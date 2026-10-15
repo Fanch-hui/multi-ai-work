@@ -5,11 +5,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import type * as QoderSdk from '@qodercn-ai/qodercn-agent-sdk';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import type { ProbeContext } from '../src/domain/provider.js';
 import { QoderAdapter } from '../src/providers/native/qoder.js';
 import { runAntigravitySession } from '../src/providers/native/antigravity-session.js';
 import { launch, stop } from '../src/providers/native/runtime.js';
+import { waitForProcessTree } from '../src/runtime/process-tree.js';
 
 const execute = promisify(execFile);
 const children: ChildProcessWithoutNullStreams[] = [], folders: string[] = [];
@@ -64,6 +65,23 @@ it.skipIf(process.platform === 'win32')('cleans a signalled parent group while p
   expect(await executing(first.descendant)).toBe(false);
   expect(await executing(second.child.pid!)).toBe(true);
   expect(await executing(second.descendant)).toBe(true);
+});
+
+it.skipIf(process.platform === 'win32')('verifies actual group members when its signal probe is denied', async () => {
+  const { child, descendant } = await startFixture();
+  const exited = once(child, 'exit'); child.kill('SIGTERM'); await exited;
+  const kill = process.kill.bind(process);
+  const probe = vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
+    if (pid === -child.pid! && signal === 0)
+      throw Object.assign(new Error('fixture-probe-denied'), { code: 'EPERM' });
+    return kill(pid, signal);
+  });
+  try {
+    await expect(waitForProcessTree(child, 50)).rejects.toThrow('原生运行时子进程尚未退出');
+    expect(await executing(descendant)).toBe(true);
+    await stop(child);
+    expect(await executing(descendant)).toBe(false);
+  } finally { probe.mockRestore(); }
 });
 
 it('does not confirm an Antigravity cancellation while its descendant is still running', async () => {

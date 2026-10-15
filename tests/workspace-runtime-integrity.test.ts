@@ -121,15 +121,18 @@ describe('prepared workspace runtime integrity', () => {
     await expect(assertRuntimeIntegrity(options.output, manifest, { allowCodeSigning: true })).rejects.toThrow('node/bin/node');
   });
 
-  it('recognizes an executable Mach-O helper outside the required entry paths', async () => {
-    const relative = 'node_modules/@deepseek-ai/libreoffice-kit-darwin-arm64/program/helper';
+  it('recognizes a native Mach-O helper outside the required entry paths', async () => {
+    // NTFS does not preserve POSIX execute bits; the binary suffix identifies this fixture there.
+    const helper = process.platform === 'win32' ? 'helper.bin' : 'helper';
+    const relative = `node_modules/@deepseek-ai/libreoffice-kit-darwin-arm64/program/${helper}`;
     const file = path.join(options.output, relative);
     await put(options.output, relative, 'executable helper');
     const unsigned = Buffer.concat([Buffer.from([0xcf, 0xfa, 0xed, 0xfe]), Buffer.from('native helper')]);
     await writeFile(file, unsigned);
     const manifest = JSON.parse(await readFile(path.join(options.output, 'runtime.json'), 'utf8'));
     manifest.integrity = await createRuntimeIntegrity(options.output, manifest);
-    expect(manifest.integrity.files[relative]).toMatchObject({ executable: true, machO: true });
+    expect(manifest.integrity.files[relative]).toMatchObject({ machO: true });
+    if (process.platform !== 'win32') expect(manifest.integrity.files[relative].executable).toBe(true);
     await writeFile(file, Buffer.concat([unsigned, Buffer.from('new signature')]));
     await expect(assertRuntimeIntegrity(options.output, manifest)).rejects.toThrow(relative);
     await expect(assertRuntimeIntegrity(options.output, manifest, { allowCodeSigning: true })).resolves.toBeUndefined();

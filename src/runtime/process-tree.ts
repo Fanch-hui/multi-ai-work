@@ -32,8 +32,12 @@ export function waitForChildExit(child: ChildProcess, timeoutMs: number): Promis
 
 async function groupIsRunning(pid: number): Promise<boolean> {
   try { process.kill(-pid, 0); }
-  catch (error) { if ((error as NodeJS.ErrnoException).code === 'ESRCH') return false; throw error; }
-  // Reparented zombies cannot execute; some hosts leave them unreaped after the group is killed.
+  catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ESRCH') return false;
+    if (code !== 'EPERM') throw error;
+  }
+  // A denied probe is inconclusive; only an empty group or zombies confirms exit.
   const { stdout } = await execute('ps', ['-eo', 'pgid=,stat='], { maxBuffer: 1024 * 1024, windowsHide: true });
   return stdout.split('\n').some(line => {
     const [group, status] = line.trim().split(/\s+/);
