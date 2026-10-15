@@ -108,6 +108,8 @@ export class QoderAdapter implements ProviderAdapter {
     const cancel = () => { void query.interrupt().catch(() => {}); };
     const inputController = new AbortController();
     const turnSignal = AbortSignal.any([context.signal, inputController.signal]);
+    const preparationController = new AbortController();
+    const preparationSignal = AbortSignal.any([context.signal, preparationController.signal]);
     let waiting = false;
     let interruption: Promise<unknown> | undefined;
     const pause = () => {
@@ -118,19 +120,16 @@ export class QoderAdapter implements ProviderAdapter {
     };
     context.signal.addEventListener('abort', cancel, { once: true });
     try {
-      const initialization = await bounded(query.initializationResult(), context.signal);
-      await bounded(Promise.race([nativeInitialization, result.then(() => { throw new Error('Qoder 在输入前结束轮次'); })]), context.signal);
-      const account = await bounded(query.accountInfo(), context.signal);
-      if (!account.userId) throw new AuthenticationRequiredError('Qoder CN 需要本机官方登录');
-      const scope = accountDigest('qoder-cn', account.userId);
-      await validateOwnedAccount(context, scope);
-      const models = qoderCatalog(await bounded(query.getAvailableModels(), context.signal));
-      this.validateModel(context, models);
-      const servers = await bounded(query.mcpServerStatus(), context.signal);
-      if (!servers.some(server => server.name === 'ai-team' && server.status === 'connected')) throw new Error('Qoder 无法连接 multi-AI work 工具');
+      preparationSignal.throwIfAborted();
+      const [{ initialization, scope }, content] = await Promise.all([
+        this.prepare(query, context, nativeInitialization, result, preparationSignal),
+        bounded(qoderImageContent({ ...context, signal: preparationSignal }), preparationSignal, 30 * 60 * 1000),
+      ]);
+      preparationSignal.throwIfAborted();
       await recordOwnership(context, sessionId, scope);
+      preparationSignal.throwIfAborted();
       input.send({ type: 'user', uuid: context.runId, session_id: sessionId, parent_tool_use_id: null,
-        message: { role: 'user', content: await qoderImageContent(context) } });
+        message: { role: 'user', content } });
       userInput.start();
       context.inputSignal?.addEventListener('abort', pause, { once: true });
       if (context.inputSignal?.aborted) pause();
@@ -149,11 +148,28 @@ export class QoderAdapter implements ProviderAdapter {
       await bounded(interruption!, context.signal, 5000);
       return { text: events.text, nativeSessionId: sessionId, outcome: 'waiting_input' };
     } finally {
+      preparationController.abort();
       userInput.stop();
       context.inputSignal?.removeEventListener('abort', pause);
       context.signal.removeEventListener('abort', cancel); input.close();
       await this.closeQuery(query, children); await result.catch(() => {});
     }
+  }
+
+  private async prepare(query: QoderSdk.Query, context: RunContext, nativeInitialization: Promise<void>,
+    result: Promise<ProviderResult>, signal: AbortSignal) {
+    const initialization = await bounded(query.initializationResult(), signal);
+    await bounded(Promise.race([nativeInitialization, result.then(() => { throw new Error('Qoder 在输入前结束轮次'); })]), signal);
+    const [account, availableModels, servers] = await Promise.all([
+      bounded(query.accountInfo(), signal), bounded(query.getAvailableModels(), signal),
+      bounded(query.mcpServerStatus(), signal),
+    ]);
+    if (!account.userId) throw new AuthenticationRequiredError('Qoder CN 需要本机官方登录');
+    const scope = accountDigest('qoder-cn', account.userId);
+    await validateOwnedAccount(context, scope);
+    this.validateModel(context, qoderCatalog(availableModels));
+    if (!servers.some(server => server.name === 'ai-team' && server.status === 'connected')) throw new Error('Qoder 无法连接 multi-AI work 工具');
+    return { initialization, scope };
   }
 
   private async runOptions(context: RunContext, sdk: Sdk, profile: string, sessionId: string,
