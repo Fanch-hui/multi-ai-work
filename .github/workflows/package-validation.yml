@@ -109,23 +109,26 @@ jobs:
           key: ${{ steps.office-cache.outputs.cache-primary-key }}
       - name: Build source
         run: pnpm build
-      - name: Package with target runtime and final dependency validation
+      - name: Prepare application with target runtime and final dependency validation
         id: package
-        run: node scripts/package.mjs ${{ matrix.flag }}
+        run: node scripts/package.mjs ${{ matrix.flag }} --dir
       - name: Save Electron download cache
         if: ${{ always() && steps.package.outcome == 'success' && steps.electron-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v4
         with:
           path: ${{ env.ELECTRON_CACHE }}
           key: ${{ steps.electron-cache.outputs.cache-primary-key }}
+      - name: Validate copied package Core and Office conversion
+        run: node scripts/package-smoke.mjs "${{ matrix.app }}" > release/package-smoke.json
+      - name: Build installer from validated application
+        id: installer
+        run: pnpm exec electron-builder ${{ matrix.flag }} --prepackaged "${{ matrix.app }}" --publish never
       - name: Save package tool downloads
-        if: ${{ always() && steps.package.outcome == 'success' && steps.builder-cache.outputs.cache-hit != 'true' }}
+        if: ${{ always() && steps.installer.outcome == 'success' && steps.builder-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v4
         with:
           path: ${{ env.ELECTRON_BUILDER_CACHE }}
           key: ${{ steps.builder-cache.outputs.cache-primary-key }}
-      - name: Validate copied package Core and Office conversion
-        run: node scripts/package-smoke.mjs "${{ matrix.app }}" > release/package-smoke.json
       - name: Record installer checksums
         run: node scripts/ci/package-checksums.mjs
       - name: Save installers and validation evidence

@@ -14,7 +14,9 @@ export class CoreHost {
           : join(app.getAppPath(), 'workspace-runtime', process.platform === 'darwin' ? 'mac-arm64' : 'win-x64') },
       stdio: 'pipe', serviceName: 'multi-AI work Core' });
     this.child = child;
-    child.stdout?.resume(); child.stderr?.resume();
+    child.stdout?.resume();
+    if (process.argv.includes('--smoke-core')) child.stderr?.pipe(process.stderr);
+    else child.stderr?.resume();
     await new Promise<void>((resolve, reject) => {
       child.on('message', input => {
         if (input.type === 'ready') resolve();

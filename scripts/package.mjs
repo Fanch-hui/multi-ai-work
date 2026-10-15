@@ -40,7 +40,7 @@ await writeFile(configPath, JSON.stringify({ ...metadata.build,
     { from: marketConfigPath, to: 'market-config.json' },
     { from: join(project, 'workspace-runtime', runtimeTarget), to: 'workspace-runtime' },
     { from: join(project, 'workspace-runtime', runtimeTarget, 'node_modules'), to: 'workspace-runtime/node_modules' }] }));
-try { await run(process.execPath, [builder, platform, ...(desktop ? ['dir'] : []), '--publish', 'never', '--config', configPath]); }
+try { await run(process.execPath, [builder, platform, ...(desktop || process.argv.includes('--dir') ? ['dir'] : []), '--publish', 'never', '--config', configPath]); }
 finally { await Promise.all([configPath, marketConfigPath].map(path => rm(path, { force: true }))); }
 if (desktop) {
   const root = join(project, 'release');

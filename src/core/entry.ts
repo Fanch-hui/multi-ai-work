@@ -46,7 +46,11 @@ async function close() {
 }
 process.on('SIGTERM', () => { void close().then(() => process.exit(0)); });
 process.on('SIGINT', () => { void close().then(() => process.exit(0)); });
-process.on('uncaughtException', error => { send({ type: 'fatal', error: publicError(error) }); void close().finally(() => process.exit(1)); });
+function reportFatal(error: unknown) {
+  send({ type: 'fatal', error: publicError(error) });
+  if (process.env.AI_TEAM_SMOKE_DATA_DIR) process.stderr.write(`${error instanceof Error ? error.stack ?? error.message : String(error)}\n`);
+}
+process.on('uncaughtException', error => { reportFatal(error); void close().finally(() => process.exit(1)); });
 try {
   const { CoreService } = await import('./service.js');
   core = new CoreService(process.env.AI_TEAM_DATA_DIR ?? join(process.cwd(), '.data'),
@@ -64,7 +68,7 @@ try {
   if (http.webLaunchUrl) void openWebUi(http.webLaunchUrl, webController.signal)
     .catch(() => { if (!closed) process.stderr.write('开发界面无法打开，请启动界面并检查默认浏览器后重新启动 Core。\n'); });
 } catch (error) {
-  send({ type: 'fatal', error: publicError(error) });
+  reportFatal(error);
   if (web) process.stderr.write(`${publicError(error)}\n`);
   process.exitCode = 1;
 }
