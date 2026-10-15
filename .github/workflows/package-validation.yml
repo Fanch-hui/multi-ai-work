@@ -126,6 +126,8 @@ jobs:
           key: ${{ steps.builder-cache.outputs.cache-primary-key }}
       - name: Validate copied package Core and Office conversion
         run: node scripts/package-smoke.mjs "${{ matrix.app }}" > release/package-smoke.json
+      - name: Record installer checksums
+        run: node scripts/ci/package-checksums.mjs
       - name: Save installers and validation evidence
         uses: actions/upload-artifact@v4
         with:
@@ -134,5 +136,6 @@ jobs:
             release/*.dmg
             release/*.exe
             release/package-smoke.json
+            release/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14
