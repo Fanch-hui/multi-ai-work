@@ -39,6 +39,7 @@ export interface RunContext {
   signal: AbortSignal; nativeMcp: NativeMcp;
   nativeTools?: NativeTools;
   emit(event: ProviderEvent): void;
+  parallelToolNames?: readonly string[];
   executeTool(name: string, args: Record<string, unknown>, callId: string): Promise<unknown>;
   getSecret(ref?: string): Promise<string | undefined>;
   saveSecret(ref: string, value: string): Promise<void>;

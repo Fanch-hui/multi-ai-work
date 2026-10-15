@@ -234,6 +234,7 @@ export class Executor {
       isWaitingForInput: () => !!this.tools.questions.forRun(run.id), inputSignal: this.tools.inputSignal(run.id),
       prompt, messages: [], instructions, tools: this.tools.definitions(toolContext, bot), signal,
       nativeMcp,
+      parallelToolNames: ['read_file', 'list_directory', 'find_files', 'search_text', 'read_skill'],
       ...(!task.kind ? { userInput: this.inputs.forRun(run, toolContext, draft, saved?.cutoff ?? draft.sequence - 1) } : {}),
       ...(!task.kind && connection.provider === 'qoder' ? { nativeTools: this.tools.nativeTools(toolContext, bot) } : {}),
       emit: event => {

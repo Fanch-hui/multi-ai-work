@@ -17,16 +17,50 @@ export async function completeToolBatch(context: RunContext, state: ManagedRunSt
     if (!context.tools.some(tool => tool.name === call.name)) throw new Error(`模型请求未开放的工具：${call.name}`);
     return [{ ...call, args: parseToolArguments(call.arguments) }];
   });
-  for (const call of pending) {
-    context.signal.throwIfAborted();
-    context.emit({ type: 'tool', data: { name: call.name, callId: call.id, phase: 'started' } });
-    const result = state.waitingForInput() ? { error: '本轮正在等待用户回答，此调用未执行' }
-      : await context.executeTool(call.name, call.args, call.id);
-    state.messages.push(toolResultMessage(call.id, result));
+  const parallel = new Set(context.parallelToolNames);
+  const order = new Map(calls.map((call, index) => [call.id, index]));
+  const saveResult = async (call: typeof pending[number], result: unknown) => {
+    const index = state.messages.findIndex((message, index) => index > assistantIndex && message.role === 'tool'
+      && (order.get(message.callId!) ?? Infinity) > order.get(call.id)!);
+    state.messages.splice(index < 0 ? state.messages.length : index, 0, toolResultMessage(call.id, result));
     executed.add(call.id);
     await state.save('tools');
     context.emit({ type: 'tool', data: { name: call.name, callId: call.id, phase: 'completed' } });
+  };
+  for (let start = 0; start < pending.length;) {
+    let end = start + 1;
+    if (parallel.has(pending[start].name)) {
+      while (end < pending.length && parallel.has(pending[end].name)) end++;
+    }
+    await executeGroup(context, state, pending.slice(start, end), saveResult);
+    start = end;
   }
   state.nextTurn();
   await state.save('ready');
+}
+
+async function executeGroup<T extends { id: string; name: string; args: Record<string, unknown> }>(
+  context: RunContext, state: ManagedRunState, calls: T[], saveResult: (call: T, result: unknown) => Promise<void>,
+) {
+  let next = 0;
+  let failure: { error: unknown } | undefined;
+  let saving = Promise.resolve();
+  const worker = async () => {
+    while (!failure && next < calls.length) {
+      try {
+        context.signal.throwIfAborted();
+        const call = calls[next++];
+        context.emit({ type: 'tool', data: { name: call.name, callId: call.id, phase: 'started' } });
+        const result = state.waitingForInput() ? { error: '本轮正在等待用户回答，此调用未执行' }
+          : await context.executeTool(call.name, call.args, call.id);
+        // Persist every successful in-flight result, even after a sibling fails or is cancelled.
+        const save = saving.then(() => saveResult(call, result));
+        saving = save.catch(error => { failure ??= { error }; });
+        await save;
+      } catch (error) { failure ??= { error }; }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(4, calls.length) }, worker));
+  if (failure) throw failure.error;
+  context.signal.throwIfAborted();
 }
