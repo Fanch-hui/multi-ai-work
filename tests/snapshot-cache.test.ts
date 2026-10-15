@@ -64,6 +64,30 @@ describe('快照配置投影缓存', () => {
     expect(cache.all('connections')).toEqual([{ id: 'one', name: 'committed' }]);
   });
 
+  it('批量 SQL 恢复后失效全部配置，失败回滚后仍读取已提交状态', () => {
+    const storage = temporaryStorage(), cache = new SnapshotCache(storage);
+    for (const table of tables) {
+      storage.put(table, { id: 'old', name: 'initial' });
+      cache.all(table);
+    }
+    const restore = (fail = false) => {
+      try {
+        storage.transaction(() => {
+          for (const table of tables) {
+            storage.db.exec(`DELETE FROM ${table}`);
+            storage.db.prepare(`INSERT INTO ${table}(id,payload) VALUES (?,?)`)
+              .run('restored', JSON.stringify({ id: 'restored', name: fail ? 'uncommitted' : 'restored' }));
+          }
+          if (fail) throw new Error('restore failed');
+        });
+      } finally { storage.invalidateTables(); }
+    };
+    restore();
+    for (const table of tables) expect(cache.all(table)).toEqual([{ id: 'restored', name: 'restored' }]);
+    expect(() => restore(true)).toThrow('restore failed');
+    for (const table of tables) expect(cache.all(table)).toEqual([{ id: 'restored', name: 'restored' }]);
+  });
+
   it('连续快照复用五类配置读取，保留主管过滤与实时消息', () => {
     const directory = mkdtempSync(join(tmpdir(), 'snapshot-state-'));
     const state = new State(directory), storage = state.storage;

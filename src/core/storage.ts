@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { Message, RunEvent, RunEventPage } from '../domain/types.js';
+import { MessageStream } from './message-stream.js';
 
 export const entityTables = ['connections', 'bots', 'conversations', 'workspaces', 'session_bindings',
   'tasks', 'runs', 'approvals', 'artifacts', 'memory_entries', 'context_checkpoints',
@@ -11,6 +12,7 @@ const indexedFields = { status: '$.status', parentId: '$.parentId', runId: '$.ru
 
 export class Storage {
   readonly db: Database.Database;
+  readonly messageStream: MessageStream;
   private statements = new Map<string, Database.Statement>();
   private tableVersions = new Map<EntityTable, number>();
   constructor(readonly path: string) {
@@ -20,6 +22,8 @@ export class Storage {
     this.db.pragma('foreign_keys = ON');
     this.db.pragma('busy_timeout = 5000');
     this.migrate();
+    this.messageStream = new MessageStream(this);
+    this.messageStream.recover();
   }
 
   prepare(sql: string): Database.Statement {
@@ -41,6 +45,9 @@ export class Storage {
         CREATE TABLE IF NOT EXISTS run_events (
           id TEXT PRIMARY KEY, run_id TEXT NOT NULL, payload TEXT NOT NULL);
         CREATE INDEX IF NOT EXISTS events_by_run ON run_events(run_id);
+        CREATE INDEX IF NOT EXISTS text_by_message ON run_events(
+          json_extract(payload, '$.data.messageId'), json_extract(payload, '$.data.streamSequence'))
+          WHERE json_extract(payload, '$.data.streamSequence') IS NOT NULL;
         CREATE INDEX IF NOT EXISTS archive_by_binding ON provider_archive(json_extract(payload, '$.bindingId'));
         CREATE INDEX IF NOT EXISTS checkpoints_by_binding ON context_checkpoints(json_extract(payload, '$.bindingId'));
         CREATE INDEX IF NOT EXISTS tasks_by_status ON tasks(json_extract(payload, '$.status'));
@@ -49,7 +56,14 @@ export class Storage {
         CREATE VIRTUAL TABLE IF NOT EXISTS memory_search USING fts5(id UNINDEXED, content, tokenize='trigram');
         PRAGMA user_version = 1;
       `);
+      const columns = this.prepare('PRAGMA table_info(messages)').all() as { name: string }[];
+      if (!columns.some(column => column.name === 'stream_sequence'))
+        this.db.exec('ALTER TABLE messages ADD COLUMN stream_sequence INTEGER NOT NULL DEFAULT 0');
     })();
+  }
+
+  invalidateTables() {
+    for (const table of entityTables) this.tableVersions.set(table, this.tableVersion(table) + 1);
   }
 
   tableVersion(table: EntityTable): number { return this.tableVersions.get(table) ?? 0; }
@@ -88,13 +102,13 @@ export class Storage {
     this.prepare('INSERT INTO metadata(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key, JSON.stringify(value));
   }
   messages(conversationId?: string): Message[] {
-    const query = conversationId ? this.prepare('SELECT payload FROM messages WHERE conversation_id = ? ORDER BY sequence') : this.prepare('SELECT payload FROM messages ORDER BY conversation_id,sequence');
-    const rows = (conversationId ? query.all(conversationId) : query.all()) as { payload: string }[];
-    return rows.map(row => JSON.parse(row.payload) as Message);
+    const query = conversationId ? this.prepare('SELECT payload, stream_sequence FROM messages WHERE conversation_id = ? ORDER BY sequence') : this.prepare('SELECT payload, stream_sequence FROM messages ORDER BY conversation_id,sequence');
+    const rows = (conversationId ? query.all(conversationId) : query.all()) as { payload: string; stream_sequence: number }[];
+    return rows.map(row => this.messageStream.project(row).message);
   }
   getMessage(id: string): Message | undefined {
-    const row = this.prepare('SELECT payload FROM messages WHERE id = ?').get(id) as { payload: string } | undefined;
-    return row ? JSON.parse(row.payload) as Message : undefined;
+    const row = this.prepare('SELECT payload, stream_sequence FROM messages WHERE id = ?').get(id) as { payload: string; stream_sequence: number } | undefined;
+    return row ? this.messageStream.project(row).message : undefined;
   }
   deleteMessage(id: string) { this.prepare('DELETE FROM messages WHERE id = ?').run(id); }
   appendMessage(message: Omit<Message, 'sequence'>): Message {
@@ -108,7 +122,7 @@ export class Storage {
     })();
   }
   updateMessage(message: Message) {
-    this.prepare('UPDATE messages SET payload = ? WHERE id = ?').run(JSON.stringify(message), message.id);
+    this.messageStream.update(message);
   }
   event(event: RunEvent) {
     return this.prepare('INSERT OR IGNORE INTO run_events(id,run_id,payload) VALUES (?,?,?)').run(event.id, event.runId, JSON.stringify(event)).changes > 0;

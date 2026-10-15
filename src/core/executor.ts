@@ -15,7 +15,7 @@ import { ToolRuntime } from './tool-runtime.js';
 import { addUsage, prepareManagedContext, workingHistory } from './managed-context.js';
 import { publicError, required } from './errors.js';
 import { runPrompt } from './run-prompt.js';
-import { completeRunMessage, interruptRunMessage, replaceRunMessage, runMessageSources, streamRunMessage } from './run-message.js';
+import { completeRunMessage, interruptRunMessage, runMessageSources } from './run-message.js';
 import { sessionBinding } from './session-binding.js';
 import { sessionMemory } from './session-memory.js';
 import { emptyRunMetrics, recordRunEvent } from './run-metrics.js';
@@ -24,6 +24,7 @@ import { TaskInputService } from './task-inputs.js';
 import { receivedRequirementVersion } from './task-requirements.js';
 import { loadManagedProgress, restoreProgressTools, restoreProgressInputs, saveManagedProgress,
   type ManagedCheckpoint } from './managed-progress.js';
+import { RunTextWriter } from './message-stream.js';
 import { ModelRecoveryPendingError } from '../domain/recovery.js';
 
 export class Executor {
@@ -40,6 +41,9 @@ export class Executor {
   questionDecisionFailed(task: Task, error: string) { this.tools.questions.failDecision(task, error); }
 
   async execute(task: Task, signal: AbortSignal) {
+    const callerSignal = signal;
+    const persistence = new AbortController();
+    signal = AbortSignal.any([signal, persistence.signal]);
     const s = this.state.storage;
     let bot = required(s.get<Bot>('bots', task.botId), '智能体不存在');
     const room = required(s.get<Conversation>('conversations', task.conversationId), '对话不存在');
@@ -78,20 +82,26 @@ export class Executor {
       }
       return background ? message : s.appendMessage(message);
     });
+    const writer = new RunTextWriter(s, error => persistence.abort(error));
     const inputCutoff = background ? 0 : saved?.cutoff ?? draft.sequence - 1;
     const token = randomBytes(32).toString('base64url');
     const toolContext = this.tools.context(run, task, bot, room, workspace, signal);
     if (saved) toolContext.resumeOperations = restoreProgressTools(s, task, saved, toolContext);
+    const postMessage = toolContext.postMessage;
+    toolContext.postMessage = (...args) => { writer.flush(); return postMessage(...args); };
+    const askUser = toolContext.askUser;
+    if (askUser) toolContext.askUser = (...args) => { writer.flush(); return askUser(...args); };
     toolContext.getSecret = ref => this.vault.get(ref);
     this.nativeContexts.set(token, { context: toolContext, bot, runId: run.id });
     let summaryUsage: () => Usage | undefined = () => undefined;
     let inferenceStarted: number | undefined;
     try {
       if (connection.status !== 'ready') throw new Error('请先在连接页完成登录与连接测试');
-      const prepared = await this.prepare(run, task, bot, room, connection, binding, adapter, toolContext, draft, token, signal, saved);
+      const prepared = await this.prepare(run, task, bot, room, connection, binding, adapter, toolContext, draft, token, signal, writer, saved);
       const input = prepared.input; summaryUsage = prepared.summaryUsage;
       inferenceStarted = Date.now();
       const result = await adapter.run(input);
+      writer.close();
       const inferenceDurationMs = Date.now() - inferenceStarted;
       this.nativeContexts.delete(token); await this.tools.settle(run.id);
       this.tools.assertNativeSettled(run.id);
@@ -133,6 +143,7 @@ export class Executor {
         }
       });
     } catch (error) {
+      try { writer.close(); } catch (writeError) { error = writeError; }
       const hadActiveProcess = this.tools.processes.hasActiveRun(run.id);
       this.nativeContexts.delete(token); await this.tools.settle(run.id);
       await this.tools.processes.settleRun(run.id);
@@ -151,7 +162,7 @@ export class Executor {
         });
         return;
       }
-      this.failRun(run, task, draft, error, signal, summaryUsage(), duration);
+      this.failRun(run, task, draft, error, callerSignal, summaryUsage(), duration);
       if (task.kind === 'question-decision' && !signal.aborted) this.questionDecisionFailed(task, publicError(error));
     } finally {
       await this.tools.processes.settleRun(run.id);
@@ -210,7 +221,7 @@ export class Executor {
 
   private async prepare(run: Run, task: Task, bot: Bot, room: Conversation, connection: Connection,
     binding: SessionBinding, adapter: ProviderAdapter, toolContext: ToolExecutionContext, draft: Message,
-    token: string, signal: AbortSignal, saved?: ManagedCheckpoint) {
+    token: string, signal: AbortSignal, writer: RunTextWriter, saved?: ManagedCheckpoint) {
     const s = this.state.storage;
     const archive = task.kind ? [] : s.messages(room.id).filter(message => message.status === 'committed'
       && (saved ? message.sequence <= saved.cutoff : message.sequence < draft.sequence));
@@ -238,22 +249,27 @@ export class Executor {
       ...(!task.kind ? { userInput: this.inputs.forRun(run, toolContext, draft, saved?.cutoff ?? draft.sequence - 1) } : {}),
       ...(!task.kind && connection.provider === 'qoder' ? { nativeTools: this.tools.nativeTools(toolContext, bot) } : {}),
       emit: event => {
-        recordRunEvent(s, { id: id(), runId: run.id, ...event, createdAt: now() });
-        if (!task.kind && event.type === 'text') {
-          if (typeof event.data.replace === 'string') replaceRunMessage(s, draft.id, event.data.replace);
-          else if (typeof event.data.delta === 'string') streamRunMessage(s, draft.id, event.data.delta);
-        }
+        writer.check();
+        const recorded = { id: id(), runId: run.id, ...event, createdAt: now() };
+        if (!task.kind && event.type === 'text') writer.append(recorded, draft.id);
+        else { writer.flush(); recordRunEvent(s, recorded); }
         this.state.changed('content');
       },
-      executeTool: (name, args, callId) => this.tools.execute(name, args, callId, toolContext, bot),
+      executeTool: (name, args, callId) => { writer.flush(); return this.tools.execute(name, args, callId, toolContext, bot); },
       getSecret: ref => this.vault.get(ref), saveSecret: (ref, value) => this.vault.set(ref, value),
       persistBinding: nativeSessionId => { binding.nativeSessionId = nativeSessionId; s.put('session_bindings', binding); },
     };
+    if (input.userInput) {
+      const beginReply = input.userInput.beginReply;
+      input.userInput.beginReply = output => { writer.flush(); beginReply(output); };
+    }
     if (managed && !task.kind) {
       input.progress = saved?.progress;
       input.deferRecovery = true;
-      input.saveProgress = async progress => saveManagedProgress(s, run, task, binding, draft,
-        saved?.cutoff ?? draft.sequence - 1, input, progress);
+      input.saveProgress = async progress => {
+        writer.flush();
+        saveManagedProgress(s, run, task, binding, draft, saved?.cutoff ?? draft.sequence - 1, input, progress);
+      };
     }
     const summaryUsage = managed ? await prepareManagedContext(input, archive, delivered, this.state, this.contextManager, adapter) : () => undefined;
     return { input, summaryUsage, memoryVersions: memoryUpdate?.versions };

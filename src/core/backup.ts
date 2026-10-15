@@ -6,6 +6,7 @@ import type { Artifact, Connection, SessionBinding, Skill, Task, ToolConnection 
 import type { PresetInstallation } from '../domain/market.js';
 import { State, id, now } from './state.js';
 import { entityTables } from './storage.js';
+import { projectStreamMessage } from './message-stream.js';
 import { backupFile, collectBackupResources, restoreBackupResources, type BackupResource, type RestoredResources } from './backup-resources.js';
 
 interface BackupManifest {
@@ -58,14 +59,20 @@ export class BackupService {
         const name = (JSON.parse(row.payload) as Artifact).name;
         const destination = join(restoreDirectory, `${id()}${extname(name)}`); await copyFile(file, destination); paths.set(record.id, destination);
       }
+      const hasStreamCursor = (source.prepare('PRAGMA table_info(messages)').all() as { name: string }[])
+        .some(column => column.name === 'stream_sequence');
       const db = this.state.storage.db;
       db.transaction(() => {
         for (const table of [...entityTables, 'metadata', 'messages', 'run_events']) {
-          const columns = table === 'metadata' ? ['key', 'value'] : table === 'messages' ? ['id', 'conversation_id', 'sequence', 'payload'] : table === 'run_events' ? ['id', 'run_id', 'payload'] : ['id', 'payload'];
+          const columns = table === 'metadata' ? ['key', 'value'] : table === 'messages' ? ['id', 'conversation_id', 'sequence', 'payload', ...(hasStreamCursor ? ['stream_sequence'] : [])] : table === 'run_events' ? ['id', 'run_id', 'payload'] : ['id', 'payload'];
           const optional = ['compactions', 'provider_archive', 'questions', 'processes', 'preset_installations', 'task_plans'].includes(table) && !source.prepare('SELECT 1 FROM sqlite_master WHERE name = ?').get(table);
           const rows = optional ? [] : source.prepare(`SELECT ${columns.join(',')} FROM ${table}`).all() as Record<string, unknown>[];
           db.exec(`DELETE FROM ${table}`);
           for (const row of rows) {
+            if (table === 'messages' && hasStreamCursor) {
+              const projected = projectStreamMessage(source, { payload: row.payload as string, stream_sequence: row.stream_sequence as number });
+              row.payload = JSON.stringify(projected.message); row.stream_sequence = projected.sequence;
+            }
             if (typeof row.payload === 'string') row.payload = this.sanitize(table, row.payload, paths, resources);
             db.prepare(`INSERT INTO ${table} (${columns.join(',')}) VALUES (${columns.map(() => '?').join(',')})`).run(...Object.values(row));
           }
@@ -75,7 +82,7 @@ export class BackupService {
         if (hostId) this.state.storage.setMetadata('oauth.hostId', hostId);
       })();
     } catch (error) { await rm(restoreDirectory, { recursive: true, force: true }); throw error; }
-    finally { source.close(); }
+    finally { this.state.storage.invalidateTables(); source.close(); }
     this.state.changed(); return { restored: true, path: root };
   }
   private sanitize(table: string, payload: string, paths: Map<string, string>, resources: RestoredResources): string {
