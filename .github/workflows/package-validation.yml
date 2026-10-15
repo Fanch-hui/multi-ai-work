@@ -55,9 +55,9 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ${{ env.ELECTRON_CACHE }}
-          key: electron-downloads-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          key: electron-downloads-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: |
-            electron-downloads-${{ runner.os }}-${{ runner.arch }}-
+            electron-downloads-v2-${{ runner.os }}-${{ runner.arch }}-
       - name: Restore package tool downloads
         id: builder-cache
         uses: actions/cache/restore@v4
