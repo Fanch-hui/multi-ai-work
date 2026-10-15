@@ -23,8 +23,8 @@ async function writeManifest(root: string, path: string, metadata: Record<string
   await writeFile(join(root, path, 'package.json'), JSON.stringify(metadata));
 }
 
-async function archive(root: string) {
-  const path = join(root, 'app.asar');
+async function archive(root: string, filename = 'app.asar') {
+  const path = join(root, filename);
   await asar.createPackage(join(root, 'app'), path);
   return path;
 }
@@ -64,5 +64,31 @@ describe('packaging dependency validation', () => {
     await writeManifest(root, 'app/node_modules/helper', { name: 'helper' });
     await writeManifest(root, 'app/node_modules/parser/node_modules/nested', { name: 'nested', dependencies: { helper: '1' } });
     expect(assertPackagedDependencies(await archive(root))).toBe(3);
+  });
+
+  it('requires the target sharp native package while allowing other platform packages to be absent', async () => {
+    const root = await fixture();
+    await writeManifest(root, 'app', { name: 'app', dependencies: { sharp: '0.35.5' } });
+    await writeManifest(root, 'app/node_modules/sharp', { name: 'sharp', optionalDependencies: {
+      '@img/sharp-win32-x64': '0.35.5', '@img/sharp-darwin-arm64': '0.35.5',
+    } });
+    const incomplete = await archive(root);
+    expect(() => assertPackagedDependencies(incomplete, { platform: 'win32', arch: 'x64' }))
+      .toThrow('sharp -> @img/sharp-win32-x64');
+    await writeManifest(root, 'app/node_modules/@img/sharp-win32-x64', { name: '@img/sharp-win32-x64' });
+    expect(assertPackagedDependencies(await archive(root, 'complete.asar'), { platform: 'win32', arch: 'x64' })).toBe(2);
+  });
+
+  it('requires the ripgrep platform package used by file search', async () => {
+    const root = await fixture();
+    await writeManifest(root, 'app', { name: 'app', dependencies: { '@vscode/ripgrep': '1.18.0' } });
+    await writeManifest(root, 'app/node_modules/@vscode/ripgrep', { name: '@vscode/ripgrep', optionalDependencies: {
+      '@vscode/ripgrep-win32-x64': '1.18.0', '@vscode/ripgrep-darwin-arm64': '1.18.0',
+    } });
+    const incomplete = await archive(root);
+    expect(() => assertPackagedDependencies(incomplete, { platform: 'win32', arch: 'x64' }))
+      .toThrow('@vscode/ripgrep -> @vscode/ripgrep-win32-x64');
+    await writeManifest(root, 'app/node_modules/@vscode/ripgrep-win32-x64', { name: '@vscode/ripgrep-win32-x64' });
+    expect(assertPackagedDependencies(await archive(root, 'complete.asar'), { platform: 'win32', arch: 'x64' })).toBe(2);
   });
 });

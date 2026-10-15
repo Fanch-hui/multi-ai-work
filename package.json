@@ -107,5 +107,9 @@
   "engines": {
     "node": ">=22.23.0",
     "pnpm": ">=11.0.0"
+  },
+  "optionalDependencies": {
+    "@img/sharp-win32-x64": "0.35.5",
+    "@vscode/ripgrep-win32-x64": "1.18.0"
   }
 }

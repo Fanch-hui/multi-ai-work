@@ -26,7 +26,7 @@ export async function assertInstalledDependencies(project) {
   if (stale.size) throw new Error(`Installed production dependencies are stale: ${[...stale].join(', ')}. Run pnpm install --frozen-lockfile before packaging.`);
 }
 
-export function assertPackagedDependencies(archive) {
+export function assertPackagedDependencies(archive, { platform = process.platform, arch = process.arch } = {}) {
   const files = new Set(asar.listPackage(archive).map(file => file.replaceAll('\\', '/').replace(/^\//, '')));
   const visited = new Set();
   const missing = new Set();
@@ -38,10 +38,12 @@ export function assertPackagedDependencies(archive) {
     const metadata = JSON.parse(asar.extractFile(archive, normalize(manifest)).toString('utf8'));
     const optional = metadata.optionalDependencies ?? {};
     const dependencies = { ...metadata.dependencies, ...optional };
+    const requiredNative = metadata.name === 'sharp' ? `@img/sharp-${platform}-${arch}`
+      : metadata.name === '@vscode/ripgrep' ? `@vscode/ripgrep-${platform}-${arch}` : undefined;
     for (const name of Object.keys(dependencies)) {
       const dependency = resolveManifest(files, manifest, name);
       if (dependency) pending.push(dependency);
-      else if (!(name in optional)) missing.add(`${metadata.name ?? manifest} -> ${name}`);
+      else if (!(name in optional) || name === requiredNative) missing.add(`${metadata.name ?? manifest} -> ${name}`);
     }
   }
   if (missing.size) throw new Error(`Packaged production dependencies are missing: ${[...missing].join(', ')}`);
