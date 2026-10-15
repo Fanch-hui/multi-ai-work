@@ -68,7 +68,7 @@ export class CoreService {
     this.approvals = new ApprovalService(this.state);
     this.memory = new MemoryService({ list: () => s.all('memory_entries'), save: memory => s.put('memory_entries', memory) });
     this.memories = new MemoryManagement(this.state, this.memory, this.tasks);
-    const context = new ContextManager({ getCheckpoint: bindingId => s.all<ContextCheckpoint>('context_checkpoints').filter(item => item.bindingId === bindingId).at(-1),
+    const context = new ContextManager({ getCheckpoint: bindingId => s.byField<ContextCheckpoint>('context_checkpoints', 'bindingId', bindingId).at(-1),
       saveCheckpoint: cp => s.put('context_checkpoints', cp), recordCompaction: record => { s.put('compactions', record); this.state.changed(); } });
     this.tools = new ToolRuntime(this.state, this.registry, this.tasks, this.approvals, this.memory, this.team, this.memories);
     this.executor = new Executor(this.state, this.tasks, this.tools, this.memory, context, this.vault, this.adapters);

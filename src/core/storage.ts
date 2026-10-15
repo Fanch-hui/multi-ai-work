@@ -7,7 +7,7 @@ export const entityTables = ['connections', 'bots', 'conversations', 'workspaces
   'tasks', 'runs', 'approvals', 'artifacts', 'memory_entries', 'context_checkpoints',
   'tool_connections', 'skills', 'tool_operations', 'deliveries', 'notifications', 'compactions', 'provider_archive', 'questions', 'processes', 'preset_installations', 'task_plans'] as const;
 export type EntityTable = typeof entityTables[number];
-const indexedFields = { status: '$.status', parentId: '$.parentId', runId: '$.runId' } as const;
+const indexedFields = { status: '$.status', parentId: '$.parentId', runId: '$.runId', bindingId: '$.bindingId' } as const;
 
 export class Storage {
   readonly db: Database.Database;
@@ -40,6 +40,8 @@ export class Storage {
         CREATE TABLE IF NOT EXISTS run_events (
           id TEXT PRIMARY KEY, run_id TEXT NOT NULL, payload TEXT NOT NULL);
         CREATE INDEX IF NOT EXISTS events_by_run ON run_events(run_id);
+        CREATE INDEX IF NOT EXISTS archive_by_binding ON provider_archive(json_extract(payload, '$.bindingId'));
+        CREATE INDEX IF NOT EXISTS checkpoints_by_binding ON context_checkpoints(json_extract(payload, '$.bindingId'));
         CREATE INDEX IF NOT EXISTS tasks_by_status ON tasks(json_extract(payload, '$.status'));
         CREATE INDEX IF NOT EXISTS tasks_by_parent ON tasks(json_extract(payload, '$.parentId'));
         CREATE INDEX IF NOT EXISTS operations_by_run ON tool_operations(json_extract(payload, '$.runId'));
@@ -57,7 +59,7 @@ export class Storage {
     return row ? JSON.parse(row.payload) as T : undefined;
   }
   byField<T>(table: EntityTable, field: keyof typeof indexedFields, value: string): T[] {
-    const rows = this.prepare(`SELECT payload FROM ${table} WHERE json_extract(payload, '${indexedFields[field]}') = ?`).all(value) as { payload: string }[];
+    const rows = this.prepare(`SELECT payload FROM ${table} WHERE json_extract(payload, '${indexedFields[field]}') = ? ORDER BY rowid`).all(value) as { payload: string }[];
     return rows.map(row => JSON.parse(row.payload) as T);
   }
   put<T extends { id: string }>(table: EntityTable, value: T): T {

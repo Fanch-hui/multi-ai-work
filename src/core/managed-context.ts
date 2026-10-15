@@ -17,8 +17,10 @@ export async function prepareManagedContext(input: RunContext, archive: Message[
   const s = state.storage;
   const history = s.metadata<ModelHistoryEntry[]>(`history:${input.binding.id}`)
     ?? modelMessageHistory(archive.filter(message => message.sequence <= delivered), input.bot.id, artifactId => modelImage(s.get('artifacts', artifactId)));
-  const archivedHistory = s.all<ProviderArchive>('provider_archive').filter(record => record.bindingId === input.binding.id)
-    .flatMap(record => record.entries);
+  const loadArchiveHistory = () => {
+    const entries = s.byField<ProviderArchive>('provider_archive', 'bindingId', input.binding.id).flatMap(record => record.entries);
+    return entries.length ? entries : undefined;
+  };
   const window = input.bot.contextWindow ?? defaultContextWindow(input.connection.provider,
     input.connection.models.find(model => model.id === input.bot.model));
   const settings = managedContextBudget(window, input.bot.compactionThreshold, input.bot.outputReserve);
@@ -41,7 +43,7 @@ export async function prepareManagedContext(input: RunContext, archive: Message[
   };
   const prepare = (force: boolean, currentInput: string) => manager.prepare({ binding: input.binding,
     messages: archive, instructions: input.instructions, tools: input.tools, history,
-    archiveHistory: archivedHistory.length ? archivedHistory : undefined, currentInput,
+    loadArchiveHistory, currentInput,
     contextWindow: budget, triggerTokens, force, signal: input.signal, summarize,
     isSourceCurrent: (ids, hash) => contextSourceHash(s.messages(input.binding.conversationId).filter(message => ids.includes(message.id))) === hash });
   const prepared = await prepare(false, input.prompt);
@@ -66,7 +68,7 @@ export function workingHistory(state: State, input: RunContext, messages: ModelM
   const previous = s.metadata<ModelHistoryEntry[]>(`history:${input.binding.id}`)
     ?? modelMessageHistory(s.messages(draft.conversationId).filter(message => message.sequence <= cutoff), input.bot.id, artifactId => modelImage(s.get('artifacts', artifactId)));
   const source = s.messages(draft.conversationId).filter(message => message.sequence <= cutoff).at(-1) ?? draft;
-  const checkpoint = s.all<ContextCheckpoint>('context_checkpoints').filter(item => item.bindingId === input.binding.id).at(-1);
+  const checkpoint = s.byField<ContextCheckpoint>('context_checkpoints', 'bindingId', input.binding.id).at(-1);
   let cursor = 0;
   let currentSource = source;
   const sources = runMessageSources(s, input.runId);

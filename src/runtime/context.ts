@@ -39,6 +39,7 @@ export interface ContextInput {
   force?: boolean;
   history?: ModelHistoryEntry[];
   archiveHistory?: ModelHistoryEntry[];
+  loadArchiveHistory?(): ModelHistoryEntry[] | undefined;
   summarize(prompt: string, signal: AbortSignal): Promise<string>;
   signal: AbortSignal;
   isSourceCurrent?(sourceMessageIds: string[], sourceHash: string): boolean;
@@ -77,7 +78,7 @@ export class ContextManager {
       .sort((a, b) => a.sequence - b.sequence);
     const fixedTokens = estimateTokens(input.instructions) + estimateTokens(input.tools) + estimateTokens(input.currentInput ?? '') + 256;
     const checkpoint = this.currentCheckpoint(input, archive);
-    const history = (checkpoint ? input.history : input.archiveHistory ?? input.history) ?? modelMessageHistory(archive, input.binding.botId);
+    const history = (checkpoint ? input.history : input.archiveHistory ?? input.loadArchiveHistory?.() ?? input.history) ?? modelMessageHistory(archive, input.binding.botId);
     const active = checkpoint ? history.filter(entry => entry.sequence > checkpoint.throughSequence) : history;
     const original = result(active, fixedTokens, checkpoint);
     const trigger = input.triggerTokens ?? (input.contextWindow ? input.contextWindow * 0.75 : undefined);

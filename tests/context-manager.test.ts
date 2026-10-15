@@ -122,3 +122,19 @@ describe('ContextManager', () => {
     expect(records.at(-1)).toMatchObject({ status: 'failed', reason: 'summary_failed' });
   });
 });
+
+
+it('只在检查点不可用时延迟读取原始档案', async () => {
+  const { manager } = setup();
+  const messages = [message(1, '旧资料'.repeat(300)), message(2, '最新请求')];
+  const history = modelMessageHistory(messages, 'a');
+  let loads = 0;
+  const input = { ...baseInput, messages, history, loadArchiveHistory: () => { loads++; return history; },
+    summarize: async () => '旧资料摘要' };
+  await manager.prepare(input);
+  expect(loads).toBe(1);
+  await manager.prepare({ ...input, force: false });
+  expect(loads).toBe(1);
+  await manager.prepare({ ...input, force: false, instructions: '新的身份指令' });
+  expect(loads).toBe(2);
+});
