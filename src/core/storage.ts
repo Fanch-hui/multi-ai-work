@@ -12,6 +12,7 @@ const indexedFields = { status: '$.status', parentId: '$.parentId', runId: '$.ru
 export class Storage {
   readonly db: Database.Database;
   private statements = new Map<string, Database.Statement>();
+  private tableVersions = new Map<EntityTable, number>();
   constructor(readonly path: string) {
     mkdirSync(dirname(path), { recursive: true });
     this.db = new Database(path);
@@ -51,6 +52,8 @@ export class Storage {
     })();
   }
 
+  tableVersion(table: EntityTable): number { return this.tableVersions.get(table) ?? 0; }
+
   all<T>(table: EntityTable): T[] {
     return (this.prepare(`SELECT payload FROM ${table}`).all() as { payload: string }[]).map(row => JSON.parse(row.payload) as T);
   }
@@ -64,6 +67,7 @@ export class Storage {
   }
   put<T extends { id: string }>(table: EntityTable, value: T): T {
     this.prepare(`INSERT INTO ${table}(id,payload) VALUES (?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload`).run(value.id, JSON.stringify(value));
+    this.tableVersions.set(table, this.tableVersion(table) + 1);
     if (table === 'memory_entries') {
       const memory = value as T & { content: string };
       this.prepare('DELETE FROM memory_search WHERE id = ?').run(value.id);
@@ -73,6 +77,7 @@ export class Storage {
   }
   delete(table: EntityTable, id: string) {
     this.prepare(`DELETE FROM ${table} WHERE id = ?`).run(id);
+    this.tableVersions.set(table, this.tableVersion(table) + 1);
     if (table === 'memory_entries') this.prepare('DELETE FROM memory_search WHERE id = ?').run(id);
   }
   metadata<T>(key: string): T | undefined {

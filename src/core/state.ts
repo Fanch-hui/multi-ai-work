@@ -17,6 +17,7 @@ import { taskInputs } from './task-input-records.js';
 import { taskActivity, taskActivityReader } from './task-activity.js';
 import type { TaskActivity } from '../domain/task-activity.js';
 import { artifactRequirement, taskRequirement } from './task-requirements.js';
+import { SnapshotCache } from './snapshot-cache.js';
 
 export const now = () => new Date().toISOString();
 export const id = () => randomUUID();
@@ -24,11 +25,13 @@ export { defaultSettings } from './work-settings.js';
 export type StateChange = 'state' | 'content';
 export class State {
   readonly storage: Storage;
+  private readonly snapshotCache: SnapshotCache;
   private listeners = new Set<(kind: StateChange) => void>();
   queueReasonFor?: (task: Task) => TaskQueueReason | undefined;
   constructor(readonly dataDirectory: string) {
     mkdirSync(dataDirectory, { recursive: true, mode: 0o700 });
     this.storage = new Storage(join(dataDirectory, 'team.sqlite'));
+    this.snapshotCache = new SnapshotCache(this.storage);
     migrateRunMetrics(this.storage);
     if (!this.storage.all<Workspace>('workspaces').length) {
       const path = join(dataDirectory, 'workspace'); mkdirSync(path, { recursive: true });
@@ -65,15 +68,15 @@ export class State {
   snapshot(): Snapshot {
     const s = this.storage, settings = this.settings(), messages = s.messages(), tasks = s.all<Task>('tasks');
     const runs = s.all<Run>('runs'), readActivity = taskActivityReader(s, tasks, runs);
-    return { connections: s.all('connections'), bots: s.all<Bot>('bots').map(bot => publicBot(bot, settings.mainBotId)), conversations: unreadConversations(s, messages),
-      workspaces: s.all('workspaces'), messages, tasks: tasks.map(task => this.taskSnapshot(task, readActivity)), runs,
+    return { connections: this.snapshotCache.all('connections'), bots: this.snapshotCache.all<Bot>('bots').map(bot => publicBot(bot, settings.mainBotId)), conversations: unreadConversations(s, messages),
+      workspaces: this.snapshotCache.all('workspaces'), messages, tasks: tasks.map(task => this.taskSnapshot(task, readActivity)), runs,
       approvals: s.all('approvals'), artifacts: s.all<Artifact>('artifacts').map(artifact => ({ ...artifactRequirement(s, artifact),
         ...(artifact.image ? { image: { ...artifact.image, path: '' } } : {}) })), questions: s.all('questions'), memories: s.all('memory_entries'),
       processes: s.all<ProcessRecord>('processes').map(item => ({ id: item.id, runId: item.runId, taskId: item.taskId,
         botId: item.botId, conversationId: item.conversationId, workspaceId: item.workspaceId, command: item.command,
         args: item.args, status: item.status, createdAt: item.createdAt, endedAt: item.endedAt, code: item.code, signal: item.signal,
         stoppedByBotId: item.stoppedByBotId, stoppedByTaskId: item.stoppedByTaskId })),
-      events: s.events(), toolConnections: s.all('tool_connections'), skills: s.all('skills'),
+      events: s.events(), toolConnections: this.snapshotCache.all('tool_connections'), skills: this.snapshotCache.all('skills'),
       bindings: s.all('session_bindings'), checkpoints: s.all('context_checkpoints'), compactions: s.all('compactions'),
       taskPlans: s.all<TaskPlanRecord>('task_plans').map(plan => taskPlanView(plan, tasks, settings.mainBotId!)),
       taskInputs: taskInputs(s),
