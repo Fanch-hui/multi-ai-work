@@ -23,7 +23,7 @@ if (!hasLock) app.quit();
 else {
   app.on('second-instance', () => { window?.show(); window?.focus(); });
   app.whenReady().then(smoke ? smokeCore : start).catch(error => {
-    if (smoke) { process.stderr.write('Core 启动检查失败\n'); app.exit(1); }
+    if (smoke) { process.stderr.write(`Core 启动检查失败: ${error instanceof Error ? error.stack ?? error.message : String(error)}\n`); app.exit(1); }
     else { dialog.showErrorBox('multi-AI work 无法启动', error.message); exiting = true; app.quit(); }
   });
 }
