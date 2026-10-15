@@ -1,0 +1,5 @@
+Adapted from https://github.com/xjli360/sealeap-amazon-skills
+Fixed commit: 497d4b8eebb484edbcdb481143a88392e963612b
+Source: amazon-skills/xiaohongshu/jinwu/sealeap-jinwu-amazon-product-selection-scorecard/SKILL.md
+License: MIT; see LICENSE.
+App adaptation: Chinese workflow, tool routing, independent resource paths and delivery constraints; 2026-10-13.

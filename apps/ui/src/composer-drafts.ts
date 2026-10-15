@@ -1,0 +1,95 @@
+import { useSyncExternalStore, type SetStateAction } from "react";
+import type { Artifact, Conversation } from "../../../src/domain/types.js";
+
+export interface ComposerDraft {
+  content: string;
+  targets: string[];
+  attachments: Artifact[];
+  requestId: string;
+  sending: boolean;
+  attaching: boolean;
+  error: string;
+}
+type DraftContent = Pick<ComposerDraft, "content" | "targets" | "attachments">;
+
+export function composerSubmission(conversation: Conversation, draft: ComposerDraft) {
+  return { conversationId: conversation.id, content: draft.content.trim(),
+    targetBotIds: conversation.purpose !== "chief" && draft.targets.length ? draft.targets : undefined,
+    artifactIds: draft.attachments.map(artifact => artifact.id), requestId: draft.requestId };
+}
+
+export class ComposerDraftStore {
+  private drafts = new Map<string, ComposerDraft>();
+  private listeners = new Map<string, Set<() => void>>();
+
+  read(id: string): ComposerDraft {
+    let draft = this.drafts.get(id);
+    if (!draft) {
+      draft = { content: "", targets: [], attachments: [], requestId: crypto.randomUUID(), sending: false, attaching: false, error: "" };
+      this.drafts.set(id, draft);
+    }
+    return draft;
+  }
+
+  subscribe(id: string, listener: () => void) {
+    const listeners = this.listeners.get(id) ?? new Set();
+    listeners.add(listener);
+    this.listeners.set(id, listeners);
+    return () => {
+      listeners.delete(listener);
+      if (!listeners.size) this.listeners.delete(id);
+    };
+  }
+
+  update(id: string, patch: Partial<ComposerDraft>) {
+    this.drafts.set(id, { ...this.read(id), ...patch });
+    this.listeners.get(id)?.forEach(listener => listener());
+  }
+
+  edit(id: string, patch: Partial<DraftContent>) {
+    this.update(id, { ...patch, requestId: crypto.randomUUID() });
+  }
+
+  beginSend(id: string): ComposerDraft | undefined {
+    const draft = this.read(id);
+    if (draft.sending || draft.attaching || (!draft.content.trim() && !draft.attachments.length)) return;
+    this.update(id, { sending: true, error: "" });
+    return draft;
+  }
+
+  finishSend(id: string, requestId: string, error?: string) {
+    if (error !== undefined) {
+      this.update(id, { sending: false, error });
+      return;
+    }
+    const draft = this.read(id);
+    this.update(id, { sending: false, ...(draft.requestId === requestId
+      ? { content: "", targets: [], attachments: [], requestId: crypto.randomUUID(), error: "" } : {}) });
+  }
+
+  beginAttachment(id: string): boolean {
+    const draft = this.read(id);
+    if (draft.attaching || draft.sending) return false;
+    this.update(id, { attaching: true, error: "" });
+    return true;
+  }
+
+  appendAttachments(id: string, items: Artifact[]) {
+    if (items.length) this.edit(id, { attachments: [...this.read(id).attachments, ...items] });
+  }
+}
+
+export const composerDrafts = new ComposerDraftStore();
+
+export function useComposerDraft(conversationId: string) {
+  const draft = useSyncExternalStore(listener => composerDrafts.subscribe(conversationId, listener),
+    () => composerDrafts.read(conversationId), () => composerDrafts.read(conversationId));
+  function setField<K extends keyof DraftContent>(field: K, value: SetStateAction<DraftContent[K]>) {
+    const current = composerDrafts.read(conversationId)[field];
+    const next = typeof value === "function" ? (value as (previous: DraftContent[K]) => DraftContent[K])(current) : value;
+    composerDrafts.edit(conversationId, { [field]: next });
+  }
+  return { draft, setContent: (value: SetStateAction<string>) => setField("content", value),
+    setTargets: (value: SetStateAction<string[]>) => setField("targets", value),
+    setAttachments: (value: SetStateAction<Artifact[]>) => setField("attachments", value) };
+}

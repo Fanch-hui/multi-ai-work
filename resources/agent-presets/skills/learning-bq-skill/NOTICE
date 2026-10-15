@@ -1,0 +1,3 @@
+Source: https://github.com/yanliudesign/offer-toolkit-skill/tree/f66c4b75dd68da409197ffc06c9807209037ce41/bq-skill
+License: MIT
+Adapted for multi-AI work: Chinese task workflow, App tools, explicit source and resource paths, local supplied-material mode. Original skill and its referenced resources are preserved under upstream/.

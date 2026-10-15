@@ -1,0 +1,5 @@
+Source: https://github.com/anthropics/financial-services
+Commit: 574ed3624aebd0418c7e96cd101262f30210ab26
+Path: plugins/vertical-plugins/financial-analysis/skills/audit-xls/SKILL.md
+License: Apache-2.0
+Modified by multi-AI work: Chinese App execution contract, self-contained resources, tool and permission mapping.

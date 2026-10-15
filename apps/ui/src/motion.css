@@ -1,0 +1,87 @@
+.page-surface {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+.page-surface-header {
+  position: relative;
+  z-index: 10;
+  grid-area: 1 / 1;
+  align-self: start;
+  pointer-events: none;
+}
+.page-surface-header > :not(.progressive-blur) {
+  position: relative;
+  z-index: 1;
+  pointer-events: auto;
+}
+.page-surface-content {
+  grid-area: 1 / 1;
+  min-height: 0;
+  overflow: auto;
+  padding-top: calc(var(--page-header-height, 76px) + 24px);
+  scroll-padding-top: calc(var(--page-header-height, 76px) + 24px);
+}
+.sidebar-shell {
+  display: grid;
+  grid-template-columns: 256px;
+  grid-template-rows: minmax(0, 1fr);
+  min-height: 0;
+  flex-shrink: 0;
+  overflow: hidden;
+  transition: grid-template-columns 220ms cubic-bezier(.22, 1, .36, 1);
+}
+.sidebar-shell[data-collapsed="true"] { grid-template-columns: 0px; }
+.sidebar-shell .app-sidebar {
+  min-width: 256px;
+  width: 256px;
+  opacity: 1;
+  transform: translateX(0);
+  transition: opacity 160ms ease-out, transform 220ms cubic-bezier(.22, 1, .36, 1);
+}
+.sidebar-shell[data-collapsed="true"] .app-sidebar { opacity: 0; transform: translateX(-20px); }
+.dialog-overlay[data-state="open"] { animation: overlay-in 180ms ease-out; }
+.dialog-overlay[data-state="closed"] { animation: overlay-out 150ms ease-in forwards; }
+.dialog-content[data-state="open"] { animation: dialog-in 200ms cubic-bezier(.22, 1, .36, 1); }
+.dialog-content[data-state="closed"] { animation: dialog-out 150ms ease-in forwards; pointer-events: none; }
+@keyframes overlay-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes overlay-out { to { opacity: 0; } }
+@keyframes dialog-in {
+  from { opacity: 0; transform: translateY(8px) scale(.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes dialog-out { to { opacity: 0; transform: translateY(4px) scale(.98); } }
+.agent-activity-indicator { display: inline-flex; align-items: center; gap: 3px; height: 14px; color: #94a3b8; }
+.agent-activity-indicator i { width: 3px; height: 3px; border-radius: 50%; background: currentColor; }
+.agent-activity-animated i { animation: activity-pulse 1400ms ease-in-out infinite; }
+.agent-activity-animated i:nth-child(2) { animation-delay: 160ms; }
+.agent-activity-animated i:nth-child(3) { animation-delay: 320ms; }
+.agent-activity-label { animation: overlay-in 160ms ease-out; }
+@keyframes activity-pulse { 0%, 75%, 100% { opacity: .45; transform: translateY(0); } 35% { opacity: 1; transform: translateY(-2px); } }
+.statistics-popover { transform-origin: bottom center; }
+.statistics-popover[data-state="open"] { animation: popover-in 160ms cubic-bezier(.22, 1, .36, 1); }
+.statistics-popover[data-state="closed"] { animation: popover-out 150ms ease-in forwards; pointer-events: none; }
+@keyframes popover-out { to { opacity: 0; transform: translateY(4px) scale(.98); } }
+.composer-mention-root::details-content {
+  opacity: 0;
+  transition: opacity 150ms ease, content-visibility 150ms allow-discrete;
+}
+.composer-mention-root[open]::details-content { opacity: 1; }
+.composer-mentions { transform-origin: bottom left; animation: popover-in 160ms cubic-bezier(.22, 1, .36, 1); }
+@keyframes popover-in { from { opacity: 0; transform: translateY(4px) scale(.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@media (max-width: 768px) {
+  .sidebar-shell { grid-template-columns: 208px; }
+  .sidebar-shell .app-sidebar { min-width: 208px; width: 208px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-shell { transition-duration: 0ms; }
+  .sidebar-shell .app-sidebar { transform: none; transition: opacity 80ms ease; }
+  .agent-activity-animated i { animation: none; }
+  .agent-activity-label, .composer-mentions, .statistics-popover[data-state="open"], .dialog-content[data-state="open"] { animation: overlay-in 80ms ease; }
+  .statistics-popover[data-state="closed"], .dialog-content[data-state="closed"] { animation: overlay-out 80ms ease forwards; }
+  .dialog-overlay[data-state] { animation-duration: 80ms; }
+}

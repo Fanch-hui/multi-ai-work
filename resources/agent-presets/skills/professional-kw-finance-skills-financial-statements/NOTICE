@@ -1,0 +1,6 @@
+Source: https://github.com/anthropics/knowledge-work-plugins
+Commit: 02ffa99ff00ce4d3046ccebabb8357cb39f3ab06
+Path: finance/skills/financial-statements/SKILL.md
+License: Apache-2.0
+Modified by multi-AI work: Chinese App execution contract, self-contained resources, tool and permission mapping.
+Added 13-week cash receipt/disbursement forecasting method and numerical reconciliation example.

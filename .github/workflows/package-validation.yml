@@ -1,0 +1,102 @@
+name: Validate desktop packages
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI_NODE_VERSION: 22.23.2
+  CI_PNPM_VERSION: 11.25.0
+
+jobs:
+  packages:
+    name: ${{ matrix.target }} package
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: mac-arm64
+            flag: --mac
+            app: release/mac-arm64/multi-AI work.app
+          - os: windows-latest
+            target: win-x64
+            flag: --win
+            app: release/win-unpacked
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure isolated data and cache directories
+        run: node scripts/ci/environment.mjs
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.CI_NODE_VERSION }}
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.CI_PNPM_VERSION }}
+          run_install: false
+      - name: Restore pnpm content store
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CI_PNPM_STORE }}
+          key: pnpm-${{ runner.os }}-${{ runner.arch }}-node-${{ env.CI_NODE_VERSION }}-pnpm-${{ env.CI_PNPM_VERSION }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-${{ runner.os }}-${{ runner.arch }}-node-${{ env.CI_NODE_VERSION }}-pnpm-${{ env.CI_PNPM_VERSION }}-
+      - name: Restore Electron download cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.ELECTRON_CACHE }}
+          key: electron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            electron-${{ runner.os }}-${{ runner.arch }}-
+      - name: Restore package tool downloads
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.ELECTRON_BUILDER_CACHE }}
+          key: builder-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            builder-${{ runner.os }}-${{ runner.arch }}-
+      - name: Restore verified Office runtime downloads
+        uses: actions/cache@v4
+        with:
+          path: workspace-runtime/downloads
+          key: office-downloads-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/workspace-runtime/lock.json') }}
+          restore-keys: |
+            office-downloads-${{ runner.os }}-${{ runner.arch }}-
+      - name: Locate licensed runner VC Redist
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $installation = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Redist.14.Latest -property installationPath
+          if (!$installation) { throw 'Runner has no licensed Visual Studio VC Redist installation' }
+          $crt = Get-ChildItem "$installation\VC\Redist\MSVC\*\x64\Microsoft.VC*.CRT" -Directory | Sort-Object FullName -Descending | Select-Object -First 1
+          if (!$crt) { throw 'Licensed x64 app-local VC Redist directory was not found' }
+          "MULTI_AI_OFFICE_CRT=$($crt.FullName)" >> $env:GITHUB_ENV
+      - name: Verify target architecture
+        run: node --input-type=module -e "if (process.platform + '-' + process.arch !== '${{ matrix.target == 'mac-arm64' && 'darwin-arm64' || 'win32-x64' }}') process.exit(1)"
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile --store-dir "${{ env.CI_PNPM_STORE }}"
+      - name: Build source
+        run: pnpm build
+      - name: Package with target runtime and final dependency validation
+        run: node scripts/package.mjs ${{ matrix.flag }}
+      - name: Validate copied package Core and Office conversion
+        run: node scripts/package-smoke.mjs "${{ matrix.app }}" > release/package-smoke.json
+      - name: Save installers and validation evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.target }}
+          path: |
+            release/*.dmg
+            release/*.exe
+            release/package-smoke.json
+          if-no-files-found: error
+          retention-days: 14

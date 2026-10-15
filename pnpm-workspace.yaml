@@ -1,0 +1,8 @@
+enableGlobalVirtualStore: false
+allowBuilds:
+  better-sqlite3: true
+  electron: true
+  esbuild: true
+  '@qodercn-ai/qodercn-agent-sdk': true
+  electron-winstaller: false
+  sharp: true

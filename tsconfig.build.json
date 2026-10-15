@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "noEmit": false, "outDir": "dist", "rootDir": ".", "jsx": "react-jsx", "sourceMap": true },
+  "include": ["src", "apps/desktop"],
+  "exclude": ["apps/ui", "tests"]
+}

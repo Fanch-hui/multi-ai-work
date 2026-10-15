@@ -1,0 +1,118 @@
+import type OpenAI from 'openai';
+import type { Response, ResponseOutputItem, ResponseOutputMessage, ResponseStreamEvent } from 'openai/resources/responses/responses';
+import type { ModelMessage, RunContext } from '../../domain/provider.js';
+import type { Usage } from '../../domain/types.js';
+import { responsesInput } from './messages.js';
+import { markPartialOutput } from './retry.js';
+import { resolveMessageImages } from '../images.js';
+import { ModelRequest } from './request.js';
+import { InterruptedModelStreamError } from './request-errors.js';
+
+export interface Turn { message: ModelMessage; usage?: Usage; }
+export class ResponsesAccumulator {
+  private completed?: Response;
+  private items = new Map<number, ResponseOutputItem>();
+  private doneItems = new Set<number>();
+  constructor(private emit: RunContext['emit']) {}
+  accept(event: ResponseStreamEvent): void {
+    if (event.type === 'response.output_item.added' || event.type === 'response.output_item.done') {
+      this.items.set(event.output_index, structuredClone(event.item));
+      if (event.type === 'response.output_item.done') this.doneItems.add(event.output_index);
+    }
+    if (event.type === 'response.content_part.added' || event.type === 'response.content_part.done') {
+      if (event.part.type !== 'reasoning_text') this.message(event.output_index, event.item_id).content[event.content_index] = structuredClone(event.part);
+    }
+    if (event.type === 'response.output_text.delta' || event.type === 'response.output_text.done') {
+      if (Number.isSafeInteger(event.output_index) && Number.isSafeInteger(event.content_index) && event.item_id) {
+        const message = this.message(event.output_index, event.item_id);
+        const part = message.content[event.content_index];
+        const text = event.type === 'response.output_text.done' ? event.text : (part?.type === 'output_text' ? part.text : '') + event.delta;
+        message.content[event.content_index] = { ...(part?.type === 'output_text' ? part : {}), type: 'output_text', text, annotations: part?.type === 'output_text' ? part.annotations : [] };
+      }
+      if (event.type === 'response.output_text.delta') this.emit({ type: 'text', data: { delta: event.delta } });
+    }
+    if (event.type === 'response.failed' || event.type === 'response.incomplete') {
+      const code = event.type === 'response.failed' ? event.response.error?.code ?? 'failed' : event.response.incomplete_details?.reason ?? 'incomplete';
+      throw Object.assign(new Error(`模型响应未完成：${code}`), event.type === 'response.failed' ? { code } : {});
+    }
+    if (event.type === 'error') throw Object.assign(new Error('模型返回错误事件'), { code: event.code });
+    if (event.type === 'response.completed') {
+      if (event.response.status !== 'completed') throw new Error('模型终态无效');
+      this.completed = event.response;
+    }
+  }
+  finish(): Turn {
+    if (!this.completed) throw new InterruptedModelStreamError('模型流已中断，缺少 response.completed');
+    const output = this.output();
+    if (output.some(item => (item.type === 'message' || item.type === 'function_call') && item.status === 'incomplete')) {
+      throw new Error('模型输出条目未完成');
+    }
+    const refusals = output.filter(item => item.type === 'message').flatMap(item => item.content)
+      .filter(content => content.type === 'refusal');
+    if (refusals.length) {
+      this.emit({ type: 'text', data: { delta: refusals.map(item => item.refusal).join('') } });
+      throw new Error('模型拒绝执行该请求');
+    }
+    const calls = output.filter(item => item.type === 'function_call').map(item => ({ id: item.call_id, name: item.name, arguments: item.arguments }));
+    const text = output.filter(item => item.type === 'message').flatMap(item => item.content)
+      .map(content => content.type === 'output_text' ? content.text : content.type === 'refusal' ? content.refusal : '').join('');
+    const usage = this.completed.usage;
+    const cached = usage?.input_tokens_details?.cached_tokens;
+    return { message: { role: 'assistant', content: text, toolCalls: calls, providerItems: output },
+      usage: usage ? { inputTokens: usage.input_tokens, outputTokens: usage.output_tokens, source: 'reported',
+        ...(cached === undefined ? {} : { cachedInputTokens: cached }) } : undefined };
+  }
+  private message(index: number, id: string): ResponseOutputMessage {
+    const existing = this.items.get(index);
+    if (existing?.type === 'message') return existing;
+    const item: ResponseOutputMessage = { type: 'message', id, role: 'assistant', status: 'in_progress', content: [] };
+    this.items.set(index, item);
+    return item;
+  }
+  private output(): ResponseOutputItem[] {
+    // Some streams send complete items before a terminal response with an empty output.
+    // Keep the event projection for both the visible answer and subsequent history.
+    const terminal = this.completed!.output;
+    if (terminal.length) return terminal.map(item => {
+      if (item.type !== 'message') return item;
+      const streamed = [...this.items.values()].find(candidate => candidate.type === 'message' && candidate.id === item.id);
+      if (streamed?.type !== 'message') return item;
+      const content = item.content.length ? item.content.map((part, index) => {
+        const previous = streamed.content[index];
+        return part.type === 'output_text' && !part.text && previous?.type === 'output_text' ? { ...part, text: previous.text } : part;
+      }) : streamed.content;
+      return { ...streamed, ...item, content };
+    });
+    return [...this.items.entries()].sort(([a], [b]) => a - b).map(([index, item]): ResponseOutputItem => {
+      if (item.type === 'message') return { ...item, status: item.status === 'incomplete' ? 'incomplete' : 'completed' };
+      if (this.doneItems.has(index)) return item;
+      throw new Error('模型输出条目缺少完成事件');
+    });
+  }
+}
+export async function responsesTurn(client: OpenAI, context: RunContext, messages: ModelMessage[]): Promise<Turn> {
+  const request = new ModelRequest(context);
+  let partialOutput = false;
+  try {
+    const images = await resolveMessageImages({ ...context, signal: request.signal }, messages);
+    request.signal.throwIfAborted();
+    const stream = await client.responses.create({
+      model: context.bot.model, instructions: context.instructions, input: responsesInput(messages, images), store: false, stream: true,
+      include: ['reasoning.encrypted_content'],
+      ...(context.bot.reasoning ? { reasoning: { effort: context.bot.reasoning as 'low' | 'medium' | 'high' } } : {}),
+      tools: context.tools.map(tool => ({ type: 'function', name: tool.name, description: tool.description, parameters: tool.inputSchema, strict: false })),
+    }, { signal: request.signal });
+    const accumulator = new ResponsesAccumulator(context.emit);
+    for await (const event of stream) {
+      if (event.type.startsWith('response.output_') || event.type.startsWith('response.content_part.')
+        || event.type.startsWith('response.function_call_arguments.') || event.type.startsWith('response.reasoning_')
+        || ('response' in event && event.response.output.length > 0)) partialOutput = true;
+      request.activity(event.type, partialOutput);
+      accumulator.accept(event);
+      if (event.type === 'response.completed') break;
+    }
+    request.signal.throwIfAborted();
+    return accumulator.finish();
+  } catch (error) { throw markPartialOutput(request.error(error), partialOutput); }
+  finally { request.close(); }
+}

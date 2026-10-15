@@ -1,0 +1,68 @@
+name: Core and build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI_NODE_VERSION: 22.23.2
+  CI_PNPM_VERSION: 11.25.0
+
+jobs:
+  checks:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure isolated data and cache directories
+        run: node scripts/ci/environment.mjs
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.CI_NODE_VERSION }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.CI_PNPM_VERSION }}
+          run_install: false
+      - name: Restore pnpm content store
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CI_PNPM_STORE }}
+          key: pnpm-${{ runner.os }}-${{ runner.arch }}-node-${{ env.CI_NODE_VERSION }}-pnpm-${{ env.CI_PNPM_VERSION }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-${{ runner.os }}-${{ runner.arch }}-node-${{ env.CI_NODE_VERSION }}-pnpm-${{ env.CI_PNPM_VERSION }}-
+      - name: Restore Electron download cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.ELECTRON_CACHE }}
+          key: electron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            electron-${{ runner.os }}-${{ runner.arch }}-
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile --store-dir "${{ env.CI_PNPM_STORE }}"
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Test
+        run: pnpm test
+      - name: Test preset packages
+        run: python scripts/presets/test_build.py
+      - name: Build
+        run: pnpm build
+      - name: Report validation scope
+        if: always()
+        run: node scripts/ci/summary.mjs

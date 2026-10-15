@@ -1,0 +1,2 @@
+resources/agent-presets/** text eol=lf
+resources/agent-presets/skills/** -text -whitespace

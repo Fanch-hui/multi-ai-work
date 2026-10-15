@@ -1,0 +1,5 @@
+Adapted from https://github.com/anthropics/knowledge-work-plugins
+Fixed commit: 02ffa99ff00ce4d3046ccebabb8357cb39f3ab06
+Source: design/skills/design-critique/SKILL.md
+License: Apache-2.0; see LICENSE.
+App adaptation: Chinese workflow, tool routing, independent resource paths and delivery constraints; 2026-10-13.

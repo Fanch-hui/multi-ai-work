@@ -1,0 +1,4 @@
+interface:
+  display_name: "Amazon 选品排除清单与差评改良验证"
+  short_description: "Amazon 选品排除清单与差评改良验证：证据化诊断、方案与单变量验证"
+  default_prompt: "Use $sealeap-fenghuang-amazon-product-exclusion-review-mining to diagnose this Amazon task and return an evidence-gated plan."

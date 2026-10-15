@@ -1,0 +1,4 @@
+Source: https://github.com/anthropics/claude-for-legal/tree/4a6c651889c97cc9140580363c73e0eb17379c2b/litigation-legal/skills/chronology
+License: Apache-2.0
+Modified for multi-AI work: Chinese metadata and task output; App authorization/resource paths; no member delegation; localized workflow.
+Additional App adaptations: removed host-specific command dependencies; packaged practice context; document mode uses supplied materials without a global matter log.

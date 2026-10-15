@@ -1,0 +1,4 @@
+interface:
+  display_name: "Amazon AI 辅助选品缺口与单位经济"
+  short_description: "Amazon AI 辅助选品缺口与单位经济：证据化诊断、方案与单变量验证"
+  default_prompt: "Use $sealeap-qiongqi-amazon-ai-product-gap-research to diagnose this Amazon task and return an evidence-gated plan."

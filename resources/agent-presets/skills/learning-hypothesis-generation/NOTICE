@@ -1,0 +1,3 @@
+Source: https://github.com/K-Dense-AI/scientific-agent-skills/tree/a1043ef544e3a100c28e70a736b6cf32554d0677/skills/hypothesis-generation
+License: MIT
+Adapted for multi-AI work: Chinese task workflow, App tools, explicit source and resource paths, local supplied-material mode. Original skill and its referenced resources are preserved under upstream/.
