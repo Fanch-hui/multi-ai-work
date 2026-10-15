@@ -55,9 +55,9 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ${{ env.ELECTRON_CACHE }}
-          key: electron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          key: electron-downloads-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: |
-            electron-${{ runner.os }}-${{ runner.arch }}-
+            electron-downloads-${{ runner.os }}-${{ runner.arch }}-
       - name: Restore package tool downloads
         id: builder-cache
         uses: actions/cache/restore@v4
@@ -95,12 +95,6 @@ jobs:
         with:
           path: ${{ env.CI_PNPM_STORE }}
           key: ${{ steps.pnpm-cache.outputs.cache-primary-key }}
-      - name: Save Electron download cache
-        if: ${{ always() && steps.install.outcome == 'success' && steps.electron-cache.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@v4
-        with:
-          path: ${{ env.ELECTRON_CACHE }}
-          key: ${{ steps.electron-cache.outputs.cache-primary-key }}
       - name: Prepare verified Office runtime
         id: office
         run: >-
@@ -118,6 +112,12 @@ jobs:
       - name: Package with target runtime and final dependency validation
         id: package
         run: node scripts/package.mjs ${{ matrix.flag }}
+      - name: Save Electron download cache
+        if: ${{ always() && steps.package.outcome == 'success' && steps.electron-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.ELECTRON_CACHE }}
+          key: ${{ steps.electron-cache.outputs.cache-primary-key }}
       - name: Save package tool downloads
         if: ${{ always() && steps.package.outcome == 'success' && steps.builder-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v4

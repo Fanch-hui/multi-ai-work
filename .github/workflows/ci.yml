@@ -47,14 +47,6 @@ jobs:
           key: pnpm-${{ runner.os }}-${{ runner.arch }}-node-${{ env.CI_NODE_VERSION }}-pnpm-${{ env.CI_PNPM_VERSION }}-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: |
             pnpm-${{ runner.os }}-${{ runner.arch }}-node-${{ env.CI_NODE_VERSION }}-pnpm-${{ env.CI_PNPM_VERSION }}-
-      - name: Restore Electron download cache
-        id: electron-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ env.ELECTRON_CACHE }}
-          key: electron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: |
-            electron-${{ runner.os }}-${{ runner.arch }}-
       - name: Install locked dependencies
         id: install
         run: pnpm install --frozen-lockfile --store-dir "${{ env.CI_PNPM_STORE }}"
@@ -64,12 +56,6 @@ jobs:
         with:
           path: ${{ env.CI_PNPM_STORE }}
           key: ${{ steps.pnpm-cache.outputs.cache-primary-key }}
-      - name: Save Electron download cache
-        if: ${{ always() && steps.install.outcome == 'success' && steps.electron-cache.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@v4
-        with:
-          path: ${{ env.ELECTRON_CACHE }}
-          key: ${{ steps.electron-cache.outputs.cache-primary-key }}
       - name: Typecheck
         run: pnpm typecheck
       - name: Test

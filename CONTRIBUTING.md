@@ -29,7 +29,7 @@ Core 是任务、工具权限与持久状态的权威。原生通道由各自运
 
 复用 `.github/workflows/ci.yml`：push、Pull Request 或手动触发都会运行 macOS 与 Windows 的完整测试、类型检查、预设构建测试和生产构建。同一分支的新提交会取消旧的运行。
 
-pnpm store 按系统、架构、Node、pnpm 和锁文件缓存；Electron 下载按平台与锁文件缓存。安装始终使用 frozen lockfile；不缓存 `node_modules`，避免复用错误的原生 ABI。
+pnpm store 按系统、架构、Node、pnpm 和锁文件缓存，依赖安装成功即保存。Electron 下载缓存用于安装包门禁，在实际打包下载后保存。安装始终使用 frozen lockfile；不缓存 `node_modules`，避免复用错误的原生 ABI。
 
 发布前从 Actions 手动运行 `Validate desktop packages`。它复用依赖与下载缓存，并生成两平台安装包，在独立目录验证 Core 启动及 Office 转换。Office 下载按运行库锁文件缓存，命中后仍校验摘要。安装包与报告通过 Actions artifacts 获取。
 
