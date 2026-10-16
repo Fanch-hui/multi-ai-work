@@ -133,6 +133,7 @@ export interface MemoryEntry {
 export interface ContextCheckpoint {
   id: string; bindingId: string; generation: number; throughSequence: number;
   content: string; sourceMessageIds: string[]; estimatedTokens: number; createdAt: string;
+  artifactIds?: string[];
 }
 export interface ContextOperation {
   id: string; bindingId: string; generation: number; status: 'started' | 'completed' | 'failed';
