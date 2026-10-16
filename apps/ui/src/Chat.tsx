@@ -2,7 +2,7 @@ import { isChiefProvider } from "../../../src/domain/chief-provider.js";
 import { ModalPresence } from "./ModalPresence.js";
 import { useState } from "react";
 import type { Conversation, Snapshot } from "../../../src/domain/types.js";
-import type { Mutate } from "./store.js";
+import type { ConversationHistory, Mutate } from "./store.js";
 import { Button, Empty } from "./components.js";
 import { ConversationRecords } from "./ConversationRecords.js";
 import { conversationRecordTasks, recordTaskActive } from './conversation-records.js';
@@ -15,8 +15,8 @@ import { ChatHeader, type ChatView } from './ChatHeader.js';
 import { useConversationRead } from './useConversationRead.js';
 import { currentTaskPlan } from './task-plans.js';
 import { TaskPlanCard } from './TaskPlanCard.js';
-export function Chat({ data, conversation, mutate, configure, configureChief, onSelectConversation, sidebarCollapsed, onExpandSidebar }: {
-  data: Snapshot; conversation?: Conversation; mutate: Mutate; configure: () => void; configureChief: () => void;
+export function Chat({ data, conversation, mutate, history, configure, configureChief, onSelectConversation, sidebarCollapsed, onExpandSidebar }: {
+  data: Snapshot; conversation?: Conversation; mutate: Mutate; history?: ConversationHistory; configure: () => void; configureChief: () => void;
   onSelectConversation: (id: string) => void; sidebarCollapsed: boolean; onExpandSidebar: () => void;
 }) {
   const [view, setView] = useState<ChatView>('chat');
@@ -53,7 +53,7 @@ export function Chat({ data, conversation, mutate, configure, configureChief, on
     </div> : main && !configured ? <div className="chat-content flex items-center justify-center px-6">
       <Empty title="让管家帮你组织工作" description="通过 ChatGPT 或自定义 API 配置管家，即可开始对话、分工和汇总。"
         action={<Button variant="primary" onClick={configureChief}>配置管家</Button>} />
-    </div> : <MessageFeed key={conversation.id} data={data} conversation={conversation} mutate={mutate} onSelectConversation={onSelectConversation} />}
+    </div> : <MessageFeed key={conversation.id} history={history} data={data} conversation={conversation} mutate={mutate} onSelectConversation={onSelectConversation} />}
     </ChatSurface>
     <ModalPresence show={membersOpen}>{membersOpen && <GroupMembers data={data} conversation={conversation} mutate={mutate} close={() => setMembersOpen(false)} />}</ModalPresence>
     <ModalPresence show={manageOpen}>{manageOpen && <ConversationActions conversation={conversation} mutate={mutate} close={() => setManageOpen(false)} />}</ModalPresence>

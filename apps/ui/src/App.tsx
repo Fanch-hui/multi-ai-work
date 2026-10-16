@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { PanelLeft, RefreshCw } from "lucide-react";
 import { useTeamStore } from "./store.js";
 import { Button } from "./components.js";
@@ -18,7 +18,7 @@ const Memory = lazy(() => import("./Memory.js").then((module) => ({ default: mod
 const Settings = lazy(() => import("./Settings.js").then((module) => ({ default: module.Settings })));
 
 export function App() {
-  const { data, error, refresh, mutate } = useTeamStore();
+  const { data, error, refresh, mutate, selectConversation, nextBefore, loadingHistory, loadMore } = useTeamStore();
   const [page, setPage] = useState<Page>("chat");
   const [selected, setSelected] = useState("");
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem("sidebar-collapsed") === "true");
@@ -33,6 +33,7 @@ export function App() {
   const conversation = data?.conversations.find((item) => item.id === selected)
     || data?.conversations.find((item) => item.id === data.settings.mainConversationId && !item.archived)
     || data?.conversations.find((item) => !item.archived);
+  useEffect(() => { selectConversation(conversation?.id); }, [conversation?.id, selectConversation]);
   function toggleSidebar() {
     const next = !collapsed;
     setCollapsed(next);
@@ -72,7 +73,7 @@ export function App() {
               <Button variant="primary" onClick={() => void refresh()}><RefreshCw size={15} />重新连接</Button>
             </div></div> : <Loading />
             : page === "chat" ? <Chat key={conversation?.id} data={data} conversation={conversation} mutate={mutate}
-              configure={() => setPage("settings")} configureChief={() => setConfigureChief(true)}
+              history={{ hasMore: !!nextBefore, loading: loadingHistory, loadMore }} configure={() => setPage("settings")} configureChief={() => setConfigureChief(true)}
               onSelectConversation={openConversation} sidebarCollapsed={collapsed} onExpandSidebar={toggleSidebar} />
             : page === "market" ? <Market data={data} mutate={mutate} headerLeading={headerLeading} configureConnection={() => setPage("settings")} careerTrigger={careerTrigger} careerHandled={() => setCareerTrigger(false)} />
             : page === "agents" ? <Agents data={data} mutate={mutate} headerLeading={headerLeading} openChief={() => openConversation(data.settings.mainConversationId || "")} openMarket={() => setPage("market")} configureConnection={() => setPage("settings")} />

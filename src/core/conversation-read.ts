@@ -5,6 +5,7 @@ import { required } from './errors.js';
 interface ReadPosition { sequence: number; pendingMessageIds: string[]; }
 const key = (conversationId: string) => `conversation-read:${conversationId}`;
 const incoming = (message: Message) => message.authorType === 'bot';
+const whitespace = '\t\n\v\f\r \u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff';
 const visible = (message: Message) => !!message.content.trim() || message.artifactIds.length > 0;
 const position = (storage: Storage, conversationId: string): ReadPosition =>
   storage.metadata<ReadPosition>(key(conversationId)) ?? { sequence: 0, pendingMessageIds: [] };
@@ -51,4 +52,24 @@ export function readConversation(storage: Storage, conversationId: string, messa
   if (sequence === previous.sequence && pendingMessageIds.join('|') === previous.pendingMessageIds.join('|')) return false;
   storage.setMetadata(key(conversationId), { sequence, pendingMessageIds });
   return true;
+}
+
+export function unreadConversationCounts(storage: Storage): Conversation[] {
+  return storage.all<Conversation>('conversations').map(room => {
+    const read = position(storage, room.id);
+    const filter = `conversation_id = ? AND json_extract(payload, '$.authorType') = 'bot'
+      AND (sequence > ? OR id IN (SELECT value FROM json_each(?)))`;
+    const args = [room.id, read.sequence, JSON.stringify(read.pendingMessageIds)];
+    const count = storage.prepare(`SELECT COUNT(*) AS count FROM messages WHERE ${filter}
+      AND json_extract(payload, '$.status') != 'draft'
+      AND (length(trim(json_extract(payload, '$.content'), ?)) > 0 OR json_array_length(payload, '$.artifactIds') > 0)`)
+      .get(...args, whitespace) as { count: number };
+    const drafts = storage.prepare(`SELECT id FROM messages WHERE ${filter} AND json_extract(payload, '$.status') = 'draft'`)
+      .all(...args) as { id: string }[];
+    const unreadCount = count.count + drafts.filter(row => {
+      const message = storage.getMessage(row.id);
+      return !!message && visible(message);
+    }).length;
+    return { ...room, unreadCount };
+  });
 }

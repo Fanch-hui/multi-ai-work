@@ -4,11 +4,12 @@ import { ScrollFollow } from './scroll-follow.js';
 export function useScrollFollow(conversationId: string) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const followRef = useRef<ScrollFollow | undefined>(undefined);
   useLayoutEffect(() => {
     const feed = scrollRef.current;
     const content = contentRef.current;
     if (!feed || !content) return;
-    const follow = new ScrollFollow();
+    const follow = new ScrollFollow(); followRef.current = follow;
     follow.reset(feed);
     const observer = new ResizeObserver(() => follow.layoutChanged(feed));
     observer.observe(feed);
@@ -56,5 +57,7 @@ export function useScrollFollow(conversationId: string) {
       window.removeEventListener('pointercancel', endDrag);
     };
   }, [conversationId]);
-  return { scrollRef, contentRef };
+  return { scrollRef, contentRef, pauseFollow: () => {
+    if (scrollRef.current) followRef.current?.userIntent(-1, scrollRef.current);
+  } };
 }

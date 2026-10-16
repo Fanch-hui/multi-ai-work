@@ -1,6 +1,7 @@
+import { useLayoutEffect, useRef } from 'react';
 import { ArrowUpRight } from "lucide-react";
 import type { Conversation, Snapshot, Task } from "../../../src/domain/types.js";
-import type { Mutate } from "./store.js";
+import type { ConversationHistory, Mutate } from "./store.js";
 import { Badge, cn, timeLabel } from "./components.js";
 import Avatar, { UserAvatar } from "./Avatar.js";
 import { ConversationAvatar } from './ConversationAvatar.js';
@@ -15,17 +16,38 @@ import { taskRecovery } from './task-activity.js';
 import { messageInputFeedbackIndex } from './task-input-feedback.js';
 export function MessageFeed({
   data,
+  history,
   conversation,
   mutate,
   onSelectConversation,
 }: {
   data: Snapshot;
+  history?: ConversationHistory;
   conversation: Conversation;
   mutate: Mutate;
   onSelectConversation: (id: string) => void;
 }) {
-  const { scrollRef, contentRef } = useScrollFollow(conversation.id);
+  const { scrollRef, contentRef, pauseFollow } = useScrollFollow(conversation.id);
   const messages = conversationMessages(data, conversation);
+  const anchor = useRef<{ messageId: string; offset: number; first?: string } | undefined>(undefined);
+  useLayoutEffect(() => {
+    const feed = scrollRef.current, saved = anchor.current;
+    if (feed && saved && messages[0]?.id !== saved.first) {
+      const target = [...feed.querySelectorAll<HTMLElement>('[data-message-id]')].find(item => item.dataset.messageId === saved.messageId);
+      if (target) feed.scrollTop += target.getBoundingClientRect().top - feed.getBoundingClientRect().top - saved.offset;
+      anchor.current = undefined;
+    } else if (!history?.loading) anchor.current = undefined;
+  }, [messages[0]?.id, history?.loading, scrollRef]);
+  async function loadOlder() {
+    const feed = scrollRef.current;
+    if (!feed || !history) return;
+    pauseFollow();
+    const top = feed.getBoundingClientRect().top;
+    const target = [...feed.querySelectorAll<HTMLElement>('[data-message-id]')].find(item => item.getBoundingClientRect().bottom > top);
+    anchor.current = target?.dataset.messageId
+      ? { messageId: target.dataset.messageId, offset: target.getBoundingClientRect().top - top, first: messages[0]?.id } : undefined;
+    await history.loadMore();
+  }
   const bots = new Map(data.bots.map(bot => [bot.id, bot]));
   const runs = new Map(data.runs.map(run => [run.id, run]));
   const tasksByRun = new Map<string, Task>();
@@ -45,6 +67,9 @@ export function MessageFeed({
       tabIndex={0}
     >
       <div ref={contentRef} className="message-feed-content mx-auto grid min-w-0 w-full max-w-4xl grid-cols-1 gap-8">
+        {history?.hasMore && <div className="text-center"><button disabled={history.loading} onClick={() => void loadOlder()}
+          className="rounded-lg px-3 py-2 text-xs text-slate-500 hover:bg-slate-50 disabled:opacity-50">
+          {history.loading ? '正在加载…' : '加载更早消息'}</button></div>}
         {!messages.length && !working.length && !questions.length && !approvals.length && <div className="flex min-h-48 flex-col items-center justify-center gap-3 py-12 text-center">
           <h2 className="text-balance text-xl font-medium text-slate-700">{main ? "今天想完成什么？" : conversation.kind === "group" ? conversation.name : "开始对话"}</h2>
           {!main && conversation.kind === "group" && <p className="max-w-lg text-xs leading-6 text-slate-400">{conversation.memberIds.map((id) => bots.get(id)?.name).filter(Boolean).join(" · ")}</p>}
@@ -54,7 +79,7 @@ export function MessageFeed({
           const user = message.authorType === "user";
           const inputFeedback = user ? feedback.get(message.id) ?? [] : [];
           return (
-            <article key={message.id} className={cn("flex min-w-0 items-start gap-3", user && "justify-end")}>
+            <article key={message.id} data-message-id={message.id} className={cn("flex min-w-0 items-start gap-3", user && "justify-end")}>
               {!user && <Avatar bot={bot} name={bot?.name || "系统"} className="size-8" />}
               <div className={cn("min-w-0", user ? "max-w-[85%]" : "flex-1")}>
                 {!user && <div className="mb-2 flex items-center gap-2">

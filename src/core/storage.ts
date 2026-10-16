@@ -2,6 +2,8 @@ import Database from 'better-sqlite3';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { Message, RunEvent, RunEventPage } from '../domain/types.js';
+import type { MessagePage } from '../domain/snapshot-sync.js';
+import { StorageChangesBuffer } from './storage-changes.js';
 import { MessageStream } from './message-stream.js';
 
 export const entityTables = ['connections', 'bots', 'conversations', 'workspaces', 'session_bindings',
@@ -13,6 +15,7 @@ const indexedFields = { status: '$.status', parentId: '$.parentId', runId: '$.ru
 export class Storage {
   readonly db: Database.Database;
   readonly messageStream: MessageStream;
+  readonly changes = new StorageChangesBuffer();
   private statements = new Map<string, Database.Statement>();
   private tableVersions = new Map<EntityTable, number>();
   constructor(readonly path: string) {
@@ -63,6 +66,7 @@ export class Storage {
   }
 
   invalidateTables() {
+    this.changes.reset(true);
     for (const table of entityTables) this.tableVersions.set(table, this.tableVersion(table) + 1);
   }
 
@@ -82,6 +86,7 @@ export class Storage {
   put<T extends { id: string }>(table: EntityTable, value: T): T {
     this.prepare(`INSERT INTO ${table}(id,payload) VALUES (?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload`).run(value.id, JSON.stringify(value));
     this.tableVersions.set(table, this.tableVersion(table) + 1);
+    this.changes.mark(table, value.id);
     if (table === 'memory_entries') {
       const memory = value as T & { content: string };
       this.prepare('DELETE FROM memory_search WHERE id = ?').run(value.id);
@@ -90,6 +95,7 @@ export class Storage {
     return value;
   }
   delete(table: EntityTable, id: string) {
+    this.changes.reset();
     this.prepare(`DELETE FROM ${table} WHERE id = ?`).run(id);
     this.tableVersions.set(table, this.tableVersion(table) + 1);
     if (table === 'memory_entries') this.prepare('DELETE FROM memory_search WHERE id = ?').run(id);
@@ -106,11 +112,25 @@ export class Storage {
     const rows = (conversationId ? query.all(conversationId) : query.all()) as { payload: string; stream_sequence: number }[];
     return rows.map(row => this.messageStream.project(row).message);
   }
+  messagePage(conversationId: string, before = Number.MAX_SAFE_INTEGER, limit = 50): MessagePage {
+    const size = Math.max(1, Math.min(200, Math.floor(limit)));
+    const rows = this.prepare(`SELECT payload, stream_sequence FROM messages
+      WHERE conversation_id = ? AND sequence < ? ORDER BY sequence DESC LIMIT ?`)
+      .all(conversationId, before, size + 1) as { payload: string; stream_sequence: number }[];
+    const messages = rows.slice(0, size).map(row => this.messageStream.project(row).message).reverse();
+    return { messages, ...(rows.length > size ? { nextBefore: messages[0]?.sequence } : {}) };
+  }
+  messageRange(conversationId: string, from: number): MessagePage {
+    const rows = this.prepare(`SELECT payload, stream_sequence FROM messages
+      WHERE conversation_id = ? AND sequence >= ? ORDER BY sequence`).all(conversationId, from) as { payload: string; stream_sequence: number }[];
+    const earlier = this.prepare('SELECT 1 FROM messages WHERE conversation_id = ? AND sequence < ? LIMIT 1').get(conversationId, from);
+    return { messages: rows.map(row => this.messageStream.project(row).message), ...(earlier ? { nextBefore: from } : {}) };
+  }
   getMessage(id: string): Message | undefined {
     const row = this.prepare('SELECT payload, stream_sequence FROM messages WHERE id = ?').get(id) as { payload: string; stream_sequence: number } | undefined;
     return row ? this.messageStream.project(row).message : undefined;
   }
-  deleteMessage(id: string) { this.prepare('DELETE FROM messages WHERE id = ?').run(id); }
+  deleteMessage(id: string) { this.prepare('DELETE FROM messages WHERE id = ?').run(id); this.changes.reset(); }
   appendMessage(message: Omit<Message, 'sequence'>): Message {
     return this.db.transaction(() => {
       const row = this.prepare('SELECT COALESCE(MAX(sequence), 0) AS seq FROM messages WHERE conversation_id = ?').get(message.conversationId) as { seq: number };
@@ -118,13 +138,17 @@ export class Storage {
       const value: Message = { ...message, sequence: Math.max(row.seq, this.metadata<number>(sequenceKey) ?? 0) + 1 };
       this.prepare('INSERT INTO messages(id,conversation_id,sequence,payload) VALUES (?,?,?,?)').run(value.id, value.conversationId, value.sequence, JSON.stringify(value));
       this.setMetadata(sequenceKey, value.sequence);
+      this.changes.mark('messages', value.id);
       return value;
     })();
   }
   updateMessage(message: Message) {
     this.messageStream.update(message);
+    this.changes.mark('messages', message.id);
   }
   event(event: RunEvent) {
+    this.changes.mark('events', event.runId);
+    if (typeof event.data.messageId === 'string') this.changes.mark('messages', event.data.messageId);
     return this.prepare('INSERT OR IGNORE INTO run_events(id,run_id,payload) VALUES (?,?,?)').run(event.id, event.runId, JSON.stringify(event)).changes > 0;
   }
   runEvents(runId: string, cursor?: number, limit = 200): RunEventPage {

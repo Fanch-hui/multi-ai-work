@@ -1,3 +1,4 @@
+import { MemorySource } from './MemorySource.js';
 import { useState } from 'react';
 import { Pencil, Search, Trash2 } from 'lucide-react';
 import type { MemoryEntry, Snapshot } from '../../../src/domain/types.js';
@@ -9,6 +10,7 @@ export function MemoryNotebook({ notebook, data, mutate, edit, add }: {
   notebook: MemoryNotebookData; data: Snapshot; mutate: Mutate; edit: (entry: MemoryEntry) => void; add: () => void;
 }) {
   const [query, setQuery] = useState('');
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const entries = notebook.entries.filter(entry => entry.content.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
   return <div className="mx-auto w-full max-w-4xl">
     <div className="relative mb-6 max-w-sm">
@@ -31,13 +33,14 @@ export function MemoryNotebook({ notebook, data, mutate, edit, add }: {
             </Confirm>
           </div>
         </div>
-        {(entry.sourceIds.length > 0 || entry.allowedConversationIds.length > 0) && <details className="mt-2 text-xs text-slate-500">
+        {(entry.sourceIds.length > 0 || entry.allowedConversationIds.length > 0) && <details className="mt-2 text-xs text-slate-500" onToggle={event => {
+          const open = event.currentTarget.open;
+          setExpanded(previous => { const next = new Set(previous); if (open) next.add(entry.id); else next.delete(entry.id); return next; });
+        }}>
           <summary className="cursor-pointer">来源与使用范围</summary>
           {entry.allowedConversationIds.length > 0 && <p className="mt-3 leading-5">用于：{entry.allowedConversationIds
             .map(id => data.conversations.find(room => room.id === id)?.name || '已删除会话').join('、')}</p>}
-          {entry.sourceIds.map(id => <blockquote key={id} className="mt-3 rounded-lg bg-slate-50 p-3 text-pretty leading-5">
-            {data.messages.find(message => message.id === id)?.content || '来源消息已删除'}
-          </blockquote>)}
+          {expanded.has(entry.id) && entry.sourceIds.map(id => <MemorySource key={id} id={id} loaded={data.messages.find(message => message.id === id)} version={entry} />)}
         </details>}
       </section>)}
     </div> : <Empty title={query ? '没有匹配的内容' : '尚无长期记忆'}
