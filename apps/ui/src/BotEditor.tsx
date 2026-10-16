@@ -12,6 +12,7 @@ import { AvatarPicker } from "./AvatarPicker.js";
 import { isChiefProvider } from "../../../src/domain/chief-provider.js";
 import { DEFAULT_COMPACTION_THRESHOLD } from "../../../src/domain/context-settings.js";
 import { ContextBudgetFields } from "./ContextBudgetFields.js";
+import { skillsForMember } from "./skill-lists.js";
 const colors = ["#047857", "#2563eb", "#d97706", "#dc2626", "#475569"];
 export function BotEditor({
   bot,
@@ -54,6 +55,7 @@ export function BotEditor({
   const selectedModel = connection?.models.find((item) => item.id === model);
   const reasoningOptions = selectedModel?.reasoning || [];
   const selectedReasoning = reasoningOptions.includes(reasoning) ? reasoning : "";
+  const availableSkills = skillsForMember(data.skills, (detached || bot)?.skillIds);
   async function save(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
@@ -229,12 +231,12 @@ export function BotEditor({
           qoderServices={qoderServices}
           onQoderServicesChange={!main && connection?.provider === "qoder" ? setQoderServices : undefined}
         />
-        {!!data.skills.length && (
+        {!!availableSkills.length && (
           <fieldset>
             <legend className="mb-2 text-sm font-medium text-slate-700">Skills</legend>
-            <p className="mb-3 text-xs text-slate-500">Office 技能随资料读取能力提供；导入的技能可在下方单独启用。</p>
+            <p className="mb-3 text-xs text-slate-500">Office 技能随资料读取能力提供；成员配套技能仅供当前成员使用，导入的技能可单独启用。</p>
             <div className="flex flex-wrap gap-4">
-              {data.skills.map((item) => (
+              {availableSkills.map((item) => (
                 <label key={item.id} className="flex items-center gap-2 text-sm text-slate-600">
                   <input
                     type="checkbox"
@@ -242,7 +244,7 @@ export function BotEditor({
                     checked={item.bundled ? toolNames.includes('read_skill') : skillIds.includes(item.id)}
                     onChange={() => setSkills(toggle(skillIds, item.id))}
                   />
-                  {item.name}{item.missing ? '（资源缺失，请重新导入）' : ''}
+                  {item.name}{item.presetOnly ? '（成员配套）' : ''}{item.missing ? '（资源缺失，请重新导入）' : ''}
                 </label>
               ))}
             </div>

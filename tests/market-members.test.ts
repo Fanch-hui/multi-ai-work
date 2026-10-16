@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { AgentPreset, PresetInstallation, PresetMemberResult } from '../src/domain/market.js';
 import type { Bot, Skill, Task } from '../src/domain/types.js';
 import { fixtureEntries, fixturePreset, zipFixture } from './preset-package-fixture.js';
 import { setup, eventually } from './core-harness.js';
 import { sessionBinding } from '../src/core/session-binding.js';
+import { authorizedSkills, importSkillPackage } from '../src/core/skills.js';
 
 async function prepare(preset = fixturePreset()) {
   const setupResult = await setup(async () => ({ text: 'done' }));
@@ -24,6 +25,35 @@ async function prepare(preset = fixturePreset()) {
 }
 
 describe('preset members', () => {
+  it('keeps preset skills with bound members and permits separately imported shared skills', async () => {
+    const { core, root, installed, add, bot } = await prepare();
+    const skillId = installed.skillIds[0]!;
+    expect(core.state.storage.get<Skill>('skills', skillId)?.presetOnly).toBeUndefined();
+    expect(core.state.snapshot().skills.find(skill => skill.id === skillId)?.presetOnly).toBe(true);
+
+    const member = await add(), other = bot('其他成员', ['read_skill']);
+    expect(authorizedSkills(core.state, member).map(skill => skill.id)).toContain(skillId);
+    expect(authorizedSkills(core.state, other).map(skill => skill.id)).not.toContain(skillId);
+    await expect(core.request('bots.save', { input: { ...other, skillIds: [skillId] } }))
+      .rejects.toThrow('市场配套技能仅供绑定成员使用');
+    await expect(core.request('bots.save', { input: { ...other, id: undefined, skillIds: [skillId] } }))
+      .rejects.toThrow('市场配套技能仅供绑定成员使用');
+
+    const source = join(root, 'shared-skill'); await mkdir(source);
+    await writeFile(join(source, 'SKILL.md'), '---\nname: shared\ndescription: 共享技能\n---\n通用工作规范。');
+    const shared = await importSkillPackage(core.state, join(source, 'SKILL.md'));
+    const configured = await core.request('bots.save', { input: { ...other, skillIds: [shared.id] } }) as Bot;
+    expect(core.state.snapshot().skills.find(skill => skill.id === shared.id)?.presetOnly).toBeUndefined();
+    expect(authorizedSkills(core.state, configured).map(skill => skill.id)).toContain(shared.id);
+    expect(authorizedSkills(core.state, configured).map(skill => skill.id)).not.toContain(skillId);
+
+    const clone = core.entities.cloneBot(member.id);
+    expect(clone.skillIds).toEqual(member.skillIds);
+    await core.request('market.detach', { botId: member.id });
+    const custom = core.state.storage.get<Bot>('bots', member.id)!;
+    expect(core.entities.saveBot({ ...custom, name: '自定义成员' }).skillIds).toContain(skillId);
+  });
+
   it('keeps downloads separate, creates independent members and retries without duplication', async () => {
     const { core, installed, configuration, add } = await prepare();
     expect(core.state.snapshot().bots.filter(bot => bot.preset)).toHaveLength(0);

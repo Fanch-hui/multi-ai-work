@@ -10,7 +10,7 @@ import { avatarSchema } from './avatars.js';
 import { chiefInstructions, chiefRole, memberTools } from './chief.js';
 import { chiefOnlyTools } from '../domain/tool-permissions.js';
 import { qoderServiceNames } from '../domain/qoder-services.js';
-import { importSkillPackage } from './skills.js';
+import { assertSkillAssignment, importSkillPackage } from './skills.js';
 import { isChiefProvider } from '../domain/chief-provider.js';
 import { protectPresetEdit, validateBotSkills } from './market/bot-policy.js';
 import { defaultContextWindow } from '../domain/context-settings.js';
@@ -64,7 +64,7 @@ export class EntityService {
       status: 'untested', models: [], revision: (old?.revision ?? 0) + 1, createdAt: old?.createdAt ?? now() };
     this.state.storage.put('connections', connection); this.state.changed(); return connection;
   }
-  saveBot(input: unknown): Bot {
+  saveBot(input: unknown, presetSkillIds: readonly string[] = []): Bot {
     const parsed = botSchema.parse(input);
     if (parsed.id === this.state.settings().mainBotId) {
       parsed.role = chiefRole; parsed.instructions = chiefInstructions;
@@ -88,6 +88,7 @@ export class EntityService {
     const old = this.state.storage.get<Bot>('bots', botId);
     protectPresetEdit(this.state, old, parsed);
     validateBotSkills(this.state, parsed);
+    assertSkillAssignment(this.state, parsed.skillIds, [...old?.skillIds ?? [], ...presetSkillIds]);
     const chief = botId === this.state.settings().mainBotId;
     const toolNames = [...new Set(parsed.toolNames ?? old?.toolNames ?? memberTools)].filter(name => chief || !chiefOnlyTools.includes(name));
     const bot: Bot = { ...parsed, preset: old?.preset, toolNames, approvalMode: parsed.approvalMode ?? old?.approvalMode ?? 'ask',
@@ -98,7 +99,7 @@ export class EntityService {
   cloneBot(botId: string): Bot {
     if (botId === this.state.settings().mainBotId) throw new Error('主管智能体为内置成员');
     const bot = required(this.state.storage.get<Bot>('bots', botId), '智能体不存在');
-    return this.saveBot({ ...bot, id: undefined, personalInstructions: undefined, name: `${bot.name} 副本` });
+    return this.saveBot({ ...bot, id: undefined, personalInstructions: undefined, name: `${bot.name} 副本` }, bot.skillIds);
   }
   createConversation(input: unknown): Conversation {
     const parsed = z.object({ name, kind: z.enum(['private', 'group']), memberIds: z.array(z.string()).min(1), chiefId: z.string().optional(), workspaceId: z.string() }).parse(input);

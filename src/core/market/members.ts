@@ -47,7 +47,7 @@ export class PresetMembers {
     const bot = s.transaction(() => {
       const saved = this.entities.saveBot({ ...config, name: config.name ?? installation.preset.name,
         role: installation.preset.role, instructions: combinedInstructions(installation.preset.instructions, config.personalInstructions),
-        color: '#2563eb', avatar: 'cat', memoryMode: 'propose', skillIds: installation.skillIds });
+        color: '#2563eb', avatar: 'cat', memoryMode: 'propose', skillIds: installation.skillIds }, installation.skillIds);
       const member: Bot = { ...saved, personalInstructions: config.personalInstructions,
         preset: { installationId: installation.id, presetId: installation.preset.id, version: installation.preset.version,
           source: installation.source, baseInstructions: installation.preset.instructions, managedSkillIds: installation.skillIds } };

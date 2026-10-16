@@ -146,7 +146,7 @@ export interface ToolConnection {
   searchBackend?: 'http' | 'tavily';
 }
 export interface Skill { id: string; name: string; path: string; content: string; description?: string; resourceRoot?: string; version?: string; bundled?: boolean;
-  digest?: string; source?: SkillSource; missing?: boolean; }
+  digest?: string; source?: SkillSource; missing?: boolean; presetOnly?: boolean; }
 export interface Settings {
   onboardingStatus?: 'pending' | 'skipped' | 'completed';
   maxActiveRuns: number; maxChildren: number; maxCoordinationRounds: number;

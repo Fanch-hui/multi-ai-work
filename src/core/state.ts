@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Artifact, Bot, MemoryEntry, ProcessRecord, Run, Snapshot, Settings, Task, TaskQueueReason, Workspace } from '../domain/types.js';
+import type { Artifact, Bot, MemoryEntry, ProcessRecord, Run, Skill, Snapshot, Settings, Task, TaskQueueReason, Workspace } from '../domain/types.js';
 import { Storage } from './storage.js';
 import { getMemoryUsage } from './memory-storage.js';
 import { ensureMainTeam, publicBot } from './chief.js';
@@ -9,7 +9,7 @@ import { migrateContextSettings } from './context-settings.js';
 import { migrateProviders } from './provider-migrations.js';
 import { migrateBotPermissions, migrateWorkSettings, workSettings, defaultSettings } from './work-settings.js';
 import { migrateRunMetrics } from './run-metrics.js';
-import { syncOfficeSkills } from './skills.js';
+import { presetSkillIds, syncOfficeSkills } from './skills.js';
 import { initializeOnboarding } from './onboarding.js';
 import { initializeConversationReads, unreadConversations } from './conversation-read.js';
 import type { TaskPlanRecord } from '../domain/task-plan.js';
@@ -73,6 +73,7 @@ export class State {
   snapshot(messageProjection?: Message[]): Snapshot {
     const s = this.storage, settings = this.settings(), messages = messageProjection ?? s.messages(), tasks = s.all<Task>('tasks');
     const runs = s.all<Run>('runs'), readActivity = taskActivityReader(s, tasks, runs);
+    const privateSkillIds = presetSkillIds(this);
     return { connections: this.snapshotCache.all('connections'), bots: this.snapshotCache.all<Bot>('bots').map(bot => publicBot(bot, settings.mainBotId)), conversations: messageProjection ? unreadConversationCounts(s) : unreadConversations(s, messages),
       workspaces: this.snapshotCache.all('workspaces'), messages, tasks: tasks.map(task => this.taskSnapshot(task, readActivity)), runs,
       approvals: s.all('approvals'), artifacts: s.all<Artifact>('artifacts').map(artifact => ({ ...artifactRequirement(s, artifact),
@@ -82,7 +83,8 @@ export class State {
         return usage ? { ...entry, usage } : entry;
       }),
       processes: s.all<ProcessRecord>('processes').map(publicProcess),
-      events: s.events(), toolConnections: this.snapshotCache.all('tool_connections'), skills: this.snapshotCache.all('skills'),
+      events: s.events(), toolConnections: this.snapshotCache.all('tool_connections'),
+      skills: this.snapshotCache.all<Skill>('skills').map(skill => privateSkillIds.has(skill.id) ? { ...skill, presetOnly: true } : skill),
       bindings: s.all('session_bindings'), checkpoints: s.all('context_checkpoints'), compactions: s.all('compactions'),
       taskPlans: s.all<TaskPlanRecord>('task_plans').map(plan => taskPlanView(plan, tasks, settings.mainBotId!)),
       taskInputs: taskInputs(s),

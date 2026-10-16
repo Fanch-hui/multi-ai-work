@@ -6,12 +6,14 @@ import type { Snapshot, ToolConnection } from "../../../src/domain/types.js";
 import type { Mutate } from "./store.js";
 import { choosePath, errorMessage } from "./api.js";
 import { Badge, Button, Confirm, Empty, ErrorNote, Field, Modal, inputClass } from "./components.js";
+import { sharedSkills } from "./skill-lists.js";
 export function Integrations({ data, mutate }: { data: Snapshot; mutate: Mutate }) {
   const [editing, setEditing] = useState<ToolConnection | "new">();
   const [importOpen, setImport] = useState(false);
   const [path, setPath] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
+  const skills = sharedSkills(data.skills);
   const searchServices = data.toolConnections.filter(item => item.enabled && (
     item.kind === "search" || item.searchBackend === "tavily" || item.toolNames.includes("tavily-search")
   ));
@@ -160,9 +162,9 @@ export function Integrations({ data, mutate }: { data: Snapshot; mutate: Mutate 
             导入 Skill
           </Button>
         </div>
-        {data.skills.length ? (
+        {skills.length ? (
           <div className="grid gap-3">
-            {data.skills.map((item) => (
+            {skills.map((item) => (
               <div key={item.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-4">
                 <FileCode2 size={20} className="shrink-0 text-slate-400" />
                 <div className="min-w-0 flex-1">

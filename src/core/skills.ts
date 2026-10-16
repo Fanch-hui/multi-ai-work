@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readdir, lstat, copyFile, readFile, realpath, rm } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative } from 'node:path';
 import type { Bot, Skill } from '../domain/types.js';
+import type { PresetInstallation } from '../domain/market.js';
 import { workspaceRuntimeRoot } from '../tools/office-runtime.js';
 import type { State } from './state.js';
 import { digestSkillDirectory, parseSkillMetadata } from './market/package-resources.js';
@@ -36,6 +37,17 @@ export function syncOfficeSkills(state: State) {
 export function authorizedSkills(state: State, bot: Bot): Skill[] {
   return state.storage.all<Skill>('skills').filter(skill => !skill.missing && (bot.skillIds.includes(skill.id)
     || skill.bundled && bot.toolNames.includes('read_skill')));
+}
+
+export function presetSkillIds(state: State): Set<string> {
+  return new Set(state.storage.all<PresetInstallation>('preset_installations').flatMap(item => item.skillIds));
+}
+
+export function assertSkillAssignment(state: State, skillIds: string[], permittedPresetIds: readonly string[]) {
+  const privateIds = presetSkillIds(state), permitted = new Set(permittedPresetIds);
+  if (skillIds.some(skillId => privateIds.has(skillId) && !permitted.has(skillId))) {
+    throw new Error('市场配套技能仅供绑定成员使用，请从智能体市场雇佣对应成员');
+  }
 }
 
 export async function importSkillPackage(state: State, selected: string): Promise<Skill> {
