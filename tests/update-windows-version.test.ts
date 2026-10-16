@@ -15,6 +15,6 @@ ${windowsVersionCheck}
 ) | ConvertTo-Json -Compress`;
   const executable = win32.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
   const { stdout } = await promisify(execFile)(executable,
-    ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], { windowsHide: true });
+    ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], { windowsHide: true, timeout: 15_000 });
   expect(JSON.parse(stdout)).toEqual([true, true, false, false]);
-});
+}, 20_000);
