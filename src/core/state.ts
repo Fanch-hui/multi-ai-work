@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Artifact, Bot, ProcessRecord, Run, Snapshot, Settings, Task, TaskQueueReason, Workspace } from '../domain/types.js';
+import type { Artifact, Bot, MemoryEntry, ProcessRecord, Run, Snapshot, Settings, Task, TaskQueueReason, Workspace } from '../domain/types.js';
 import { Storage } from './storage.js';
+import { getMemoryUsage } from './memory-storage.js';
 import { ensureMainTeam, publicBot } from './chief.js';
 import { migrateContextSettings } from './context-settings.js';
 import { migrateProviders } from './provider-migrations.js';
@@ -75,7 +76,11 @@ export class State {
     return { connections: this.snapshotCache.all('connections'), bots: this.snapshotCache.all<Bot>('bots').map(bot => publicBot(bot, settings.mainBotId)), conversations: messageProjection ? unreadConversationCounts(s) : unreadConversations(s, messages),
       workspaces: this.snapshotCache.all('workspaces'), messages, tasks: tasks.map(task => this.taskSnapshot(task, readActivity)), runs,
       approvals: s.all('approvals'), artifacts: s.all<Artifact>('artifacts').map(artifact => ({ ...artifactRequirement(s, artifact),
-        ...(artifact.image ? { image: { ...artifact.image, path: '' } } : {}) })), questions: s.all('questions'), memories: s.all('memory_entries'),
+        ...(artifact.image ? { image: { ...artifact.image, path: '' } } : {}) })), questions: s.all('questions'),
+      memories: s.all<MemoryEntry>('memory_entries').map(entry => {
+        const usage = getMemoryUsage(s, entry.id);
+        return usage ? { ...entry, usage } : entry;
+      }),
       processes: s.all<ProcessRecord>('processes').map(publicProcess),
       events: s.events(), toolConnections: this.snapshotCache.all('tool_connections'), skills: this.snapshotCache.all('skills'),
       bindings: s.all('session_bindings'), checkpoints: s.all('context_checkpoints'), compactions: s.all('compactions'),

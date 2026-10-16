@@ -236,10 +236,17 @@ export class CoreService {
       case 'tasks.retry': return this.tasks.retry(objectId());
       case 'tasks.reconcile': return this.tools.controls!.reconcile(objectId(), z.enum(['succeeded', 'not_executed']).parse(params.outcome));
       case 'approvals.resolve': this.approvals.resolve(objectId(), z.boolean().parse(params.approved)); break;
-      case 'memories.propose': return this.proposeMemory(params);
-      case 'memories.save': return this.memories.save(params);
+      case 'memories.propose': return this.memories.propose(params);
+      case 'memories.save': return this.memories.save(params, { kind: 'user' });
+      case 'memories.pin': return this.memories.pin(objectId(), z.boolean().parse(params.pinned));
+      case 'memories.merge': return this.memories.merge(params, { kind: 'user' });
+      case 'memories.history': return this.memories.history(objectId());
+      case 'memories.consolidate': return this.memories.consolidate(z.object({
+        scope: z.enum(['bot', 'team', 'shared']).optional(),
+        ownerId: z.string().optional(),
+      }).parse(params));
       case 'memories.resolve': this.memory.resolve(objectId(), z.boolean().parse(params.approved)); break;
-      case 'memories.revoke': return this.memories.revoke(objectId());
+      case 'memories.revoke': return this.memories.revoke(objectId(), { kind: 'user' });
       case 'workspaces.add': return this.entities.addWorkspace(params);
       case 'tools.save': return this.toolConnections.save(params.input);
       case 'tools.probe': return this.toolConnections.probe(objectId());
@@ -373,12 +380,6 @@ export class CoreService {
     if (connection.secretRef) await this.vault.delete(connection.secretRef);
     this.state.storage.put('connections', { ...connection, secretRef: undefined, status: 'needs_auth', revision: connection.revision + 1 });
     this.state.changed(); return result;
-  }
-  private proposeMemory(params: Record<string, unknown>) {
-    const input = z.object({ content: z.string().trim().min(1).max(20000), scope: z.enum(['bot', 'team', 'shared']), ownerId: z.string(),
-      allowedConversationIds: z.array(z.string()).default([]), sourceIds: z.array(z.string()).default([]) }).parse(params);
-    const memory: MemoryEntry = { ...input, id: id(), status: 'candidate', revision: 1, createdAt: now(), updatedAt: now() };
-    this.state.storage.put('memory_entries', memory); this.state.changed(); return memory;
   }
   private nativeSetup(connection: Connection) {
     return detectNativeSetup({ provider: connection.provider as 'antigravity' | 'qoder', executable: connection.executableMode === 'auto' ? undefined : connection.executable,
