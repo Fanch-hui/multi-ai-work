@@ -7,7 +7,7 @@ import { ContextReferences } from '../src/core/context-references.js';
 import { importAttachment } from '../src/core/attachments.js';
 import { setup } from './core-harness.js';
 
-async function fixture(tools = ['read_artifact', 'get_task']) {
+async function fixture(tools = ['read_artifact', 'get_task'], inlineToolLimit?: number) {
   const { core, root, bot } = await setup(async () => ({ text: '完成' }));
   const member = bot('助手', tools);
   const room = core.entities.createConversation({ name: '资料', kind: 'private', memberIds: [member.id], workspaceId: core.state.snapshot().workspaces[0].id });
@@ -15,7 +15,7 @@ async function fixture(tools = ['read_artifact', 'get_task']) {
     artifactIds: [], runIds: [], dependencyIds: [], goal: '处理资料', expectedOutput: '', requestId: 'task', depth: 0, createdAt: '', updatedAt: '' };
   core.state.storage.put('tasks', task);
   const references = new ContextReferences(core.state, { runId: 'run', task, bot: member, room,
-    toolNames: tools, signal: new AbortController().signal });
+    toolNames: tools, signal: new AbortController().signal, inlineToolLimit });
   return { core, root, member, room, task, references };
 }
 
@@ -66,6 +66,16 @@ describe('压缩资料引用', () => {
     expect(await references.preserveReferences([], first.artifactIds)).toEqual({ text: '', artifactIds: [] });
     await expect(references.preserveReferences([message])).rejects.toThrow('当前授权');
     const withoutRead = await fixture(['get_task']);
+    await expect(withoutRead.references.preserveReferences([message])).rejects.toThrow('当前授权');
+    expect(withoutRead.core.state.storage.all<Artifact>('artifacts')).toEqual([]);
+  });
+
+  it('小窗口按实际预算保存中等长度工具结果，权限不足保留原上下文', async () => {
+    const message: ModelMessage = { role: 'tool', content: '中段资料'.repeat(700) };
+    const readable = await fixture(['read_artifact'], 1000);
+    const preserved = await readable.references.preserveReferences([message]);
+    expect(preserved.artifactIds).toHaveLength(1);
+    const withoutRead = await fixture([], 1000);
     await expect(withoutRead.references.preserveReferences([message])).rejects.toThrow('当前授权');
     expect(withoutRead.core.state.storage.all<Artifact>('artifacts')).toEqual([]);
   });

@@ -9,7 +9,7 @@ import { scopedTask } from './task-access.js';
 import { accessibleArtifacts } from './tool-access.js';
 
 export interface ContextReference { kind: 'artifact' | 'task'; id: string; name: string; }
-interface ReferenceScope { runId: string; task: Task; bot: Bot; room: Conversation; toolNames: readonly string[]; signal: AbortSignal; }
+interface ReferenceScope { runId: string; task: Task; bot: Bot; room: Conversation; toolNames: readonly string[]; signal: AbortSignal; inlineToolLimit?: number; }
 const maxReadableBytes = 25 * 1024 * 1024;
 
 export class ContextReferences {
@@ -19,7 +19,7 @@ export class ContextReferences {
   async preserveReferences(messages: readonly ModelMessage[], previousArtifactIds: readonly string[] = []): Promise<{ text: string; artifactIds: string[] }> {
     const previous = previousArtifactIds.map(id => ({ kind: 'artifact' as const, id, name: '' }));
     for (const message of messages) {
-      if (message.role !== 'tool' || message.content.length <= 32000) continue;
+      if (message.role !== 'tool' || message.content.length <= (this.scope.inlineToolLimit ?? 32000)) continue;
       const reference = await this.preserveToolOutput(message);
       if (!reference) throw new Error('完整工具结果无法通过当前授权读取，保留原上下文');
       this.previous.push(reference);
@@ -115,7 +115,7 @@ async function readable(artifact: Artifact): Promise<boolean> {
 export function formatContextReferences(references: readonly ContextReference[]): string {
   const refs = [...new Map(references.map(ref => [`${ref.kind}:${ref.id}`, ref])).values()];
   if (!refs.length) return '';
-  return `可按当前权限读取的资料：\n${refs.map(ref => JSON.stringify({ name: ref.name,
+  return `可按当前权限读取的资料：\n${refs.map(ref => JSON.stringify({ name: ref.name.slice(0, 200),
     tool: ref.kind === 'artifact' ? 'read_artifact' : 'get_task',
     arguments: ref.kind === 'artifact' ? { artifactId: ref.id } : { taskId: ref.id } })).join('\n')}`;
 }
