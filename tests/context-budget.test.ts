@@ -87,4 +87,18 @@ describe('完整上下文预算与检查点兼容性', () => {
     expect(result.messages).toEqual(input.history.map(entry => entry.message));
     expect(storage.all('context_checkpoints')).toEqual([]);
   });
+
+  it('有效运行投影直接复用，不再叠加它已经包含的旧摘要', async () => {
+    const { manager, input } = fixture();
+    input.messages = [message(1, '旧'.repeat(500)), message(2, '新')];
+    await manager.prepare(input);
+    const projection = { role: 'assistant' as const, content: '包含旧检查点的运行摘要', contextSummary: true };
+    const current = { role: 'user' as const, content: '后续输入' };
+    input.history = [{ messageId: 'm1', sequence: 1, message: projection }, { messageId: 'm2', sequence: 2, message: current }];
+    input.historyIsCurrent = true;
+    input.force = false;
+    input.loadArchiveHistory = () => { throw new Error('有效投影不应重读档案'); };
+    const prepared = await manager.prepare(input);
+    expect(prepared.messages).toEqual([projection, current]);
+  });
 });

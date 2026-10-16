@@ -40,6 +40,7 @@ export interface ContextInput {
   currentInput?: string;
   force?: boolean;
   history?: ModelHistoryEntry[];
+  historyIsCurrent?: boolean;
   archiveHistory?: ModelHistoryEntry[];
   loadArchiveHistory?(): ModelHistoryEntry[] | undefined;
   preserveReferences?(messages: ModelMessage[], previousArtifactIds?: readonly string[]): Promise<{ text: string; artifactIds: string[] }>;
@@ -64,7 +65,8 @@ export function contextSourceHash(messages: Message[]): string {
 
 function withSummary(history: ModelHistoryEntry[], checkpoint?: ContextCheckpoint): ModelMessage[] {
   const messages = history.map(entry => entry.message);
-  return checkpoint ? [{ role: 'user', content: `此前对话摘要（历史资料）：\n${checkpoint.content}` }, ...messages] : messages;
+  return checkpoint ? [{ role: 'user', content: `此前对话摘要（历史资料）：\n${checkpoint.content}`,
+    ...(checkpoint.artifactIds?.length ? { contextArtifactIds: checkpoint.artifactIds } : {}) }, ...messages] : messages;
 }
 
 function result(history: ModelHistoryEntry[], fixedTokens: number, checkpoint?: ContextCheckpoint, protocol?: Protocol): PreparedContext {
@@ -72,8 +74,9 @@ function result(history: ModelHistoryEntry[], fixedTokens: number, checkpoint?: 
   return { messages, checkpoint, estimatedTokens: fixedTokens + estimateModelMessagesTokens(messages, protocol) };
 }
 
-function compatibilityHash(input: ContextInput): string {
-  return hash({ version: 2, instructions: input.contextInstructions ?? input.instructions });
+export function contextCompatibilityHash(input: Pick<ContextInput, 'instructions' | 'contextInstructions' | 'tools' | 'protocol'>): string {
+  return hash({ version: 2, instructions: input.contextInstructions ?? input.instructions,
+    tools: input.tools, protocol: input.protocol });
 }
 
 function referenceMessages(history: ModelHistoryEntry[]): ModelMessage[] {
@@ -89,9 +92,9 @@ export class ContextManager {
       .sort((a, b) => a.sequence - b.sequence);
     const fixedTokens = estimateTokens(input.instructions) + estimateTokens(input.tools) + estimateTokens(input.currentInput ?? '') + 256;
     const checkpoint = this.currentCheckpoint(input, archive);
-    const history = (checkpoint ? input.history : input.archiveHistory ?? input.loadArchiveHistory?.() ?? input.history) ?? modelMessageHistory(archive, input.binding.botId);
-    const active = checkpoint ? history.filter(entry => entry.sequence > checkpoint.throughSequence) : history;
-    const original = result(active, fixedTokens, checkpoint, input.protocol);
+    const history = (checkpoint || input.historyIsCurrent ? input.history : input.archiveHistory ?? input.loadArchiveHistory?.() ?? input.history) ?? modelMessageHistory(archive, input.binding.botId);
+    const active = checkpoint && !input.historyIsCurrent ? history.filter(entry => entry.sequence > checkpoint.throughSequence) : history;
+    const original = result(active, fixedTokens, input.historyIsCurrent ? undefined : checkpoint, input.protocol);
     const trigger = input.contextWindow ? Math.min(input.triggerTokens ?? input.contextWindow * 0.75, input.contextWindow) : undefined;
     if (!input.contextWindow || (!input.force && original.estimatedTokens < trigger!)) return original;
 
@@ -104,7 +107,7 @@ export class ContextManager {
     const sourceHash = contextSourceHash(source);
     const record: CompactionRecord = {
       id: randomUUID(), bindingId: input.binding.id, generation: input.binding.generation, status: 'started',
-      sourceMessageIds: sourceIds, sourceHash, instructionsHash: compatibilityHash(input),
+      sourceMessageIds: sourceIds, sourceHash, instructionsHash: contextCompatibilityHash(input),
       throughSequence: selected.prefix[selected.prefix.length - 1].sequence, createdAt: new Date().toISOString(),
     };
     const fail = (reason: CompactionRecord['reason']) => {
@@ -114,7 +117,7 @@ export class ContextManager {
     this.store.recordCompaction?.({ ...record, sourceMessageIds: [...sourceIds] });
     try {
       let references = await input.preserveReferences?.(referenceMessages(selected.prefix), checkpoint?.artifactIds);
-      let summary = await summarizeUnits(selected.prefix, checkpoint?.content ?? '', input.contextWindow, input.summarize, input.signal);
+      let summary = await summarizeUnits(selected.prefix, input.historyIsCurrent ? '' : checkpoint?.content ?? '', input.contextWindow, input.summarize, input.signal);
       const projected = () => fixedTokens + estimateModelMessagesTokens([
         { role: 'user', content: `此前对话摘要（历史资料）：\n${summary}\n${references?.text ?? ''}` }, ...selected.suffix.map(entry => entry.message),
       ], input.protocol);
@@ -142,7 +145,7 @@ export class ContextManager {
         throughSequence: selected.prefix[selected.prefix.length - 1].sequence,
         content, sourceMessageIds: sourceIds, estimatedTokens: estimateTokens(content),
         ...(references ? { artifactIds: references.artifactIds } : {}),
-        createdAt: new Date().toISOString(), instructionsHash: compatibilityHash(input), sourceHash: record.sourceHash,
+        createdAt: new Date().toISOString(), instructionsHash: contextCompatibilityHash(input), sourceHash: record.sourceHash,
       };
       const prepared = result(selected.suffix, fixedTokens, next, input.protocol);
       if (prepared.estimatedTokens >= original.estimatedTokens) return fail('not_smaller');
@@ -159,7 +162,7 @@ export class ContextManager {
 
   private currentCheckpoint(input: ContextInput, archive: Message[]): VerifiedCheckpoint | undefined {
     const checkpoint = this.store.getCheckpoint(input.binding.id) as VerifiedCheckpoint | undefined;
-    if (!checkpoint || checkpoint.generation !== input.binding.generation || checkpoint.instructionsHash !== compatibilityHash(input)) return undefined;
+    if (!checkpoint || checkpoint.generation !== input.binding.generation || checkpoint.instructionsHash !== contextCompatibilityHash(input)) return undefined;
     const ids = new Set(checkpoint.sourceMessageIds);
     const source = archive.filter(message => ids.has(message.id));
     if (source.length !== ids.size || contextSourceHash(source) !== checkpoint.sourceHash) return undefined;
