@@ -9,6 +9,7 @@ import { TaskPlanService } from './task-plans.js';
 import { TaskInputService } from './task-inputs.js';
 import { receivingTask } from './task-input-records.js';
 import { latestProgressRun } from './managed-progress.js';
+import { requireAttachmentCapacity } from '../domain/attachment-policy.js';
 
 import { terminal } from '../domain/task-status.js';
 export { terminal } from '../domain/task-status.js';
@@ -81,6 +82,7 @@ export class TaskService {
     const room = required(s.get<Conversation>('conversations', input.conversationId), '对话不存在');
     this.requireActive(room.id);
     const artifactIds = [...new Set(input.artifactIds ?? [])];
+    requireAttachmentCapacity(0, artifactIds.length);
     for (const artifactId of artifactIds) {
       const artifact = required(s.get<Artifact>('artifacts', artifactId), '资料不存在');
       if (artifact.conversationId !== room.id) throw new Error('资料不在当前会话中');
@@ -186,22 +188,37 @@ export class TaskService {
     }
   }
 
-  post(conversationId: string, botId: string, runId: string, content: string, artifactIds: string[] = []): Message {
-    for (const artifactId of artifactIds) {
-      const artifact = required(this.state.storage.get<Artifact>('artifacts', artifactId), '工件不存在');
-      const room = required(this.state.storage.get<Conversation>('conversations', conversationId), '会话不存在');
-      const run = this.state.storage.get<Run>('runs', runId);
-      const task = run && this.state.storage.get<Task>('tasks', run.taskId);
-      if (!accessibleArtifacts(this.state, room, botId, task).some(item => item.id === artifact.id)) throw new Error('工件不在当前会话中');
-    }
+  post(conversationId: string, botId: string, runId: string, content: string, artifactIds: string[] = [], targetConversationId = conversationId): Message {
     const s = this.state.storage;
+    const room = required(s.get<Conversation>('conversations', conversationId), '会话不存在');
+    const run = s.get<Run>('runs', runId);
+    const task = run && s.get<Task>('tasks', run.taskId);
+    const target = this.messageRoom(room, botId, task, targetConversationId);
+    this.requireActive(target.id);
+    const visible = new Set(accessibleArtifacts(this.state, room, botId, task).map(item => item.id));
+    for (const artifactId of artifactIds) {
+      required(s.get<Artifact>('artifacts', artifactId), '工件不存在');
+      if (!visible.has(artifactId)) throw new Error('工件不在当前会话中');
+    }
     const message = s.transaction(() => {
-      const draft = s.messages(conversationId).find(message => message.runId === runId && message.authorBotId === botId && message.status === 'draft');
+      const draft = s.messages(target.id).find(message => message.runId === runId && message.authorBotId === botId && message.status === 'draft');
       if (draft) s.deleteMessage(draft.id);
       // Publication follows the current cursor so readers cannot skip a previously empty draft.
-      return s.appendMessage({ id: id(), conversationId, authorType: 'bot', authorBotId: botId,
+      return s.appendMessage({ id: id(), conversationId: target.id, authorType: 'bot', authorBotId: botId,
         runId, content, artifactIds, status: 'committed', createdAt: now() });
     });
     this.state.changed(); return message;
+  }
+
+  private messageRoom(room: Conversation, botId: string, task: Task | undefined, targetId: string): Conversation {
+    if (targetId === room.id) return room;
+    const s = this.state.storage;
+    const target = required(s.get<Conversation>('conversations', targetId), '会话不存在或未授权');
+    const source = target.sourceTaskId ? s.get<Task>('tasks', target.sourceTaskId) : undefined;
+    if (botId !== this.state.settings().mainBotId || room.kind !== 'private' || room.purpose !== 'chief' || room.chiefId !== botId
+      || task?.conversationId !== room.id || task.botId !== botId || target.kind !== 'group' || target.purpose !== 'task'
+      || target.chiefId !== botId || !target.memberIds.includes(botId) || target.sourceConversationId !== room.id
+      || source?.conversationId !== room.id || source.botId !== botId) throw new Error('只能向当前主对话的关联任务群发言');
+    return target;
   }
 }

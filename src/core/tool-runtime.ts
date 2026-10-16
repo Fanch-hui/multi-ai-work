@@ -78,9 +78,9 @@ export class ToolRuntime {
     const s = this.state.storage;
     const context: ToolExecutionContext = { runId: run.id, task, botId: bot.id, conversation: room, workspace, signal,
       requestApproval: (name, summary, args) => this.approvals.request(run, name, summary, args, signal),
-      listArtifacts: () => accessibleArtifacts(this.state, room, bot.id, task).map(artifact => artifactRequirement(s, artifact)),
+      listArtifacts: () => accessibleArtifacts(this.state, room, bot.id, s.get<Task>('tasks', task.id) ?? task).map(artifact => artifactRequirement(s, artifact)),
       findArtifact: artifactId => {
-        const artifact = accessibleArtifacts(this.state, room, bot.id, task).find(artifact => artifact.id === artifactId);
+        const artifact = accessibleArtifacts(this.state, room, bot.id, s.get<Task>('tasks', task.id) ?? task).find(artifact => artifact.id === artifactId);
         return artifact && artifactRequirement(s, artifact);
       },
       ...messageTools(this.state, room.id),
@@ -102,7 +102,7 @@ export class ToolRuntime {
         s.transaction(() => { s.put('artifacts', artifact); const current = s.get<Task>('tasks', task.id)!; s.put('tasks', { ...current, artifactIds: [...current.artifactIds, artifact.id] }); });
         this.state.changed(); return artifact;
       },
-      postMessage: (content, artifacts) => this.tasks.post(room.id, bot.id, run.id, content, artifacts).id,
+      postMessage: (content, artifacts, conversationId) => this.tasks.post(room.id, bot.id, run.id, content, artifacts, conversationId).id,
       delegateTask: (botId, goal, expectedOutput, dependencyIds, artifactIds, planStepId) => this.tasks.create({ botId, goal, expectedOutput,
         parentId: task.id, conversationId: room.id, dependencyIds, inputArtifactIds: artifactIds ?? s.get<Task>('tasks', task.id)?.inputArtifactIds,
         planStepId, requestId: createHash('sha256').update(JSON.stringify({ parentId: task.id, botId, goal, expectedOutput, planStepId,

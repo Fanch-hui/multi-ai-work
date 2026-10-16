@@ -12,6 +12,7 @@ import { useAttachments } from "./useAttachments.js";
 import { busyInputMembers } from "./task-input-feedback.js";
 import { composerDrafts, composerSubmission, useComposerDraft } from "./composer-drafts.js";
 import { modelLabel } from "./model-label.js";
+import { MAX_MESSAGE_ATTACHMENTS } from "../../../src/domain/attachment-policy.js";
 export function Composer({
   data,
   conversation,
@@ -136,7 +137,7 @@ export function Composer({
           </p>}
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-1">
-              <Button type="button" variant="ghost" className="size-8 min-h-8 rounded-full p-0" aria-label={attaching ? "正在添加资料" : "添加资料"} title="添加资料" disabled={busy || attaching} onClick={() => void attach()}>
+              <Button type="button" variant="ghost" className="size-8 min-h-8 rounded-full p-0" aria-label={attaching ? "正在添加资料" : "添加资料"} title={`添加资料（每条消息最多 ${MAX_MESSAGE_ATTACHMENTS} 个附件）`} disabled={busy || attaching} onClick={() => void attach()}>
                 <Paperclip size={17} />
               </Button>
               {!main && conversation.kind === "group" && (

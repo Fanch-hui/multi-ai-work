@@ -24,7 +24,7 @@ export interface ToolExecutionContext {
   signal: AbortSignal; requestApproval(toolName: string, summary: string, args: Record<string, unknown>): Promise<boolean>;
   listArtifacts(): Artifact[]; registerArtifact(input: Omit<Artifact, 'id' | 'createdAt'>): Artifact;
   findArtifact(id: string): Artifact | undefined;
-  postMessage(content: string, artifactIds?: string[]): string;
+  postMessage(content: string, artifactIds?: string[], conversationId?: string): string;
   readMessages(after?: number, limit?: number, around?: number): unknown;
   searchMessages?(query: string, limit?: number): unknown;
   getObservedFileVersion?(path: string): string | undefined;

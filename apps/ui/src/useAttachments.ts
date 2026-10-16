@@ -5,7 +5,7 @@ import type { Mutate } from "./store.js";
 import { errorMessage } from "./api.js";
 import { composerDrafts, useComposerDraft } from "./composer-drafts.js";
 
-type AttachResult = Artifact | Artifact[] | { artifact?: Artifact; artifacts?: Artifact[] } | null;
+type AttachResult = Artifact | Artifact[] | { artifact?: Artifact; artifacts?: Artifact[]; errors?: string[] } | null;
 function importedArtifacts(result: AttachResult): Artifact[] {
   if (!result) return [];
   if (Array.isArray(result)) return result;
@@ -26,21 +26,25 @@ export function useAttachments(conversationId: string, mutate: Mutate) {
   const [dragging, setDragging] = useState(false);
   const dragDepth = useRef(0);
   useEffect(() => { setDragging(false); dragDepth.current = 0; }, [conversationId]);
-  async function importItems(work: (append: (result: AttachResult) => void) => Promise<AttachResult>) {
-    if (!composerDrafts.beginAttachment(conversationId)) return;
+  async function importItems(incoming: number, work: (append: (result: AttachResult) => void, attachmentCount: number) => Promise<AttachResult>) {
+    if (!composerDrafts.beginAttachment(conversationId, incoming)) return;
+    const attachmentCount = composerDrafts.read(conversationId).attachments.length;
     function append(result: AttachResult) {
       composerDrafts.appendAttachments(conversationId, importedArtifacts(result));
+      if (result && "errors" in result && result.errors?.length) {
+        composerDrafts.update(conversationId, { error: result.errors.join("\n") });
+      }
     }
     try {
-      append(await work(append));
+      append(await work(append, attachmentCount));
     } catch (cause) { composerDrafts.update(conversationId, { error: errorMessage(cause) }); }
     finally { composerDrafts.update(conversationId, { attaching: false }); }
   }
   function attach() {
-    return importItems(() => mutate<AttachResult>("conversations.attach", { conversationId }));
+    return importItems(1, (_append, attachmentCount) => mutate<AttachResult>("conversations.attach", { conversationId, attachmentCount }));
   }
   function upload(files: File[]) {
-    return importItems(async append => {
+    return importItems(files.length, async append => {
       for (const file of files) {
         if (file.size > 25 * 1024 * 1024) throw new Error(`${file.name} 超过 25 MB，请选择较小的文件。`);
         const result = await mutate<AttachResult>("conversations.attachBytes", {

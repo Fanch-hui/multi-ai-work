@@ -4,6 +4,10 @@ import type { State } from './state.js';
 export function accessibleArtifacts(state: State, room: Conversation, botId: string, task?: Task): Artifact[] {
   const s = state.storage;
   const returned = new Set<string>();
+  if (room.kind === 'group' && room.memberIds.includes(botId)) {
+    for (const message of s.messages(room.id).filter(item => item.status === 'committed'))
+      for (const artifactId of message.artifactIds) returned.add(artifactId);
+  }
   if (room.purpose === 'chief' && botId === state.settings().mainBotId) {
     for (const task of s.all<Task>('tasks').filter(item => item.conversationId === room.id)) {
       for (const artifactId of s.metadata<string[]>(`returned-artifacts:${task.id}`) ?? []) {

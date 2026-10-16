@@ -10,7 +10,7 @@ export function createTaskControlTools() {
       execute: (args: { taskId?: string; runId?: string }, context: ToolExecutionContext) => context.stopTask!(args),
     },
     send_task_input: {
-      description: '把明确的新要求接入当前执行的成员任务，复用该任务与会话。需求变更应使用此工具，保留工具结果；不另派依赖旧任务的变更任务。使用 get_task 查看实际接收状态。',
+      description: '把明确的新要求或文件接入当前执行的成员任务，artifactIds 填写需要补发的获准文件 ID，复用该任务与会话。需求变更应使用此工具，保留工具结果；不另派依赖旧任务的变更任务。使用 get_task 查看实际接收状态。',
       schema: z.object({ ...target, content: z.string().trim().min(1).max(100000), artifactIds: z.array(z.string()).max(50).optional() }).strict(),
       available: (context: ToolExecutionContext) => !!context.sendTaskInput,
       execute: (args: { taskId?: string; runId?: string; content: string; artifactIds?: string[] }, context: ToolExecutionContext) => context.sendTaskInput!(args),

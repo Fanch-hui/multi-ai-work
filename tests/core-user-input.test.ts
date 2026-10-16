@@ -59,7 +59,10 @@ describe('执行中的用户补充', () => {
     await eventually(() => core.state.storage.get<Task>('tasks', original.taskIds[0])?.status === 'completed');
     expect(core.state.snapshot().runs).toHaveLength(1);
     expect(core.state.storage.messages(room).map(message => message.content)).toEqual(['原需求', '补充要求', '已按补充调整']);
-    expect(model.requests[1].messages.filter(message => message.role !== 'system').map(message => message.role)).toEqual(['user', 'user']);
+    const inputs = model.requests[1].messages.filter(message => message.role !== 'system'
+      && !message.content.startsWith('App 当前运行资料（'));
+    expect(inputs.map(message => message.role)).toEqual(['user', 'user']);
+    expect(inputs[1].content).toBe('补充要求');
     const binding = core.state.storage.all<SessionBinding>('session_bindings')[0];
     const history = core.state.storage.metadata<ModelHistoryEntry[]>(`history:${binding.id}`)!;
     expect(history.find(entry => entry.message.content === '补充要求')).toMatchObject({ messageId: supplement.messageId,

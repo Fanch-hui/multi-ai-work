@@ -43,6 +43,7 @@ import { readConversation } from './conversation-read.js';
 import { TaskControlService } from './task-control.js';
 import { inspectTask } from './task-inspection.js';
 import { deleteArtifact } from './artifact-delete.js';
+import { MAX_MESSAGE_ATTACHMENTS, requireAttachmentCapacity } from '../domain/attachment-policy.js';
 
 export type HostRequest = (method: 'chooseDirectory' | 'chooseFile' | 'chooseAvatar' | 'openPath', params?: Record<string, unknown>) => Promise<unknown>;
 export class CoreService {
@@ -195,11 +196,14 @@ export class CoreService {
         targetBotIds: z.array(z.string()).optional(), artifactIds: z.array(z.string()).optional(), requestId: z.string().optional() }).parse(params));
       case 'conversations.attach': {
         const conversationId = z.string().parse(params.conversationId);
+        const attachmentCount = z.number().int().min(0).max(MAX_MESSAGE_ATTACHMENTS).default(0).parse(params.attachmentCount);
         required(s.get('conversations', conversationId), '对话不存在');
+        requireAttachmentCapacity(attachmentCount, 1);
         if (!this.host) throw new Error('添加资料需要桌面文件选择器');
         const selection = await this.host('chooseFile', { multiple: true }) as { path?: string; paths?: string[] };
         const paths = selection.paths ?? (selection.path ? [selection.path] : []);
         if (!paths.length) return { cancelled: true };
+        requireAttachmentCapacity(attachmentCount, paths.length);
         const artifacts: Artifact[] = [], errors: string[] = [];
         for (const path of paths) {
           try { artifacts.push(await importAttachment(this.state, conversationId, path)); }

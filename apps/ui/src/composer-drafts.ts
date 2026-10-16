@@ -1,5 +1,6 @@
 import { useSyncExternalStore, type SetStateAction } from "react";
 import type { Artifact, Conversation } from "../../../src/domain/types.js";
+import { ATTACHMENT_LIMIT_MESSAGE, MAX_MESSAGE_ATTACHMENTS, requireAttachmentCapacity } from "../../../src/domain/attachment-policy.js";
 
 export interface ComposerDraft {
   content: string;
@@ -67,15 +68,21 @@ export class ComposerDraftStore {
       ? { content: "", targets: [], attachments: [], requestId: crypto.randomUUID(), error: "" } : {}) });
   }
 
-  beginAttachment(id: string): boolean {
+  beginAttachment(id: string, incoming = 1): boolean {
     const draft = this.read(id);
     if (draft.attaching || draft.sending) return false;
+    if (draft.attachments.length + incoming > MAX_MESSAGE_ATTACHMENTS) {
+      this.update(id, { error: ATTACHMENT_LIMIT_MESSAGE });
+      return false;
+    }
     this.update(id, { attaching: true, error: "" });
     return true;
   }
 
   appendAttachments(id: string, items: Artifact[]) {
-    if (items.length) this.edit(id, { attachments: [...this.read(id).attachments, ...items] });
+    const attachments = this.read(id).attachments;
+    requireAttachmentCapacity(attachments.length, items.length);
+    if (items.length) this.edit(id, { attachments: [...attachments, ...items] });
   }
 }
 

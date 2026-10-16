@@ -38,11 +38,12 @@ export function createBuiltins(mcp: McpConnections): Record<string, Builtin> {
     ...createTaskPlanTools(),
     ...createTaskControlTools(),
     post_message: {
-      description: '向当前对话即时发言，发布后保留为本轮对话回复，最终返回用于任务结果。普通回复直接输出最终答复即可；成果 ID 必须已获当前会话授权。',
-      schema: z.object({ content: text, artifactIds: z.array(id).max(50).optional() }),
+      description: '即时发言或发送文件，artifactIds 填写获准成果 ID，可只附文件。默认当前对话；主管可用 conversationId 发到来源主对话绑定的任务群，附带文件对群成员共享。需要成员处理时用 delegate_task 携带文件，执行中用 send_task_input 补发。当前对话发布后保留为本轮回复，最终返回用于任务结果。',
+      schema: z.object({ content: z.string().trim().max(120000).default(''), artifactIds: z.array(id).max(50).optional(), conversationId: id.optional() }),
       execute: (args, context) => {
+        if (!args.content && !args.artifactIds?.length) throw new Error('消息不能为空');
         for (const artifactId of args.artifactIds ?? []) if (!context.findArtifact(artifactId)) throw new Error('成果不存在或未授权');
-        return { messageId: context.postMessage(args.content, args.artifactIds) };
+        return { messageId: context.postMessage(args.content, args.artifactIds, args.conversationId) };
       }
     },
     read_messages: {
@@ -57,7 +58,7 @@ export function createBuiltins(mcp: McpConnections): Record<string, Builtin> {
       execute: (args, context) => context.searchMessages!(args.query, args.limit)
     },
     delegate_task: {
-      description: '向当前团队成员委派任务，立即返回持久任务 ID。已有任务安排时填写 planStepId，Core 关联实际进度并复用前置步骤的任务依赖；同一步骤的相关成员应完整派发。独立工作同时派发，dependencyIds 仅用于额外必须等待的前置任务。',
+      description: '向当前团队成员委派任务，立即返回持久任务 ID。artifactIds 显式传递成员需要读取的文件。已有任务安排时填写 planStepId，Core 关联实际进度并复用前置步骤的任务依赖；同一步骤的相关成员应完整派发。独立工作同时派发，dependencyIds 仅用于额外必须等待的前置任务。',
       schema: z.object({ botId: id, goal: text, expectedOutput: text, dependencyIds: z.array(id).max(10).optional(), artifactIds: z.array(id).max(50).optional(), planStepId: id.optional() }),
       available: context => context.conversation.kind === 'group',
       execute: (args, context) => context.delegateTask(args.botId, args.goal, args.expectedOutput, args.dependencyIds, args.artifactIds, args.planStepId)

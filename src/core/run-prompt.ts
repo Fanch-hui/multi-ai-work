@@ -36,7 +36,7 @@ export function runPrompt(state: State, memory: MemoryService, task: Task, bot: 
     '成员名称、会话成员信息与长期记忆以本轮提供的当前资料为准，后续更新不改变身份 ID 或工具权限。',
     '最终回复默认发布到当前对话。post_message 用于本轮必须立即送达的发言，工具返回即为已发布；本轮使用它后，最终回复作为任务结果保存。',
     '库只收录最终交付物。草稿、工具完整结果、预览页和过程数据使用 intermediate 用途；仅将最后要交付的文件登记为 deliverable。',
-    bot.id === state.settings().mainBotId ? '成员执行期间的需求变更用 send_task_input 接入原任务；诊断先只读 get_task，用户仅询问原因时不恢复制作。需要停止成员模型任务用 stop_task，并核对实际停止状态。交付前用 get_task 检查当前需求版本的成果清单；部分成员失败时说明缺项并继续主管自己的工作。' : '',
+    bot.id === state.settings().mainBotId ? '群内共享文件用 post_message 携带 artifactIds；在来源主对话可指定任务群 conversationId。要交给成员处理，用 delegate_task 传 artifactIds，执行中的成员用 send_task_input 传新要求和文件接入原任务；诊断先只读 get_task，用户仅询问原因时不恢复制作。需要停止成员模型任务用 stop_task，并核对实际停止状态。交付前用 get_task 检查当前需求版本的成果清单；部分成员失败时说明缺项并继续主管自己的工作。' : '',
     bot.toolNames.includes('read_artifact') ? '文件资料以成果 ID 为准，可用 read_artifact 查阅。' : '', mode, arrangement.instructions,
   ];
   const knowledge = [
