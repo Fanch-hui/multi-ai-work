@@ -1,16 +1,17 @@
 import Database from 'better-sqlite3';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import type { Message, RunEvent, RunEventPage } from '../domain/types.js';
+import type { MemoryEntry, Message, RunEvent, RunEventPage } from '../domain/types.js';
 import type { MessagePage } from '../domain/snapshot-sync.js';
 import { StorageChangesBuffer } from './storage-changes.js';
 import { MessageStream } from './message-stream.js';
+import { indexMemorySearch } from './memory-storage.js';
 
 export const entityTables = ['connections', 'bots', 'conversations', 'workspaces', 'session_bindings',
-  'tasks', 'runs', 'approvals', 'artifacts', 'memory_entries', 'context_checkpoints',
+  'tasks', 'runs', 'approvals', 'artifacts', 'memory_entries', 'memory_revisions', 'memory_usage', 'context_checkpoints',
   'tool_connections', 'skills', 'tool_operations', 'deliveries', 'notifications', 'compactions', 'provider_archive', 'questions', 'processes', 'preset_installations', 'task_plans'] as const;
 export type EntityTable = typeof entityTables[number];
-const indexedFields = { status: '$.status', parentId: '$.parentId', runId: '$.runId', bindingId: '$.bindingId' } as const;
+const indexedFields = { status: '$.status', parentId: '$.parentId', runId: '$.runId', bindingId: '$.bindingId', memoryId: '$.memoryId' } as const;
 
 export class Storage {
   readonly db: Database.Database;
@@ -56,6 +57,7 @@ export class Storage {
         CREATE INDEX IF NOT EXISTS tasks_by_status ON tasks(json_extract(payload, '$.status'));
         CREATE INDEX IF NOT EXISTS tasks_by_parent ON tasks(json_extract(payload, '$.parentId'));
         CREATE INDEX IF NOT EXISTS operations_by_run ON tool_operations(json_extract(payload, '$.runId'));
+        CREATE INDEX IF NOT EXISTS revisions_by_memory ON memory_revisions(json_extract(payload, '$.memoryId'));
         CREATE VIRTUAL TABLE IF NOT EXISTS memory_search USING fts5(id UNINDEXED, content, tokenize='trigram');
         PRAGMA user_version = 1;
       `);
@@ -86,12 +88,8 @@ export class Storage {
   put<T extends { id: string }>(table: EntityTable, value: T): T {
     this.prepare(`INSERT INTO ${table}(id,payload) VALUES (?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload`).run(value.id, JSON.stringify(value));
     this.tableVersions.set(table, this.tableVersion(table) + 1);
-    this.changes.mark(table, value.id);
-    if (table === 'memory_entries') {
-      const memory = value as T & { content: string };
-      this.prepare('DELETE FROM memory_search WHERE id = ?').run(value.id);
-      this.prepare('INSERT INTO memory_search(id,content) VALUES (?,?)').run(value.id, memory.content);
-    }
+    if (table !== 'memory_usage') this.changes.mark(table, value.id);
+    if (table === 'memory_entries') indexMemorySearch(this, value as unknown as MemoryEntry);
     return value;
   }
   delete(table: EntityTable, id: string) {

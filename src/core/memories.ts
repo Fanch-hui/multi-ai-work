@@ -1,14 +1,24 @@
 import { z } from 'zod';
 import type { Bot, Connection, Conversation, MemoryEntry, Task } from '../domain/types.js';
+import { memorySummary, normalizeMemoryContent } from '../domain/memory.js';
 import { MemoryService } from '../runtime/memory.js';
 import { State, id, now } from './state.js';
 import { TaskService } from './tasks.js';
 import { required } from './errors.js';
 import { assertUserMemorySources, memoryGuidance } from './memory-policy.js';
 
-const fields = z.object({ id: z.string().optional(), content: z.string().trim().min(1).max(20000),
-  scope: z.enum(['bot', 'team', 'shared']), ownerId: z.string().min(1),
-  allowedConversationIds: z.array(z.string()).default([]), sourceIds: z.array(z.string()).default([]) });
+const fields = z.object({
+  id: z.string().optional(),
+  content: z.string().trim().min(1).max(20000),
+  topic: z.string().trim().max(120).optional(),
+  summary: z.string().trim().max(200).optional(),
+  tags: z.array(z.string().trim().min(1).max(60)).max(20).optional(),
+  pinned: z.boolean().optional(),
+  scope: z.enum(['bot', 'team', 'shared']),
+  ownerId: z.string().min(1),
+  allowedConversationIds: z.array(z.string()).default([]),
+  sourceIds: z.array(z.string()).default([]),
+});
 
 export class MemoryManagement {
   private unsubscribe?: () => void;
@@ -31,14 +41,39 @@ export class MemoryManagement {
     if (parsed.scope === 'bot') required(s.get<Bot>('bots', parsed.ownerId), '所属成员不存在');
     if (parsed.scope === 'team') required(s.get<Conversation>('conversations', parsed.ownerId), '所属会话不存在');
     for (const roomId of parsed.allowedConversationIds) required(s.get('conversations', roomId), '授权会话不存在');
-    const entry: MemoryEntry = { ...parsed, id: old?.id ?? id(),
+    const content = normalizeMemoryContent(parsed.content);
+    const revision = (old?.revision ?? 0) + 1;
+    const contentChanged = old ? normalizeMemoryContent(old.content) !== content : true;
+    const nextTopic = parsed.topic !== undefined ? (parsed.topic.trim() || undefined) : old?.topic;
+    const nextSummaryRaw = parsed.summary !== undefined
+      ? (parsed.summary.trim() || undefined)
+      : (!contentChanged ? old?.summary : undefined);
+    const nextSummary = nextSummaryRaw ? memorySummary({ content, summary: nextSummaryRaw, revision }) : undefined;
+    const nextTags = parsed.tags !== undefined
+      ? [...new Set(parsed.tags.map(tag => tag.trim()).filter(Boolean))]
+      : old?.tags;
+    const nextPinned = parsed.pinned !== undefined ? parsed.pinned : old?.pinned;
+    const entry: MemoryEntry = {
+      id: old?.id ?? id(),
+      content,
+      scope: parsed.scope,
+      ownerId: parsed.ownerId,
+      sourceIds: parsed.sourceIds,
       allowedConversationIds: parsed.scope === 'team' ? [parsed.ownerId] : [...new Set(parsed.allowedConversationIds)],
-      status: 'approved', revision: (old?.revision ?? 0) + 1, createdAt: old?.createdAt ?? now(), updatedAt: now() };
+      ...(nextTopic ? { topic: nextTopic } : {}),
+      ...(nextSummary ? { summary: nextSummary, summaryRevision: revision } : {}),
+      ...(nextTags?.length ? { tags: nextTags } : {}),
+      ...(nextPinned !== undefined ? { pinned: nextPinned } : {}),
+      status: 'approved',
+      revision,
+      createdAt: old?.createdAt ?? now(),
+      updatedAt: now(),
+    };
     s.put('memory_entries', entry); this.state.changed(); return entry;
   }
 
-  manage(input: Record<string, unknown>, botId: string, conversationId: string): unknown {
-    const action = z.enum(['list', 'save', 'approve', 'revoke']).parse(input.action), s = this.state.storage;
+  manage(input: Record<string, unknown>, botId: string, conversationId: string, _task?: Task): unknown {
+    const action = z.enum(['list', 'save', 'approve', 'revoke', 'merge', 'promote', 'history']).parse(input.action), s = this.state.storage;
     const owns = (entry: Pick<MemoryEntry, 'scope' | 'ownerId'>) => entry.scope === 'bot' ? entry.ownerId === botId
       : botId === this.state.settings().mainBotId;
     const entry = input.id ? required(s.get<MemoryEntry>('memory_entries', z.string().parse(input.id)), '记忆不存在') : undefined;
@@ -52,7 +87,7 @@ export class MemoryManagement {
     }
     const scope = input.scope ?? entry?.scope ?? 'bot';
     const ownerId = input.ownerId ?? (entry?.scope === scope ? entry.ownerId : scope === 'team' ? conversationId : botId);
-    const parsed = fields.parse({ allowedConversationIds: [conversationId], ...entry, ...input, scope, ownerId });
+    const parsed = fields.parse({ allowedConversationIds: [conversationId], ...entry, ...input, scope, ownerId, pinned: entry?.pinned });
     if (!owns(parsed)) throw new Error('不能修改其他成员的记忆');
     const authorizedRooms = parsed.scope === 'team' ? [parsed.ownerId] : parsed.allowedConversationIds;
     if (authorizedRooms.some(roomId => !s.get<Conversation>('conversations', roomId)?.memberIds.includes(botId)))

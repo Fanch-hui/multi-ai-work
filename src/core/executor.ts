@@ -14,7 +14,7 @@ import { TaskService, terminal } from './tasks.js';
 import { ToolRuntime } from './tool-runtime.js';
 import { addUsage, prepareManagedContext, workingHistory, projectedHistory, saveHistoryValidity } from './managed-context.js';
 import { publicError, required } from './errors.js';
-import { runPrompt } from './run-prompt.js';
+import { memorySelectOptions, runPrompt } from './run-prompt.js';
 import { completeRunMessage, interruptRunMessage, runMessageSources } from './run-message.js';
 import { sessionBinding } from './session-binding.js';
 import { sessionMemory } from './session-memory.js';
@@ -232,7 +232,7 @@ export class Executor {
     const delivered = managed && !hasHistory ? archive.at(-2)?.sequence ?? 0 : binding.lastDeliveredSequence;
     const delta = archive.filter(message => message.sequence > delivered
       && !(message.authorBotId === bot.id && message.runId && s.get<Run>('runs', message.runId)?.bindingId === binding.id));
-    const memoryUpdate = managed || task.kind ? undefined : sessionMemory(this.memory, bot, binding);
+    const memoryUpdate = managed || task.kind ? undefined : sessionMemory(this.memory, bot, binding, memorySelectOptions(this.state, task, bot, room, delta));
     const { instructions, prompt, contextInstructions, runtimeContext } = runPrompt(this.state, this.memory, task, bot, room, toolContext, delta, memoryUpdate?.prompt, managed);
     const root = dirname(fileURLToPath(import.meta.url));
     const compiled = root.includes(`${join('dist', 'src', 'core')}`);

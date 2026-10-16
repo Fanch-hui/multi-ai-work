@@ -3,6 +3,11 @@ import type { TaskPlan } from './task-plan.js';
 import type { TaskActivity } from './task-activity.js';
 import type { TaskRequirement } from './task-requirement.js';
 import type { ModelRecovery } from './recovery.js';
+import type { MemoryEntry } from './memory.js';
+export type {
+  MemoryActor, MemoryUsage, MemoryReviewSuggestion, MemoryEntry, MemoryRevisionRecord,
+  MemoryRecallInput, MemoryTopicDirectoryItem, MemoryDirectory, MemorySelection, MemoryConsolidationStatus,
+} from './memory.js';
 export type ProviderKind = 'antigravity' | 'chatgpt' | 'qoder' | 'custom';
 export type QoderService = 'WebSearch' | 'WebFetch' | 'ImageSearch' | 'ImageGen' | 'SecurityScan';
 export type Protocol = 'chat-completions' | 'responses';
@@ -124,11 +129,6 @@ export interface ProcessRecord {
   pid?: number; createdAt: string; endedAt?: string; code?: number | null; signal?: string | null;
   stdout?: string; stderr?: string; truncated?: boolean;
   stoppedByBotId?: string; stoppedByTaskId?: string;
-}
-export interface MemoryEntry {
-  id: string; scope: 'bot' | 'team' | 'shared'; ownerId: string; content: string;
-  sourceIds: string[]; allowedConversationIds: string[]; status: 'candidate' | 'approved' | 'revoked' | 'superseded';
-  revision: number; createdAt: string; updatedAt: string;
 }
 export interface ContextCheckpoint {
   id: string; bindingId: string; generation: number; throughSequence: number;

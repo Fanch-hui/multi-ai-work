@@ -122,15 +122,15 @@ export class ToolRuntime {
           createTaskGroup: (input: TaskGroupInput) => this.team.createTaskGroup(task, input),
         } : {}),
       } : {}),
-      recallMemory: query => bot.memoryMode === 'off' ? [] : this.memory.recall({ botId: bot.id, conversationId: room.id }, query),
-      ...(bot.memoryMode !== 'off' ? { manageMemory: (input: Record<string, unknown>) => this.memoryManagement.manage(input, bot.id, room.id) } : {}),
-      proposeMemory: (content, scope, sourceIds) => {
+      recallMemory: input => bot.memoryMode === 'off' ? [] : this.memory.query({ botId: bot.id, conversationId: room.id }, input, { recordActiveRead: !task.kind, scopeKey: run.id }),
+      ...(bot.memoryMode !== 'off' ? { manageMemory: (input: Record<string, unknown>) => this.memoryManagement.manage(input, bot.id, room.id, task) } : {}),
+      proposeMemory: (content, scope, sourceIds, metadata) => {
         if (bot.memoryMode === 'off') throw new Error('当前智能体已关闭记忆');
         if (scope === 'shared') throw new Error('请先保存当前会话记忆，再由管家设置共享范围');
         assertUserMemorySources(this.state, sourceIds, [room.id]);
-        const memory = this.memory.propose({ botId: bot.id, conversationId: room.id, content, scope, sourceIds });
+        const memory = this.memory.propose({ botId: bot.id, conversationId: room.id, content, scope, sourceIds, ...metadata });
         if (scope === 'bot' || bot.id === this.state.settings().mainBotId)
-          return this.memoryManagement.manage({ action: 'approve', id: memory.id }, bot.id, room.id) as MemoryEntry;
+          return this.memoryManagement.manage({ action: 'approve', id: memory.id }, bot.id, room.id, task) as MemoryEntry;
         this.state.changed(); return memory;
       },
       getSecret: async () => { throw new Error('工具凭据服务尚未绑定'); },

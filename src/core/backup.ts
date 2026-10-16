@@ -8,6 +8,7 @@ import { State, id, now } from './state.js';
 import { entityTables } from './storage.js';
 import { projectStreamMessage } from './message-stream.js';
 import { backupFile, collectBackupResources, restoreBackupResources, type BackupResource, type RestoredResources } from './backup-resources.js';
+import { rebuildMemorySearch } from './memory-storage.js';
 
 interface BackupManifest {
   version: 1 | 2; artifacts: { id: string; file: string }[];
@@ -65,7 +66,7 @@ export class BackupService {
       db.transaction(() => {
         for (const table of [...entityTables, 'metadata', 'messages', 'run_events']) {
           const columns = table === 'metadata' ? ['key', 'value'] : table === 'messages' ? ['id', 'conversation_id', 'sequence', 'payload', ...(hasStreamCursor ? ['stream_sequence'] : [])] : table === 'run_events' ? ['id', 'run_id', 'payload'] : ['id', 'payload'];
-          const optional = ['compactions', 'provider_archive', 'questions', 'processes', 'preset_installations', 'task_plans'].includes(table) && !source.prepare('SELECT 1 FROM sqlite_master WHERE name = ?').get(table);
+          const optional = ['memory_revisions', 'memory_usage', 'compactions', 'provider_archive', 'questions', 'processes', 'preset_installations', 'task_plans'].includes(table) && !source.prepare('SELECT 1 FROM sqlite_master WHERE name = ?').get(table);
           const rows = optional ? [] : source.prepare(`SELECT ${columns.join(',')} FROM ${table}`).all() as Record<string, unknown>[];
           db.exec(`DELETE FROM ${table}`);
           for (const row of rows) {
@@ -77,7 +78,7 @@ export class BackupService {
             db.prepare(`INSERT INTO ${table} (${columns.join(',')}) VALUES (${columns.map(() => '?').join(',')})`).run(...Object.values(row));
           }
         }
-        db.exec('DELETE FROM memory_search; INSERT INTO memory_search(id,content) SELECT id,json_extract(payload,\'$.content\') FROM memory_entries;');
+        rebuildMemorySearch(this.state.storage);
         db.prepare("DELETE FROM metadata WHERE key LIKE 'history:%' OR key LIKE 'history-validity:%' OR key LIKE 'results:%'").run();
         if (hostId) this.state.storage.setMetadata('oauth.hostId', hostId);
       })();

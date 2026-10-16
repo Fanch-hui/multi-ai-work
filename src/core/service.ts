@@ -45,6 +45,7 @@ import { inspectTask } from './task-inspection.js';
 import { deleteArtifact } from './artifact-delete.js';
 import { MAX_MESSAGE_ATTACHMENTS, requireAttachmentCapacity } from '../domain/attachment-policy.js';
 import { MaintenanceAdmission } from './maintenance-admission.js';
+import { createStorageMemoryStore } from './memory-storage.js';
 
 export type HostRequest = (method: 'chooseDirectory' | 'chooseFile' | 'chooseAvatar' | 'openPath', params?: Record<string, unknown>) => Promise<unknown>;
 export class CoreService {
@@ -69,7 +70,7 @@ export class CoreService {
     this.entities = new EntityService(this.state, this.vault); this.tasks = new TaskService(this.state);
     this.team = new TeamService(this.state, this.entities);
     this.approvals = new ApprovalService(this.state);
-    this.memory = new MemoryService({ list: () => s.all('memory_entries'), save: memory => s.put('memory_entries', memory) });
+    this.memory = new MemoryService(createStorageMemoryStore(s));
     this.memories = new MemoryManagement(this.state, this.memory, this.tasks);
     const context = new ContextManager({ getCheckpoint: bindingId => s.byField<ContextCheckpoint>('context_checkpoints', 'bindingId', bindingId).at(-1),
       saveCheckpoint: cp => s.put('context_checkpoints', cp), recordCompaction: record => { s.put('compactions', record); this.state.changed(); } });

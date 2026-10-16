@@ -68,13 +68,30 @@ export function createBuiltins(mcp: McpConnections): Record<string, Builtin> {
       execute: (args, context) => { const task = context.getTask(args.taskId ?? context.task.id); if (!task) throw new Error('任务不存在或未授权'); return task; }
     },
     recall_memory: {
-      description: '检索当前身份与对话获准使用的长期记忆。', schema: z.object({ query: text }),
-      execute: (args, context) => context.recallMemory(args.query)
+      description: '检索并展开当前身份与对话获准使用的长期记忆。支持关键词查询、按主题过滤、分页和按 ID 读取完整正文及合并历史。',
+      schema: z.object({
+        query: z.string().trim().max(120_000).optional(),
+        ids: z.array(id).max(50).optional(),
+        topic: z.string().trim().max(200).optional(),
+        offset: z.number().int().min(0).optional(),
+        limit: z.number().int().min(1).max(50).optional(),
+        includeHistory: z.boolean().optional(),
+      }),
+      execute: (args, context) => context.recallMemory(args)
     },
     propose_memory: {
       description: '挑选用户明确表达的长期偏好、习惯和持续要求保存为记忆，sourceIds 须引用用户原始消息；单次任务目标、预算、进度和成员讨论留在任务记录。团队公共记忆交由管家整理。',
-      schema: z.object({ content: text, scope: z.enum(['bot', 'team', 'shared']), sourceIds: z.array(id).max(50) }),
-      execute: (args, context) => context.proposeMemory(args.content, args.scope, args.sourceIds)
+      schema: z.object({
+        content: text,
+        scope: z.enum(['bot', 'team', 'shared']),
+        sourceIds: z.array(id).max(50),
+        topic: z.string().trim().max(120).optional(),
+        summary: z.string().trim().max(200).optional(),
+        tags: z.array(z.string().trim().min(1).max(60)).max(20).optional(),
+      }),
+      execute: (args, context) => context.proposeMemory(args.content, args.scope, args.sourceIds, {
+        topic: args.topic, summary: args.summary, tags: args.tags,
+      })
     },
     read_artifact: {
       description: '按成果 ID 读取获准资料：图片返回模型可查看的图像内容，文档按 offset / limit 字符位置分段读取。',

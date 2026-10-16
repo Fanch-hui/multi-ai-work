@@ -1,4 +1,4 @@
-import type { Artifact, Bot, Conversation, MemoryEntry, Task, ToolConnection, Workspace, Skill, ProcessRecord, UserQuestion } from './types.js';
+import type { Artifact, Bot, Conversation, MemoryEntry, MemoryRecallInput, Task, ToolConnection, Workspace, Skill, ProcessRecord, UserQuestion } from './types.js';
 import type { ToolDefinition } from './provider.js';
 import type { PlanStepUpdate, TaskPlan, TaskPlanInput } from './task-plan.js';
 
@@ -44,8 +44,8 @@ export interface ToolExecutionContext {
   setTaskPlan?(input: TaskPlanInput): TaskPlan;
   getTaskPlan?(): TaskPlan | undefined;
   updatePlanStep?(input: PlanStepUpdate): TaskPlan;
-  recallMemory(query: string): MemoryEntry[];
-  proposeMemory(content: string, scope: MemoryEntry['scope'], sourceIds: string[]): MemoryEntry;
+  recallMemory(input: string | MemoryRecallInput): unknown;
+  proposeMemory(content: string, scope: MemoryEntry['scope'], sourceIds: string[], metadata?: { topic?: string; summary?: string; tags?: string[] }): MemoryEntry;
   manageMemory?(input: Record<string, unknown>): unknown;
   getSecret(ref?: string): Promise<string | undefined>;
   toolConnections: ToolConnection[]; skills: Skill[];
