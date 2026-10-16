@@ -7,6 +7,12 @@ const signal = new AbortController().signal;
 const entries = (messages: ModelMessage[]) => messages.map((message, index) => ({ sequence: 1, messageId: `m${index}`, message }));
 
 describe('managed history semantic projection', () => {
+  it('retains the source of App context and reminders in summary material', () => {
+    const projected = summaryMessageProjection({ role: 'user', content: '工具重复提醒',
+      appContext: { source: 'app.repeat-tool-reminder', version: 'v1:call' } });
+    expect(projected).toMatchObject({ source: 'app.repeat-tool-reminder', version: 'v1:call', content: '工具重复提醒' });
+    expect(summaryMessageProjection({ role: 'user', content: '实际用户要求' })).not.toHaveProperty('source');
+  });
   it('estimates the selected protocol once, excluding source metadata and ciphertext length', () => {
     const message: ModelMessage = { role: 'assistant', content: 'readable result'.repeat(100),
       providerItems: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'actual wire text' }] },

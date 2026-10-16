@@ -84,6 +84,7 @@ export function summaryMessageProjection(message: ModelMessage): unknown {
   const content = message.content || providerText(message.providerItems ?? []);
   return {
     role: message.role, content,
+    ...(message.appContext ? { source: message.appContext.source, version: message.appContext.version } : {}),
     ...(message.callId ? { callId: message.callId } : {}),
     ...(message.toolCalls?.length ? { toolCalls: message.toolCalls } : {}),
     ...(message.images?.length ? { imageArtifactIds: message.images.map(image => image.artifactId) } : {}),
