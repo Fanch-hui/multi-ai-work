@@ -7,6 +7,7 @@ describe('智能体自主管理记忆', () => {
     let memoryId = '';
     const { core, bot } = await setup(async context => {
       expect(context.instructions).not.toContain('仅供会话甲使用的长期约定');
+      expect(context.runtimeContext?.content).not.toContain('仅供会话甲使用的长期约定');
       expect(await context.executeTool('recall_memory', { query: '长期约定' }, 'recall')).toEqual([]);
       expect(await context.executeTool('manage_memory', { action: 'list' }, 'list')).toEqual([
         expect.objectContaining({ id: memoryId, content: '仅供会话甲使用的长期约定' }),
@@ -41,12 +42,18 @@ describe('智能体自主管理记忆', () => {
         const saved = await context.executeTool('manage_memory', { action: 'save', content: '文档标题使用中文', sourceIds }, 'save-own') as MemoryEntry;
         savedId = saved.id;
       } else {
-        expect(context.instructions).toContain('文档标题使用中文');
+        expect(context.instructions).not.toContain('文档标题使用中文');
+        expect(context.runtimeContext).toMatchObject({ role: 'user', appContext: { source: 'app.runtime', version: expect.any(String) } });
+        const current = JSON.parse(context.runtimeContext!.content.split('\n').at(-1)!);
+        expect(current.memories).toEqual([{ source: 'memory_entries', id: savedId, revision: 1, content: '文档标题使用中文' }]);
+        expect(await context.executeTool('recall_memory', { query: '标题' }, 'recall-own')).toEqual([
+          expect.objectContaining({ id: savedId, revision: 1, content: '文档标题使用中文' }),
+        ]);
         await context.executeTool('manage_memory', { action: 'save', id: savedId, content: '文档标题使用简洁中文', sourceIds }, 'edit-own');
       }
       return { text: '记住了' };
     });
-    const member = bot('写作助手');
+    const member = bot('写作助手', ['recall_memory']);
     const room = core.entities.createConversation({ name: '写作', kind: 'private', memberIds: [member.id], workspaceId: core.state.snapshot().workspaces[0].id });
     const first = core.tasks.send({ conversationId: room.id, content: '保存约定：以后文档标题使用中文' });
     await eventually(() => core.state.storage.get<Task>('tasks', first.taskIds[0])?.status === 'completed');

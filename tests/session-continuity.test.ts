@@ -27,11 +27,16 @@ async function setupSession(provider: ProviderKind, run: ProviderAdapter['run'])
   return { core, bot, room, turn, connection, root, native };
 }
 
-interface Input { prompt: string; instructions: string; bindingId: string; resumed?: string; }
+interface Input { prompt: string; instructions: string; bindingId: string; resumed?: string; runtimeContext?: RunContext['runtimeContext']; }
 function receive(context: RunContext, inputs: Input[]) {
   inputs.push({ prompt: context.prompt, instructions: context.instructions, bindingId: context.binding.id,
-    resumed: context.binding.nativeSessionId });
+    resumed: context.binding.nativeSessionId, runtimeContext: context.runtimeContext });
   context.persistBinding(context.binding.nativeSessionId ?? `native:${context.binding.id}`);
+}
+
+function runtimeMemories(input: Input) {
+  expect(input.runtimeContext).toMatchObject({ role: 'user', appContext: { source: 'app.runtime', version: expect.any(String) } });
+  return JSON.parse(input.runtimeContext!.content.split('\n').at(-1)!).memories;
 }
 
 describe('会话续接与当前记忆', () => {
@@ -51,31 +56,40 @@ describe('会话续接与当前记忆', () => {
     await turn('第一轮保存约定');
     const binding = core.state.snapshot().bindings[0];
     await turn('第二轮继续');
-    const currentMemory = native ? inputs[1].prompt : inputs[1].instructions;
-    expect(currentMemory).toContain(`[${memoryId}@1] 标题采用中文`);
     if (native) {
+      expect(inputs[1].prompt).toContain(`[${memoryId}@1] 标题采用中文`);
+      expect(inputs[1].runtimeContext).toBeUndefined();
       expect(inputs[1].prompt).not.toContain('第一轮保存约定');
       expect(inputs[1].instructions).not.toContain('标题采用中文');
       expect(inputs[1].resumed).toBe(`native:${binding.id}`);
-    }
+    } else expect(runtimeMemories(inputs[1])).toEqual([{ source: 'memory_entries', id: memoryId, revision: 1, content: '标题采用中文' }]);
     const updatedBot = core.entities.saveBot({ ...bot, name: '新名称', avatar: 'fox', color: 'blue', contextWindow: 500000 });
     await turn('第三轮继续');
     if (native) {
       expect(inputs[2].prompt).not.toContain('标题采用中文');
       expect(inputs[2].prompt).toContain(`新名称 (${bot.id})`);
+    } else {
+      expect(inputs[2].runtimeContext?.content).toContain('新名称');
+      expect(runtimeMemories(inputs[2])).toEqual(runtimeMemories(inputs[1]));
     }
     const entry = core.state.storage.get<MemoryEntry>('memory_entries', memoryId)!;
     core.memories.save({ ...entry, content: '标题采用简洁中文' });
     await turn('第四轮继续');
-    expect(native ? inputs[3].prompt : inputs[3].instructions).toContain(`[${memoryId}@2] 标题采用简洁中文`);
+    if (native) expect(inputs[3].prompt).toContain(`[${memoryId}@2] 标题采用简洁中文`);
+    else expect(runtimeMemories(inputs[3])).toEqual([{ source: 'memory_entries', id: memoryId, revision: 2, content: '标题采用简洁中文' }]);
     core.memories.revoke(memoryId);
     await turn('第五轮继续');
     if (native) {
       expect(inputs[4].prompt).toContain(`失效的记忆引用：[${memoryId}]`);
       expect(inputs[4].prompt).not.toContain('标题采用');
-    } else expect(inputs[4].instructions).not.toContain('标题采用');
+    } else expect(runtimeMemories(inputs[4])).toEqual([]);
     await turn('第六轮继续');
     if (native) expect(inputs[5].prompt).not.toContain(memoryId);
+    else {
+      expect(runtimeMemories(inputs[5])).toEqual([]);
+      expect(inputs.every(input => input.instructions === inputs[0].instructions)).toBe(true);
+      expect(inputs[0].instructions).not.toContain('标题采用');
+    }
     expect(core.state.snapshot().bindings).toHaveLength(1);
     expect(inputs.every(input => input.bindingId === binding.id)).toBe(true);
     expect(core.state.snapshot().bindings[0].configRevision).toBe(updatedBot.revision);
