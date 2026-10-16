@@ -233,7 +233,7 @@ export class Executor {
     const delta = archive.filter(message => message.sequence > delivered
       && !(message.authorBotId === bot.id && message.runId && s.get<Run>('runs', message.runId)?.bindingId === binding.id));
     const memoryUpdate = managed || task.kind ? undefined : sessionMemory(this.memory, bot, binding);
-    const { instructions, prompt, contextInstructions } = runPrompt(this.state, this.memory, task, bot, room, toolContext, delta, memoryUpdate?.prompt);
+    const { instructions, prompt, contextInstructions, runtimeContext } = runPrompt(this.state, this.memory, task, bot, room, toolContext, delta, memoryUpdate?.prompt, managed);
     const root = dirname(fileURLToPath(import.meta.url));
     const compiled = root.includes(`${join('dist', 'src', 'core')}`);
     const nativeMcp = { command: process.execPath, args: compiled ? [join(root, 'mcp-worker.js')]
@@ -244,7 +244,8 @@ export class Executor {
         .flatMap(artifactId => { const image = modelImage(toolContext.findArtifact(artifactId)); return image ? [image] : []; }),
       resolveImage: imageResolver(this.state, toolContext),
       isWaitingForInput: () => !!this.tools.questions.forRun(run.id), inputSignal: this.tools.inputSignal(run.id),
-      prompt, messages: [], instructions, contextInstructions, tools: this.tools.definitions(toolContext, bot), signal,
+      prompt, messages: [], instructions, contextInstructions, runtimeContext, tools: this.tools.definitions(toolContext, bot)
+        .sort((a, b) => managed ? (a.name < b.name ? -1 : a.name > b.name ? 1 : 0) : 0), signal,
       nativeMcp,
       parallelToolNames: ['read_file', 'list_directory', 'find_files', 'search_text', 'read_skill'],
       ...(!task.kind ? { userInput: this.inputs.forRun(run, toolContext, draft, saved?.cutoff ?? draft.sequence - 1) } : {}),

@@ -15,9 +15,9 @@ export class ManagedRunState {
 
   constructor(readonly context: RunContext) {
     const saved = context.progress;
-    this.messages = saved ? [...saved.messages] : [...context.messages, { role: 'user', content: context.prompt,
+    this.messages = saved ? [...saved.messages] : [...context.messages, ...(context.runtimeContext ? [context.runtimeContext] : []), { role: 'user', content: context.prompt,
       ...(context.images?.length ? { images: context.images } : {}) }];
-    this.currentStart = saved?.currentStart ?? context.messages.length;
+    this.currentStart = saved?.currentStart ?? context.messages.length + (context.runtimeContext ? 1 : 0);
     this.compaction = saved?.compaction;
     this.archiveStart = saved?.archiveStart ?? saved?.currentStart ?? context.messages.length;
     this.text = saved?.text ?? '';

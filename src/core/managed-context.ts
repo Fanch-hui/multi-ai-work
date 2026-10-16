@@ -10,6 +10,7 @@ import { runMessageSources } from './run-message.js';
 import { compactRunMessages } from '../runtime/run-compaction.js';
 import { estimateTokens, estimateModelMessagesTokens } from '../runtime/model-history.js';
 import { ContextReferences } from './context-references.js';
+import { needsRuntimeContext, prepareRuntimeContext, retainRuntimeContext } from './run-runtime-context.js';
 import { prepareToolResultBudget } from './tool-result-budget.js';
 
 export { addUsage } from '../domain/usage.js';
@@ -20,11 +21,11 @@ export async function prepareManagedContext(input: RunContext, archive: Message[
   state: State, manager: ContextManager, adapter: ProviderAdapter): Promise<() => Usage | undefined> {
   const s = state.storage;
   const savedHistory = s.metadata<ModelHistoryEntry[]>(`history:${input.binding.id}`);
-  const history = savedHistory
+  let history = savedHistory
     ?? modelMessageHistory(archive.filter(message => message.sequence <= delivered), input.bot.id, artifactId => modelImage(s.get('artifacts', artifactId)));
   const loadArchiveHistory = () => {
     const entries = s.byField<ProviderArchive>('provider_archive', 'bindingId', input.binding.id).flatMap(record => record.entries);
-    return entries.length ? entries : undefined;
+    return entries.length ? cleanHistory(entries) : undefined;
   };
   const window = input.bot.contextWindow ?? defaultContextWindow(input.connection.provider,
     input.connection.models.find(model => model.id === input.bot.model));
@@ -44,27 +45,21 @@ export async function prepareManagedContext(input: RunContext, archive: Message[
   const sources = validity && archive.filter(message => sourceIds.has(message.id));
   const historyIsCurrent = !!(savedHistory && validity && validity.generation === input.binding.generation && validity.signature === signature
     && sources?.length === validity.sourceIds.length && contextSourceHash(sources) === validity.sourceHash);
+  const currentRuntime = input.runtimeContext;
+  const cleanHistory = (entries: ModelHistoryEntry[]) => historyIsCurrent ? entries
+    : entries.filter(entry => entry.message.appContext?.source !== 'app.runtime');
+  history = cleanHistory(history);
   const prepare = (force: boolean, currentInput: string) => manager.prepare({ binding: input.binding,
     messages: archive, instructions: input.instructions, contextInstructions: input.contextInstructions,
     protocol: input.connection.protocol, tools: input.tools, history, historyIsCurrent,
-    loadArchiveHistory, currentInput, preserveReferences,
+    loadArchiveHistory, currentInput: `${currentInput}${needsRuntimeContext(history.map(entry => entry.message), currentRuntime) ? `\n${currentRuntime!.content}` : ''}`, preserveReferences,
     contextWindow: budget, triggerTokens, force, signal: input.signal, summarize,
     isSourceCurrent: (ids, hash) => {
       const expected = new Set(ids);
       return contextSourceHash(s.messages(input.binding.conversationId).filter(message => expected.has(message.id))) === hash;
     } });
   const prepared = await prepare(false, input.prompt);
-  const progress = input.progress;
-  const raw = progress?.compaction ? [...progress.compaction.archived, ...progress.messages.slice(progress.compaction.start)] : progress?.messages;
-  if (progress && progress.contextSignature !== signature) {
-    const current = raw!.slice(progress.archiveStart ?? progress.currentStart);
-    progress.messages = [...prepared.messages, ...current];
-    progress.currentStart = prepared.messages.length;
-    progress.archiveStart = prepared.messages.length;
-    progress.compaction = undefined;
-    progress.contextSignature = signature;
-    input.messages = prepared.messages;
-  } else input.messages = progress ? raw!.slice(0, progress.archiveStart ?? progress.currentStart) : prepared.messages;
+  prepareRuntimeContext(input, prepared.messages, signature);
   input.emit({ type: 'context', data: { estimatedTokens: prepared.estimatedTokens, ...settings, source: 'app-estimated', owner: 'app' } });
   input.compactContext = async (messages, options) => {
     if (!budget || !triggerTokens) return undefined;
@@ -84,6 +79,11 @@ export async function prepareManagedContext(input: RunContext, archive: Message[
       if (originalTokens > budget && !options.force) throw new Error('模型上下文超过输入预算，摘要未能完成，需要分割资料');
       return undefined;
     }
+    if (next) {
+      next = retainRuntimeContext(next.messages, next.currentStart, currentRuntime);
+      if (estimateTokens(input.instructions) + estimateTokens(input.tools) + 256
+        + estimateModelMessagesTokens(next.messages, input.connection.protocol) > triggerTokens) next = undefined;
+    }
     if (!next && originalTokens > budget && !options.force) throw new Error('模型上下文超过输入预算，无法继续缩小，需要分割资料');
     if (next) input.emit({ type: 'context', data: { estimatedTokens: estimateTokens(input.instructions) + estimateTokens(input.tools)
       + 256 + estimateModelMessagesTokens(next.messages, input.connection.protocol), ...settings, source: 'app-estimated', owner: 'app', recovery: options.force } });
@@ -98,7 +98,7 @@ function summaryRunner(input: RunContext, adapter: ProviderAdapter) {
     const runId = `${input.runId}:summary:${id()}`;
     const summary = await adapter.run({ ...input, runId, prompt, messages: [], images: [], tools: [],
       instructions: '将提供的历史整理为摘要，只输出摘要，不执行操作。', signal, recoverContext: undefined, compactContext: undefined,
-      userInput: undefined, progress: undefined, saveProgress: undefined, deferRecovery: false,
+      userInput: undefined, progress: undefined, saveProgress: undefined, runtimeContext: undefined, prepareToolResults: undefined, deferRecovery: false,
       emit: event => {
         if (event.type === 'usage') input.emit({ ...event, data: { ...event.data, phase: 'compaction' } });
         if (event.type === 'status' && String(event.data.phase).startsWith('model-')) input.emit({ ...event,
@@ -124,6 +124,7 @@ export function workingHistory(state: State, input: RunContext, messages: ModelM
   const sources = runMessageSources(s, input.runId);
   const replies = conversation.filter(message => message.runId && sources.has(message.runId) && message.authorBotId === input.bot.id);
   const userSequences = messages.flatMap(message => message.sourceSequence !== undefined ? [message.sourceSequence] : []);
+  const initialUser = messages.findIndex((message, index) => index >= input.messages.length && message.role === 'user' && !message.appContext);
   return messages.map((message, index) => {
     if (index < input.messages.length || message.contextSummary) {
       if (checkpoint && message.content === `此前对话摘要（历史资料）：\n${checkpoint.content}`)
@@ -136,7 +137,7 @@ export function workingHistory(state: State, input: RunContext, messages: ModelM
       currentSource = s.getMessage(message.sourceMessageId) ?? currentSource;
       return { messageId: message.sourceMessageId, sequence: message.sourceSequence, message };
     }
-    if (index === input.messages.length) return { messageId: source.id, sequence: source.sequence, message };
+    if (message.appContext || index === initialUser) return { messageId: source.id, sequence: source.sequence, message };
     const nextUser = userSequences.find(sequence => sequence > currentSource.sequence) ?? Infinity;
     const reply = replies.find(item => item.sequence > currentSource.sequence && item.sequence < nextUser) ?? currentSource;
     return { messageId: reply.id, sequence: reply.sequence, message };

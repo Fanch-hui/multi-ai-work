@@ -5,7 +5,7 @@ export interface ToolDefinition { name: string; description: string; inputSchema
 export interface ModelImage { artifactId: string; mimeType: string; width?: number; height?: number; }
 export interface ToolContentResult { content: ({ type: 'text'; text: string } | { type: 'image'; image: ModelImage })[]; isError?: boolean; }
 export interface ModelMessage { role: 'user' | 'assistant' | 'tool'; content: string; images?: ModelImage[]; callId?: string; toolCalls?: { id: string; name: string; arguments: string }[]; providerItems?: unknown[];
-  sourceMessageId?: string; sourceSequence?: number; contextSummary?: boolean; contextArtifactIds?: string[]; }
+  sourceMessageId?: string; sourceSequence?: number; contextSummary?: boolean; contextArtifactIds?: string[]; appContext?: { source: 'app.runtime' | 'app.repeat-tool-reminder'; version: string }; }
 export interface ManagedProgress {
   messages: ModelMessage[];
   currentStart: number;
@@ -38,6 +38,7 @@ export interface RunContext {
   runId: string; bot: Bot; connection: Connection; binding: SessionBinding; workspacePath: string;
   prompt: string; messages: ModelMessage[]; instructions: string; contextInstructions?: string; contextSignature?: string; tools: ToolDefinition[];
   images?: ModelImage[];
+  runtimeContext?: ModelMessage;
   resolveImage?(image: ModelImage): Promise<{ mimeType: string; data: string }>;
   signal: AbortSignal; nativeMcp: NativeMcp;
   nativeTools?: NativeTools;
