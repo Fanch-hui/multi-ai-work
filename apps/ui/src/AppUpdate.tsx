@@ -37,7 +37,7 @@ function UpdateError({ update }: { update: AppUpdate }) {
 export function SidebarAppUpdate() {
   const update = useAppUpdate();
   const { state, pending, run } = update;
-  if (!state || ['disabled', 'idle', 'checking'].includes(state.phase)) return null;
+  if (!state || ['disabled', 'idle', 'checking'].includes(state.phase) || state.phase === 'error' && !state.version) return null;
   const downloading = state.phase === 'downloading';
   const installing = state.phase === 'installing';
   const percent = state.total ? Math.min(100, Math.round((state.received ?? 0) / state.total * 100)) : undefined;
