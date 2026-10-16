@@ -38,7 +38,7 @@ export function Composer({
     const textarea = textareaRef.current;
     if (!textarea) return;
     textarea.style.height = "auto";
-    textarea.style.height = `${Math.min(192, Math.max(64, textarea.scrollHeight))}px`;
+    textarea.style.height = `${Math.min(192, Math.max(48, textarea.scrollHeight))}px`;
   }, [conversation.id, content]);
   useEffect(() => {
     function dismissMentions(event: PointerEvent) {
@@ -110,9 +110,10 @@ export function Composer({
           )}
           <textarea
             ref={textareaRef}
+            rows={1}
             aria-label="消息内容"
             aria-describedby={busyMembers.length ? `task-input-hint-${conversation.id}` : undefined}
-            className="max-h-48 min-h-16 w-full resize-none border-0 bg-transparent px-1 py-3 text-sm leading-6 outline-none placeholder:text-slate-400"
+            className="max-h-48 min-h-12 w-full resize-none border-0 bg-transparent px-1 py-3 text-sm leading-6 outline-none placeholder:text-slate-400"
             value={content}
             disabled={busy}
             onPaste={onPaste}
