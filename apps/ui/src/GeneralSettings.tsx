@@ -5,6 +5,7 @@ import type { Mutate } from "./store.js";
 import { choosePath, errorMessage, snapshot } from "./api.js";
 import { generalSettings, restoreGeneralSettings } from "./general-settings.js";
 import { Button, Confirm, ErrorNote, Field, inputClass, cn } from "./components.js";
+import { AppUpdateSettings } from "./AppUpdate.js";
 export function General({ data, mutate }: { data: Snapshot; mutate: Mutate }) {
   const [settings, setSettings] = useState(() => generalSettings(data.settings));
   const [error, setError] = useState("");
@@ -169,6 +170,7 @@ export function General({ data, mutate }: { data: Snapshot; mutate: Mutate }) {
           {notice}
         </p>
       )}
+      <AppUpdateSettings />
     </div>
   );
 }

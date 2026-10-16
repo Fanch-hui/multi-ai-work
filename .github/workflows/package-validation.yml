@@ -137,8 +137,39 @@ jobs:
           name: desktop-${{ matrix.target }}
           path: |
             release/*.dmg
+            release/*.zip
             release/*.exe
             release/package-smoke.json
+            release/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
+
+  release-materials:
+    name: Assemble update release materials
+    needs: packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.CI_NODE_VERSION }}
+      - name: Download validated platform packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-*
+          path: release
+          merge-multiple: true
+      - name: Generate complete update manifest and checksums
+        run: node scripts/ci/release-metadata.mjs
+      - name: Save update release materials
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-release-materials
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/*.exe
+            release/latest.json
             release/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14

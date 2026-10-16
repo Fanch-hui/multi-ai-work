@@ -1,10 +1,21 @@
 import type { Snapshot } from "../../../src/domain/types.js";
+import type { AppUpdateState } from "../../../src/domain/app-update.js";
 export type Request = <T = unknown>(method: string, params?: Record<string, unknown>) => Promise<T>;
 interface DesktopBridge {
   request: Request;
   subscribe(listener: (event: unknown) => void): () => void;
+  subscribeUpdates?(listener: (state: AppUpdateState) => void): () => void;
 }
 const desktop = () => (window as Window & { aiTeam?: DesktopBridge }).aiTeam;
+export type AppUpdateCommand = 'check' | 'download' | 'cancel' | 'install';
+export function appUpdateBridge() {
+  const bridge = desktop();
+  if (typeof bridge?.subscribeUpdates !== 'function') return undefined;
+  return {
+    request: (command: AppUpdateCommand | 'state') => bridge.request<AppUpdateState>(`app.update.${command}`),
+    subscribe: (listener: (state: AppUpdateState) => void) => bridge.subscribeUpdates!(listener),
+  };
+}
 async function initializeWebSession(): Promise<void> {
   if (desktop()) return;
   const fragment = new URLSearchParams(window.location.hash.slice(1));

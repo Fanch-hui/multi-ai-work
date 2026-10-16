@@ -1,8 +1,10 @@
-import { app, BrowserWindow, ipcMain, shell, Menu, Tray, nativeImage, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, shell, Menu, Tray, nativeImage, dialog, net } from 'electron';
 import { dirname, join, isAbsolute } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { CoreHost } from './core-host.js';
 import type { Snapshot } from '../../src/domain/types.js';
+import { AppUpdater } from './app-updater.js';
+import { prepareUpdateInstaller } from './update-installer.js';
 
 const directory = dirname(fileURLToPath(import.meta.url));
 const pagePath = join(directory, '../../ui/index.html');
@@ -11,6 +13,8 @@ let window: BrowserWindow;
 let tray: Tray | undefined;
 let exiting = false;
 let trayEnabled = true;
+let updater: AppUpdater | undefined;
+let shutdown: Promise<void> | undefined;
 const smoke = process.argv.includes('--smoke-core');
 app.setName('multi-AI work');
 if (smoke) {
@@ -42,11 +46,23 @@ async function start() {
     title: 'multi-AI work', backgroundColor: '#ffffff', show: false,
     ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 18, y: 18 } } : {}),
     webPreferences: { preload: join(directory, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
+  updater = new AppUpdater({ version: app.getVersion(),
+    enabled: app.isPackaged && (process.platform === 'darwin' && process.arch === 'arm64' || process.platform === 'win32' && process.arch === 'x64'),
+    platform: process.platform === 'win32' ? 'windows' : 'macos', architecture: process.arch === 'x64' ? 'x64' : 'arm64',
+    cacheDirectory: join(app.getPath('userData'), 'app-updates'), fetcher: (input, init) => net.fetch(new Request(input, init)),
+    acquire: () => core.request('system.prepareUpdate', {}), release: () => core.request('system.releaseUpdate', {}),
+    prepareInstallation: (packagePath, version) => prepareUpdateInstaller({ packagePath, version,
+      cacheDirectory: join(app.getPath('userData'), 'app-updates'), parentPid: process.pid, executablePath: app.getPath('exe'),
+      platform: process.platform as 'darwin' | 'win32', architecture: process.arch as 'arm64' | 'x64', bundleId: 'local.multi-ai-work.desktop' }),
+    quit: () => { exiting = true; app.quit(); },
+    changed: state => { if (!window.isDestroyed()) window.webContents.send('team:update', state); },
+  });
   window.webContents.setWindowOpenHandler(({ url }) => { if (allowedExternal(url)) void shell.openExternal(url); return { action: 'deny' }; });
   window.webContents.on('will-navigate', (event, url) => { if (url !== pathToFileURL(pagePath).href) { event.preventDefault(); if (allowedExternal(url)) void shell.openExternal(url); } });
   ipcMain.handle('team:request', async (event, method: unknown, params: unknown) => {
     if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame || event.senderFrame.url !== pathToFileURL(pagePath).href) throw new Error('调用来源未授权');
     if (typeof method !== 'string' || !params || typeof params !== 'object' || Array.isArray(params)) throw new Error('请求参数无效');
+    if (method.startsWith('app.update.')) return updater!.request(method);
     const result = await core.request(method, params as Record<string, unknown>);
     if (method === 'connections.login' && result && typeof result === 'object' && 'url' in result && typeof result.url === 'string' && allowedExternal(result.url)) await shell.openExternal(result.url);
     if (method === 'settings.save') { const snapshot = await core.request('state.snapshot', {}) as Snapshot; trayEnabled = snapshot.settings.trayEnabled; }
@@ -56,6 +72,7 @@ async function start() {
   await core.start(window);
   const snapshot = await core.request('state.snapshot', {}) as Snapshot; trayEnabled = snapshot.settings.trayEnabled;
   await window.loadFile(pagePath); window.show();
+  void updater.start();
   const pixels = Buffer.alloc(16 * 16 * 4);
   for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
     if ((x >= 2 && x <= 6 && y >= 3 && y <= 7) || (x >= 9 && x <= 13 && y >= 3 && y <= 7) || (x >= 4 && x <= 11 && y >= 10 && y <= 13)) pixels[(y * 16 + x) * 4 + 3] = 255;
@@ -70,7 +87,9 @@ function allowedExternal(url: string) { try { const parsed = new URL(url); retur
 app.on('activate', () => window?.show());
 app.on('window-all-closed', () => { if (!trayEnabled) app.quit(); });
 app.on('before-quit', event => {
-  if (exiting && !core) return;
   event.preventDefault(); exiting = true;
-  void core.close().finally(() => { tray?.destroy(); app.exit(0); });
+  shutdown ??= (async () => {
+    try { await updater?.close(); await core.close(); }
+    finally { tray?.destroy(); app.exit(0); }
+  })();
 });

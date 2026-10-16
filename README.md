@@ -20,10 +20,16 @@ pnpm desktop
 | `pnpm typecheck` | TypeScript 检查 |
 | `pnpm test` | 核心、协议适配和工具测试 |
 | `pnpm build` | 编译 Core、Electron 与 UI |
-| `pnpm package:mac` | 在 macOS 生成应用目录和 DMG，输出到 `release` |
+| `pnpm package:mac` | 在 macOS 生成应用目录、DMG 和更新 ZIP，输出到 `release` |
 | `pnpm package:win` | 在 Windows 生成 NSIS 安装包，输出到 `release` |
 
 `pnpm desktop` 构建本机应用后启动，使 SQLite 与 Electron 使用匹配的运行时。桌面数据目录可在“连接与设置 → 运行与备份”查看。开发模式使用项目内的 `.data`，API/OAuth 凭据仅留在当前进程，重启后需重新提供；日常使用请启动桌面应用。agy 保留本机 HOME，复用原生登录与系统 Keyring；Qoder 使用连接专用 profile。
+
+## 应用更新
+
+桌面应用每次启动检查一次更新，也可在“连接与设置 → 运行与备份 → 应用更新”手动检查。发现新版时，品牌名称右侧显示下载图标；下载完成后切换为重启更新图标。安装前须完成或停止所有任务。更新替换应用程序，保留本机工作台数据。
+
+更新支持安装在 `/Applications` 的 macOS arm64 应用与 Windows x64 NSIS 安装版本。发布流程在两平台安装包门禁通过后生成 `desktop-release-materials`，包含更新 ZIP、EXE、`latest.json` 和 `SHA256SUMS.txt`；将这些文件上传至同版本 `v<version>` 的 GitHub Release 后，客户端即可检查到更新。本地可运行 `node scripts/ci/release-metadata.mjs <产物目录>` 生成清单，目录须同时包含当前版本的 macOS ZIP 与 Windows EXE。
 
 ## 配置连接
 

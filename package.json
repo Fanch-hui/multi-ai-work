@@ -1,6 +1,6 @@
 {
   "name": "multi-ai-work",
-  "version": "0.6.15",
+  "version": "0.6.16",
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
@@ -88,7 +88,8 @@
       "identity": "-",
       "target": [
         "dir",
-        "dmg"
+        "dmg",
+        "zip"
       ],
       "category": "public.app-category.productivity",
       "artifactName": "multi-AI-work-${version}-${arch}.${ext}"

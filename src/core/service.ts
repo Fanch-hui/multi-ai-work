@@ -44,6 +44,7 @@ import { TaskControlService } from './task-control.js';
 import { inspectTask } from './task-inspection.js';
 import { deleteArtifact } from './artifact-delete.js';
 import { MAX_MESSAGE_ATTACHMENTS, requireAttachmentCapacity } from '../domain/attachment-policy.js';
+import { UpdateAdmission } from './update-admission.js';
 
 export type HostRequest = (method: 'chooseDirectory' | 'chooseFile' | 'chooseAvatar' | 'openPath', params?: Record<string, unknown>) => Promise<unknown>;
 export class CoreService {
@@ -60,6 +61,7 @@ export class CoreService {
   private oauth: OAuthManager; private backup: BackupService;
   private registry = createToolRegistry(); private adapters: ProviderAdapter[];
   private maintenance = false;
+  private updates: UpdateAdmission;
   constructor(dataDirectory: string, cipher?: CipherHost, private host?: HostRequest, adapters?: ProviderAdapter[]) {
     this.state = new State(dataDirectory); const s = this.state.storage;
     this.vault = new Vault(join(dataDirectory, 'credentials.enc.json'), cipher);
@@ -83,6 +85,7 @@ export class CoreService {
     this.backup = new BackupService(this.state);
     this.market = new MarketService(this.state, this.entities);
     this.previews = new ArtifactPreviews(this.state);
+    this.updates = new UpdateAdmission(this.state, this.tasks, this.scheduler, this.tools.processes);
   }
   async start() { await this.vault.load(); this.tools.processes.recover(); this.scheduler.start(); this.memories.start(); this.questionDecisions.start(); }
   async close() {
@@ -93,6 +96,15 @@ export class CoreService {
   }
 
   async request(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
+    if (method === 'system.prepareUpdate') {
+      if (this.maintenance) throw new Error('正在处理备份，请稍后重启更新');
+      return this.updates.prepare();
+    }
+    if (method === 'system.releaseUpdate') { this.updates.release(); return { released: true }; }
+    return this.updates.request(method, () => this.handleRequest(method, params));
+  }
+
+  private async handleRequest(method: string, params: Record<string, unknown>): Promise<unknown> {
     if (this.maintenance && method !== 'state.snapshot') throw new Error('正在恢复备份，请稍后操作');
     if (method.startsWith('market.') || method === 'career.save') {
       if (method === 'market.import' && !params.path) {

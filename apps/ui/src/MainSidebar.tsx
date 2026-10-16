@@ -6,6 +6,7 @@ import { Button, cn } from "./components.js";
 import type { Mutate } from "./store.js";
 import { ConversationActions } from "./ConversationActions.js";
 import { SidebarConversationList } from "./SidebarConversationList.js";
+import { SidebarAppUpdate } from "./AppUpdate.js";
 export type Page = "chat" | "agents" | "tasks" | "memory" | "market" | "settings";
 const navigation = [
   { id: "agents", label: "我的团队", icon: Users },
@@ -28,10 +29,13 @@ export function MainSidebar({ collapsed = false, data, page, selectedId, onPage,
         <PanelLeftClose size={17} />
       </Button>
     </div>
-    <button className="mb-4 flex shrink-0 items-center gap-2.5 px-3 text-left text-base font-semibold text-slate-900"
+    <div className="mb-4 flex shrink-0 items-center gap-1 px-3">
+    <button className="flex min-w-0 flex-1 items-center gap-2.5 text-left text-base font-semibold text-slate-900"
       onClick={() => data?.settings.mainConversationId && onSelect(data.settings.mainConversationId)} aria-label="打开主智能体对话">
-      <img src={`${import.meta.env.BASE_URL}app-icon.png`} alt="" className="size-7 rounded-lg" /><span>multi-AI work</span>
+      <img src={`${import.meta.env.BASE_URL}app-icon.png`} alt="" className="size-7 shrink-0 rounded-lg" /><span className="truncate">multi-AI work</span>
     </button>
+    <SidebarAppUpdate />
+    </div>
     <div className="mb-3 flex shrink-0 gap-2">
       <Button className="h-10 min-w-0 flex-1 border-black/6 bg-white/70 font-medium" onClick={onCreateGroup} disabled={!data}>
         <Plus size={16} />新对话
