@@ -306,6 +306,29 @@ describe('记忆整理、版本溯源与并发保护', () => {
       ownerId: groupRoom.id,
     }, member.id, groupRoom.id)).toThrow('仅允许由管家执行');
 
+    const chiefReviewTask: Task = {
+      id: 'task-chief-review',
+      conversationId: privateRoom.id,
+      botId: chief.id,
+      requestId: `memory:bot:${chief.id}:test`,
+      depth: 0,
+      kind: 'memory-review',
+      goal: '整理记忆',
+      expectedOutput: '完成',
+      status: 'running',
+      dependencyIds: [],
+      artifactIds: [],
+      runIds: [],
+      createdAt: now(),
+      updatedAt: now(),
+    };
+    expect(() => core.memories.manage({
+      action: 'promote',
+      id: personal.id,
+      scope: 'team',
+      ownerId: groupRoom.id,
+    }, chief.id, privateRoom.id, chiefReviewTask)).toThrow('后台整理任务不可执行记忆晋升');
+
     const promoted = core.memories.manage({
       action: 'promote',
       id: personal.id,

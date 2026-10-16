@@ -216,7 +216,7 @@ export class MemoryManagement {
       return getMemoryHistory(this.state, entry.id, conversationId);
     }
     if (action === 'merge') return mergeMemories(this.state, input, actor, owns);
-    if (action === 'promote') return promoteMemory(this.state, input, botId, conversationId);
+    if (action === 'promote') return promoteMemory(this.state, input, botId, conversationId, task);
     if (action === 'revoke') return this.revoke(z.string().parse(input.id), actor);
     if (action === 'approve') {
       if (!entry) throw new Error('请选择要保存的记忆');

@@ -234,7 +234,11 @@ export function promoteMemory(
   rawInput: unknown,
   botId: string,
   conversationId: string,
+  task?: Task,
 ): MemoryEntry {
+  if (task?.kind === 'memory-review') {
+    throw new Error('后台整理任务不可执行记忆晋升，请在目标会话中由管家显式晋升');
+  }
   if (botId !== state.settings().mainBotId) {
     throw new Error('个人记忆晋升公共记忆仅允许由管家执行');
   }

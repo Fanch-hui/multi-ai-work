@@ -153,6 +153,46 @@ describe('有预算的分层召回与通道同步', () => {
     expect(formatted).toContain('未注入全文');
     expect(formatted).not.toContain(hugeContent.slice(0, 400));
     expect(estimateTokens(formatted)).toBeLessThanOrEqual(320);
+
+    // Near-budget pinned memory (~1,966 tokens in selectContext) falls back to summary in sessionMemory instead of disappearing
+    const nearBudgetRoom = core.entities.createConversation({
+      name: '临界预算会话',
+      kind: 'private',
+      memberIds: [member.id],
+      workspaceId: core.state.snapshot().workspaces[0].id,
+    });
+    const nearBudgetEntry = core.memories.save({
+      scope: 'bot',
+      ownerId: member.id,
+      allowedConversationIds: [nearBudgetRoom.id],
+      pinned: true,
+      topic: '临界规范',
+      summary: '临界预算下的核心规范摘要',
+      content: '甲'.repeat(1940),
+    });
+    const nearSelection = core.memory.selectContext(
+      { botId: member.id, conversationId: nearBudgetRoom.id },
+      { budgetTokens: 2000 },
+    );
+    expect(nearSelection.fullEntries.map(entry => entry.id)).toEqual([nearBudgetEntry.id]);
+    expect(nearSelection.estimatedTokens).toBeGreaterThan(1940);
+    expect(nearSelection.estimatedTokens).toBeLessThanOrEqual(2000);
+
+    const nearTurn = sessionMemory(
+      core.memory,
+      member,
+      {
+        id: 'binding-near', botId: member.id, conversationId: nearBudgetRoom.id, connectionId: member.connectionId,
+        generation: 1, configRevision: member.revision, connectionRevision: 1, workspaceId: nearBudgetRoom.workspaceId,
+        lastDeliveredSequence: 0,
+      },
+      { budgetTokens: 2000 },
+    );
+    expect(nearTurn.prompt).toContain('未注入全文的记忆摘要');
+    expect(nearTurn.prompt).toContain('临界预算下的核心规范摘要');
+    expect(nearTurn.prompt).toContain(nearBudgetEntry.id);
+    expect(estimateTokens(nearTurn.prompt)).toBeLessThanOrEqual(2000);
+    expect(nearTurn.versions[nearBudgetEntry.id]).toBe(nearBudgetEntry.revision);
   });
 
   it('区分本轮未选中、正文修订与撤销：managed 不重建历史，native 不误报失效引用且修订补发严格受预算限制', async () => {
@@ -245,14 +285,14 @@ describe('有预算的分层召回与通道同步', () => {
     expect(estimateTokens(turnOversized.prompt)).toBeLessThanOrEqual(2000);
     expect(turnOversized.prompt).toContain('未注入全文');
     expect(turnOversized.prompt).not.toContain(oversizedRevision.slice(0, 300));
-    expect(turnOversized.versions[budgetRule.id]).toBeUndefined();
+    expect(turnOversized.versions[budgetRule.id]).toBe(3);
 
-    // Revoking budgetRule sends invalidation notice
+    // Revoking budgetRule on the continuous path (using turnOversized.versions) still sends invalidation notice
     core.memories.revoke(budgetRule.id);
     const turn4 = sessionMemory(
       core.memory,
       member,
-      { ...binding, memoryVersions: turn3.versions },
+      { ...binding, memoryVersions: turnOversized.versions },
       { query: '代码单元测试' },
     );
     expect(turn4.prompt).toContain(`失效的记忆引用：[${budgetRule.id}]`);
