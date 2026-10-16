@@ -5,11 +5,14 @@ import { stat } from 'node:fs/promises';
 
 export class CoreHost {
   private child?: UtilityProcess;
+  private closing?: Promise<void>;
   private pending = new Map<string, { resolve(value: unknown): void; reject(error: Error): void }>();
   onChange?: () => void;
-  async start(window?: BrowserWindow) {
+  get running() { return !!this.child; }
+  async start(window?: BrowserWindow, dataDirectory = app.getPath('userData')) {
+    if (this.child) throw new Error('Core 已经启动');
     const child = utilityProcess.fork(join(app.getAppPath(), 'dist/src/core/entry.js'), [], {
-      env: { ...process.env, AI_TEAM_DATA_DIR: app.getPath('userData'),
+      env: { ...process.env, AI_TEAM_DATA_DIR: dataDirectory,
         MULTI_AI_WORKSPACE_RUNTIME: app.isPackaged ? join(process.resourcesPath, 'workspace-runtime')
           : join(app.getAppPath(), 'workspace-runtime', process.platform === 'darwin' ? 'mac-arm64' : 'win-x64') },
       stdio: 'pipe', serviceName: 'multi-AI work Core' });
@@ -47,11 +50,19 @@ export class CoreHost {
   }
   async close() {
     const child = this.child; if (!child) return;
-    await new Promise<void>(resolve => {
-      const timeout = setTimeout(() => { child.kill(); resolve(); }, 15000);
-      child.once('exit', () => { clearTimeout(timeout); resolve(); }); child.postMessage({ type: 'close' });
-    });
-    this.child = undefined;
+    this.closing ??= new Promise<void>((resolve, reject) => {
+      let closed = false;
+      const message = (input: { type?: string }) => { if (input.type === 'closed') closed = true; };
+      child.on('message', message);
+      const forced = setTimeout(() => { child.kill(); }, 15000);
+      const timeout = setTimeout(() => reject(new Error('应用数据仍在使用，请退出后重试')), 20000);
+      child.once('exit', code => {
+        clearTimeout(forced); clearTimeout(timeout); child.removeListener('message', message);
+        if (closed && code === 0) resolve(); else reject(new Error('数据服务未正常关闭，请重试'));
+      });
+      child.postMessage({ type: 'close' });
+    }).finally(() => { this.closing = undefined; });
+    await this.closing;
   }
   private async host(method: string, params: Record<string, unknown>, window?: BrowserWindow) {
     if (method === 'encrypt' || method === 'decrypt') {
@@ -61,7 +72,7 @@ export class CoreHost {
     }
     if (method === 'chooseDirectory' || method === 'chooseFile') {
       if (!window) throw new Error('目录选择需要桌面窗口');
-      const result = await dialog.showOpenDialog(window, { properties: method === 'chooseDirectory' ? ['openDirectory'] : params.multiple ? ['openFile', 'multiSelections'] : ['openFile'] });
+      const result = await dialog.showOpenDialog(window, { properties: method === 'chooseDirectory' ? ['openDirectory', 'createDirectory'] : params.multiple ? ['openFile', 'multiSelections'] : ['openFile'] });
       return { path: result.canceled ? undefined : result.filePaths[0], paths: result.canceled ? [] : result.filePaths };
     }
     if (method === 'chooseAvatar') {

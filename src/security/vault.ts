@@ -29,6 +29,7 @@ export class Vault {
     await this.persist();
   }
   async delete(ref: string) { this.values.delete(ref); await this.persist(); }
+  async flush() { await this.pending; }
   private persist() {
     if (!this.cipher) return Promise.resolve();
     const operation = this.pending.then(async () => {

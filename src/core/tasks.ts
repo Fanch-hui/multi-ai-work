@@ -15,10 +15,10 @@ import { terminal } from '../domain/task-status.js';
 export { terminal } from '../domain/task-status.js';
 export class TaskService {
   private blockedConversations = new Set<string>();
-  private updateBlocked = false;
+  private maintenanceBlocked = false;
   constructor(private state: State) {}
 
-  setUpdateBlocked(blocked: boolean) { this.updateBlocked = blocked; }
+  setMaintenanceBlocked(blocked: boolean) { this.maintenanceBlocked = blocked; }
 
   blockConversation(conversationId: string) {
     if (this.blockedConversations.has(conversationId)) throw new Error('对话正在修改，请稍后再试');
@@ -27,7 +27,7 @@ export class TaskService {
   unblockConversation(conversationId: string) { this.blockedConversations.delete(conversationId); }
   accepting(conversationId: string) {
     const room = this.state.storage.get<Conversation>('conversations', conversationId);
-    return !this.updateBlocked && !!room && !room.archived && !this.blockedConversations.has(conversationId);
+    return !this.maintenanceBlocked && !!room && !room.archived && !this.blockedConversations.has(conversationId);
   }
   private requireActive(conversationId: string) {
     if (!this.accepting(conversationId)) throw new Error('对话已归档或正在修改，请先恢复对话');

@@ -5,6 +5,9 @@ import { CoreHost } from './core-host.js';
 import type { Snapshot } from '../../src/domain/types.js';
 import { AppUpdater } from './app-updater.js';
 import { prepareUpdateInstaller } from './update-installer.js';
+import { readDataDirectory } from './data-location.js';
+import { DataDirectoryController } from './data-directory-controller.js';
+import { copyDataDirectory } from './data-directory-process.js';
 
 const directory = dirname(fileURLToPath(import.meta.url));
 const pagePath = join(directory, '../../ui/index.html');
@@ -14,6 +17,7 @@ let tray: Tray | undefined;
 let exiting = false;
 let trayEnabled = true;
 let updater: AppUpdater | undefined;
+let dataDirectory: DataDirectoryController | undefined;
 let shutdown: Promise<void> | undefined;
 const smoke = process.argv.includes('--smoke-core');
 app.setName('multi-AI work');
@@ -42,6 +46,7 @@ async function smokeCore() {
   await core.close(); app.exit(0);
 }
 async function start() {
+  const currentDirectory = await readDataDirectory(app.getPath('userData'));
   window = new BrowserWindow({ width: 1400, height: 900, minWidth: 900, minHeight: 640,
     title: 'multi-AI work', backgroundColor: '#ffffff', show: false,
     ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 18, y: 18 } } : {}),
@@ -57,19 +62,30 @@ async function start() {
     quit: () => { exiting = true; app.quit(); },
     changed: state => { if (!window.isDestroyed()) window.webContents.send('team:update', state); },
   });
+  dataDirectory = new DataDirectoryController({ defaultDirectory: app.getPath('userData'), currentDirectory, core,
+    startCore: () => core.start(window, currentDirectory), copy: copyDataDirectory,
+    restart: () => { setImmediate(() => { app.relaunch(); exiting = true; app.quit(); }); },
+    changed: () => { if (!window.isDestroyed()) window.webContents.send('team:changed'); },
+  });
   window.webContents.setWindowOpenHandler(({ url }) => { if (allowedExternal(url)) void shell.openExternal(url); return { action: 'deny' }; });
   window.webContents.on('will-navigate', (event, url) => { if (url !== pathToFileURL(pagePath).href) { event.preventDefault(); if (allowedExternal(url)) void shell.openExternal(url); } });
   ipcMain.handle('team:request', async (event, method: unknown, params: unknown) => {
     if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame || event.senderFrame.url !== pathToFileURL(pagePath).href) throw new Error('调用来源未授权');
     if (typeof method !== 'string' || !params || typeof params !== 'object' || Array.isArray(params)) throw new Error('请求参数无效');
+    if (exiting) throw new Error('应用正在退出，请稍后操作');
+    if (dataDirectory!.busy) throw new Error('正在更改数据目录，请稍候');
+    if (method === 'app.dataDirectory.change') {
+      if (updater!.snapshot().phase === 'installing') throw new Error('正在安装更新，请稍后更改数据目录');
+      return dataDirectory!.change((params as { path: string }).path);
+    }
     if (method.startsWith('app.update.')) return updater!.request(method);
     const result = await core.request(method, params as Record<string, unknown>);
     if (method === 'connections.login' && result && typeof result === 'object' && 'url' in result && typeof result.url === 'string' && allowedExternal(result.url)) await shell.openExternal(result.url);
     if (method === 'settings.save') { const snapshot = await core.request('state.snapshot', {}) as Snapshot; trayEnabled = snapshot.settings.trayEnabled; }
     return result;
   });
-  core.onChange = () => { if (!window.isDestroyed()) window.webContents.send('team:changed'); };
-  await core.start(window);
+  core.onChange = () => { if (!window.isDestroyed() && !dataDirectory?.busy) window.webContents.send('team:changed'); };
+  await core.start(window, currentDirectory);
   const snapshot = await core.request('state.snapshot', {}) as Snapshot; trayEnabled = snapshot.settings.trayEnabled;
   await window.loadFile(pagePath); window.show();
   void updater.start();
@@ -89,7 +105,7 @@ app.on('window-all-closed', () => { if (!trayEnabled) app.quit(); });
 app.on('before-quit', event => {
   event.preventDefault(); exiting = true;
   shutdown ??= (async () => {
-    try { await updater?.close(); await core.close(); }
+    try { await dataDirectory?.settle(); await updater?.close(); await core.close(); }
     finally { tray?.destroy(); app.exit(0); }
   })();
 });

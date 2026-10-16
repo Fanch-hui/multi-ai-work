@@ -5,8 +5,14 @@ interface DesktopBridge {
   request: Request;
   subscribe(listener: (event: unknown) => void): () => void;
   subscribeUpdates?(listener: (state: AppUpdateState) => void): () => void;
+  changeDataDirectory?(path: string): Promise<{ path: string; restarting: true }>;
 }
 const desktop = () => (window as Window & { aiTeam?: DesktopBridge }).aiTeam;
+export function dataDirectoryBridge() {
+  const bridge = desktop();
+  if (typeof bridge?.changeDataDirectory !== 'function') return undefined;
+  return { change: (path: string) => bridge.changeDataDirectory!(path) };
+}
 export type AppUpdateCommand = 'check' | 'download' | 'cancel' | 'install';
 export function appUpdateBridge() {
   const bridge = desktop();

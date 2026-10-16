@@ -44,7 +44,7 @@ import { TaskControlService } from './task-control.js';
 import { inspectTask } from './task-inspection.js';
 import { deleteArtifact } from './artifact-delete.js';
 import { MAX_MESSAGE_ATTACHMENTS, requireAttachmentCapacity } from '../domain/attachment-policy.js';
-import { UpdateAdmission } from './update-admission.js';
+import { MaintenanceAdmission } from './maintenance-admission.js';
 
 export type HostRequest = (method: 'chooseDirectory' | 'chooseFile' | 'chooseAvatar' | 'openPath', params?: Record<string, unknown>) => Promise<unknown>;
 export class CoreService {
@@ -61,7 +61,7 @@ export class CoreService {
   private oauth: OAuthManager; private backup: BackupService;
   private registry = createToolRegistry(); private adapters: ProviderAdapter[];
   private maintenance = false;
-  private updates: UpdateAdmission;
+  private admission: MaintenanceAdmission;
   constructor(dataDirectory: string, cipher?: CipherHost, private host?: HostRequest, adapters?: ProviderAdapter[]) {
     this.state = new State(dataDirectory); const s = this.state.storage;
     this.vault = new Vault(join(dataDirectory, 'credentials.enc.json'), cipher);
@@ -85,23 +85,25 @@ export class CoreService {
     this.backup = new BackupService(this.state);
     this.market = new MarketService(this.state, this.entities);
     this.previews = new ArtifactPreviews(this.state);
-    this.updates = new UpdateAdmission(this.state, this.tasks, this.scheduler, this.tools.processes);
+    this.admission = new MaintenanceAdmission(this.state, this.tasks, this.scheduler, this.tools.processes);
   }
   async start() { await this.vault.load(); this.tools.processes.recover(); this.scheduler.start(); this.memories.start(); this.questionDecisions.start(); }
   async close() {
     this.logins.close(); await this.toolConnections.close();
     this.questionDecisions.close(); this.memories.close(); this.oauth.close();
     await this.market.quiesce(); await this.previews.close(); await this.scheduler.close();
-    await this.tools.processes.close(); await this.registry.close(); this.state.storage.close();
+    await this.tools.processes.close(); await this.registry.close(); await this.vault.flush(); this.state.storage.close();
   }
 
   async request(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
-    if (method === 'system.prepareUpdate') {
-      if (this.maintenance) throw new Error('正在处理备份，请稍后重启更新');
-      return this.updates.prepare();
+    if (method === 'system.prepareUpdate' || method === 'system.prepareDataDirectoryChange') {
+      if (this.maintenance) throw new Error('正在处理备份，请稍后再试');
+      return this.admission.prepare(method === 'system.prepareUpdate' ? 'update' : 'data-directory');
     }
-    if (method === 'system.releaseUpdate') { this.updates.release(); return { released: true }; }
-    return this.updates.request(method, () => this.handleRequest(method, params));
+    if (method === 'system.releaseUpdate' || method === 'system.releaseDataDirectoryChange') {
+      this.admission.release(method === 'system.releaseUpdate' ? 'update' : 'data-directory'); return { released: true };
+    }
+    return this.admission.request(method, () => this.handleRequest(method, params));
   }
 
   private async handleRequest(method: string, params: Record<string, unknown>): Promise<unknown> {

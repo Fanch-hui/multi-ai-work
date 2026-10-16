@@ -59,12 +59,14 @@ export function Confirm({
   title,
   description,
   actionLabel = "确认",
+  actionVariant = "danger",
   onConfirm,
   children,
 }: {
   title: string;
   description: string;
   actionLabel?: string;
+  actionVariant?: "danger" | "primary";
   onConfirm: () => Promise<unknown>;
   children: ReactNode;
 }) {
@@ -106,7 +108,7 @@ export function Confirm({
             <AlertDialog.Cancel asChild>
               <Button disabled={pending}>取消</Button>
             </AlertDialog.Cancel>
-            <Button variant="danger" disabled={pending} onClick={() => void submit()}>
+            <Button variant={actionVariant} disabled={pending} onClick={() => void submit()}>
               {pending && <LoaderCircle size={16} />} {actionLabel}
             </Button>
           </div>

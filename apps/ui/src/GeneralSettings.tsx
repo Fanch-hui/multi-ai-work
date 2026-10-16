@@ -6,6 +6,7 @@ import { choosePath, errorMessage, snapshot } from "./api.js";
 import { generalSettings, restoreGeneralSettings } from "./general-settings.js";
 import { Button, Confirm, ErrorNote, Field, inputClass, cn } from "./components.js";
 import { AppUpdateSettings } from "./AppUpdate.js";
+import { DataDirectoryField } from "./DataDirectoryField.js";
 export function General({ data, mutate }: { data: Snapshot; mutate: Mutate }) {
   const [settings, setSettings] = useState(() => generalSettings(data.settings));
   const [error, setError] = useState("");
@@ -113,9 +114,7 @@ export function General({ data, mutate }: { data: Snapshot; mutate: Mutate }) {
           <h2 className="text-balance text-base font-semibold">数据与备份</h2>
         </div>
         <div className="grid gap-4 rounded-xl border border-slate-200 bg-white p-5">
-          <Field label="数据目录">
-            <input readOnly className={inputClass} value={data.dataDirectory} />
-          </Field>
+          <DataDirectoryField key={data.dataDirectory} path={data.dataDirectory} disabled={!!busy} />
           <div className="flex flex-wrap gap-3">
             <Button disabled={!!busy} onClick={() => void backup()}>
               <Download size={16} />
