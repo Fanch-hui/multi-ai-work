@@ -69,4 +69,53 @@ describe('member memory notebooks', () => {
     expect(notebooks.some(item => item.id === chief.id)).toBe(false);
     expect(notebooks.find(item => item.id === member.id)?.entries).toEqual([]);
   });
+
+  it('groups entries by topic, displays usage stats, and warns when pinned entries exceed budget', async () => {
+    const { core, chief, room } = await fixture();
+    const shortPinned = core.memories.save({
+      content: '优先使用中文回复',
+      topic: '语言偏好',
+      tags: ['中文', '格式'],
+      pinned: true,
+      scope: 'bot',
+      ownerId: chief.id,
+      allowedConversationIds: [room.id],
+    });
+    const hugePinned = core.memories.save({
+      content: `超长置顶记忆内容 ${'核心架构约束说明 '.repeat(260)}`,
+      topic: '架构约束',
+      pinned: true,
+      scope: 'bot',
+      ownerId: chief.id,
+      allowedConversationIds: [room.id],
+    });
+
+    core.memory.selectContext({ botId: chief.id, conversationId: room.id }, {
+      query: '中文',
+      recordAutoInject: true,
+      scopeKey: 'run-ui-1',
+    });
+
+    const data = core.state.snapshot();
+    const chiefNotebook = memoryNotebooks(data, '中文')[0]!;
+    expect(chiefNotebook.id).toBe(chief.id);
+    expect(chiefNotebook.overflowIds).toContain(hugePinned.id);
+    expect(chiefNotebook.overflowIds).not.toContain(shortPinned.id);
+
+    const html = renderToStaticMarkup(createElement(MemoryNotebook, {
+      notebook: chiefNotebook,
+      data,
+      mutate: async () => undefined as never,
+      edit: () => undefined,
+      add: () => undefined,
+    }));
+    expect(html).toContain('语言偏好');
+    expect(html).toContain('架构约束');
+    expect(html).toContain('#中文');
+    expect(html).toContain('已置顶');
+    expect(html).toContain('未纳入全文');
+    expect(html).toContain('超出自动注入预算上限');
+    expect(html).toContain('自动注入 1 次 · 主动读取 0 次');
+    expect(html).toContain('整理记忆');
+  });
 });

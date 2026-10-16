@@ -3,25 +3,39 @@ import type { MemoryEntry, Snapshot } from "../../../src/domain/types.js";
 import type { Mutate } from "./store.js";
 import { errorMessage } from "./api.js";
 import { Button, ErrorNote, Field, Modal, inputClass } from "./components.js";
+
 export function MemoryEditor({ memory, target, data, mutate, close }: {
   memory?: MemoryEntry; target?: Pick<MemoryEntry, "scope" | "ownerId">;
   data: Snapshot; mutate: Mutate; close: () => void;
 }) {
   const [content, setContent] = useState(memory?.content || "");
+  const [topic, setTopic] = useState(memory?.topic || "");
+  const [summary, setSummary] = useState(memory?.summary || "");
+  const [tagsText, setTagsText] = useState(memory?.tags?.join("、") || "");
+  const [pinned, setPinned] = useState(Boolean(memory?.pinned));
   const [scope, setScope] = useState<MemoryEntry["scope"]>(memory?.scope || target?.scope || "bot");
   const [ownerId, setOwner] = useState(memory?.ownerId || target?.ownerId || data.settings.mainBotId || "");
   const [allowed, setAllowed] = useState<string[]>((memory?.scope === "team" ? [memory.ownerId] : memory?.allowedConversationIds || [])
     .filter((id) => data.conversations.some((room) => room.id === id)));
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
   async function save(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
     setError("");
     try {
+      const tags = tagsText
+        .split(/[、,，\s]+/)
+        .map(tag => tag.trim())
+        .filter(Boolean);
       await mutate("memories.save", {
         id: memory?.id,
         content,
+        topic: topic.trim(),
+        summary: summary.trim(),
+        tags,
+        pinned,
         scope,
         ownerId: scope === "team" ? allowed[0] || "" : scope === "shared"
           ? memory?.scope === "shared" ? memory.ownerId : "shared" : ownerId,
@@ -35,6 +49,7 @@ export function MemoryEditor({ memory, target, data, mutate, close }: {
       setBusy(false);
     }
   }
+
   return (
     <Modal
       open
@@ -52,6 +67,40 @@ export function MemoryEditor({ memory, target, data, mutate, close }: {
             placeholder="保存稳定的偏好、约定和已确认事实"
           />
         </Field>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="主题分类">
+            <input
+              className={inputClass}
+              value={topic}
+              onChange={(event) => setTopic(event.target.value)}
+              placeholder="如：代码规范、交付格式"
+            />
+          </Field>
+          <Field label="标签">
+            <input
+              className={inputClass}
+              value={tagsText}
+              onChange={(event) => setTagsText(event.target.value)}
+              placeholder="用顿号或空格分隔"
+            />
+          </Field>
+        </div>
+        <Field label="一句话摘要">
+          <input
+            className={inputClass}
+            value={summary}
+            onChange={(event) => setSummary(event.target.value)}
+            placeholder="可选，用于记忆目录索引"
+          />
+        </Field>
+        <label className="flex items-center gap-2 text-sm text-slate-600">
+          <input
+            type="checkbox"
+            checked={pinned}
+            onChange={(event) => setPinned(event.target.checked)}
+          />
+          置顶为核心记忆（优先全文注入上下文）
+        </label>
         <Field label="使用范围">
           <select
             className={inputClass}

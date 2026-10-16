@@ -142,3 +142,16 @@ export function searchableMemoryText(entry: Pick<MemoryEntry, 'content' | 'topic
     ? entry.summary.trim() : '';
   return [entry.topic?.trim(), validSummary, ...(entry.tags ?? []), entry.content].filter(Boolean).join('\n');
 }
+
+export function estimateMemoryTokens(text: string): number {
+  if (!text) return 0;
+  const cjkCount = (text.match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/gu) ?? []).length;
+  return Math.ceil(cjkCount + (text.length - cjkCount) / 4);
+}
+
+export function computeMemoryBudgetTokens(contextWindow?: number): number {
+  if (contextWindow && contextWindow < 8000) {
+    return Math.max(120, Math.min(2000, Math.floor(contextWindow * 0.25)));
+  }
+  return 2000;
+}
