@@ -1,10 +1,67 @@
 import { describe, expect, it } from 'vitest';
-import type { ProviderResult } from '../src/domain/provider.js';
+import type { ProviderResult, ManagedProgress, ModelMessage } from '../src/domain/provider.js';
 import type { Task } from '../src/domain/types.js';
 import type { ModelHistoryEntry } from '../src/runtime/model-history.js';
 import { eventually, setup } from './core-harness.js';
 
 describe('Core 工作上下文', () => {
+  it('reuses the saved working projection and rebuilds raw history after memory revocation', async () => {
+    const seen: string[] = [];
+    const { core, bot } = await setup(async context => {
+      seen.push(JSON.stringify(context.messages));
+      const user: ModelMessage = { role: 'user', content: context.prompt };
+      const answer: ModelMessage = { role: 'assistant', content: '完成' };
+      if (seen.length === 1) return { text: answer.content,
+        messages: [user, { role: 'assistant', content: '', toolCalls: [{ id: 'read', name: 'read_file', arguments: '{}' }] },
+          { role: 'tool', callId: 'read', content: '原始工具证据' }, answer],
+        contextMessages: [user, { role: 'assistant', content: '工作摘要含旧约定', contextSummary: true }, answer] };
+      return { text: answer.content, messages: [...context.messages, user, answer], contextMessages: [...context.messages, user, answer] };
+    });
+    const member = bot('摘要助手');
+    const room = core.entities.createConversation({ name: '私聊', kind: 'private', memberIds: [member.id], workspaceId: core.state.snapshot().workspaces[0].id });
+    const memory = core.memories.save({ scope: 'bot', ownerId: member.id, content: '采用旧约定', allowedConversationIds: [room.id] });
+    const turn = async () => {
+      const task = core.tasks.send({ conversationId: room.id, content: '继续处理' }).taskIds[0];
+      await eventually(() => core.state.storage.get<Task>('tasks', task)?.status === 'completed');
+    };
+    await turn(); await turn();
+    expect(seen[1]).toContain('工作摘要含旧约定');
+    expect(seen[1]).not.toContain('原始工具证据');
+    core.memories.revoke(memory.id);
+    await turn();
+    expect(seen[2]).not.toContain('工作摘要含旧约定');
+    expect(seen[2]).toContain('原始工具证据');
+  });
+
+  it('rebuilds an interrupted run from its raw ledger when memory was revoked', async () => {
+    let resumed: ManagedProgress | undefined;
+    let first = true;
+    const { core, bot } = await setup(async context => {
+      if (first) {
+        first = false;
+        const user: ModelMessage = { role: 'user', content: context.prompt };
+        await context.saveProgress!({ messages: [user, { role: 'assistant', content: '含已撤销记忆的摘要', contextSummary: true }],
+          currentStart: 0, archiveStart: 0, contextSignature: context.contextSignature,
+          compaction: { archived: [user, { role: 'assistant', content: '原始完成证据' }], start: 2 },
+          text: '', pendingInputIds: [], turnId: 'before-crash', attempt: 0, phase: 'ready' });
+        throw new Error('durable interrupted run');
+      }
+      resumed = context.progress;
+      return { text: '完成', messages: [...context.progress!.messages, { role: 'assistant', content: '完成' }] };
+    });
+    const member = bot('恢复助手');
+    const room = core.entities.createConversation({ name: '私聊', kind: 'private', memberIds: [member.id], workspaceId: core.state.snapshot().workspaces[0].id });
+    const memory = core.memories.save({ scope: 'bot', ownerId: member.id, content: '旧约定', allowedConversationIds: [room.id] });
+    const taskId = core.tasks.send({ conversationId: room.id, content: '处理资料' }).taskIds[0];
+    await eventually(() => core.state.storage.get<Task>('tasks', taskId)?.status === 'failed');
+    core.memories.revoke(memory.id);
+    await core.request('tasks.retry', { id: taskId });
+    await eventually(() => core.state.storage.get<Task>('tasks', taskId)?.status === 'completed');
+    expect(resumed?.compaction).toBeUndefined();
+    expect(JSON.stringify(resumed?.messages)).not.toContain('含已撤销记忆的摘要');
+    expect(JSON.stringify(resumed?.messages)).toContain('原始完成证据');
+  });
+
   it('连续整理保留来源、仅注入一个检查点，并计入摘要用量', async () => {
     const { core, bot } = await setup(async context => {
       const summary = context.runId.includes(':summary:');

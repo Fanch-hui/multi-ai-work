@@ -5,10 +5,13 @@ export interface ToolDefinition { name: string; description: string; inputSchema
 export interface ModelImage { artifactId: string; mimeType: string; width?: number; height?: number; }
 export interface ToolContentResult { content: ({ type: 'text'; text: string } | { type: 'image'; image: ModelImage })[]; isError?: boolean; }
 export interface ModelMessage { role: 'user' | 'assistant' | 'tool'; content: string; images?: ModelImage[]; callId?: string; toolCalls?: { id: string; name: string; arguments: string }[]; providerItems?: unknown[];
-  sourceMessageId?: string; sourceSequence?: number; }
+  sourceMessageId?: string; sourceSequence?: number; contextSummary?: boolean; contextArtifactIds?: string[]; }
 export interface ManagedProgress {
   messages: ModelMessage[];
   currentStart: number;
+  archiveStart?: number;
+  contextSignature?: string;
+  compaction?: { archived: ModelMessage[]; start: number };
   text: string;
   pendingInputIds: string[];
   turnId: string;
@@ -33,7 +36,7 @@ export interface NativeTools {
 }
 export interface RunContext {
   runId: string; bot: Bot; connection: Connection; binding: SessionBinding; workspacePath: string;
-  prompt: string; messages: ModelMessage[]; instructions: string; tools: ToolDefinition[];
+  prompt: string; messages: ModelMessage[]; instructions: string; contextInstructions?: string; contextSignature?: string; tools: ToolDefinition[];
   images?: ModelImage[];
   resolveImage?(image: ModelImage): Promise<{ mimeType: string; data: string }>;
   signal: AbortSignal; nativeMcp: NativeMcp;
@@ -45,6 +48,7 @@ export interface RunContext {
   saveSecret(ref: string, value: string): Promise<void>;
   persistBinding(nativeSessionId: string): void;
   recoverContext?(messages: ModelMessage[]): Promise<ModelMessage[] | undefined>;
+  compactContext?(messages: ModelMessage[], options: { force: boolean; currentStart: number }): Promise<{ messages: ModelMessage[]; currentStart: number } | undefined>;
   progress?: ManagedProgress;
   saveProgress?(progress: ManagedProgress): Promise<void>;
   deferRecovery?: boolean;
@@ -52,7 +56,7 @@ export interface RunContext {
   inputSignal?: AbortSignal;
   userInput?: RunUserInput;
 }
-export interface ProviderResult { text: string; usage?: Usage; nativeSessionId?: string; messages?: ModelMessage[];
+export interface ProviderResult { text: string; usage?: Usage; nativeSessionId?: string; messages?: ModelMessage[]; contextMessages?: ModelMessage[];
   outcome?: 'completed' | 'waiting_input'; modelDurationMs?: number; }
 export interface ProbeContext { connection: Connection; signal: AbortSignal; getSecret(ref?: string): Promise<string | undefined>; saveSecret?(ref: string, value: string): Promise<void>; }
 export interface ProbeResult { models: ModelInfo[]; capabilities: Capabilities; version?: string; accountScope?: string; }

@@ -4,6 +4,8 @@ import type { ModelRecovery } from '../../domain/recovery.js';
 export class ManagedRunState {
   messages: ModelMessage[];
   currentStart: number;
+  archiveStart: number;
+  compaction?: ManagedProgress['compaction'];
   text: string;
   pendingInputIds: Set<string>;
   turnId: string;
@@ -16,6 +18,8 @@ export class ManagedRunState {
     this.messages = saved ? [...saved.messages] : [...context.messages, { role: 'user', content: context.prompt,
       ...(context.images?.length ? { images: context.images } : {}) }];
     this.currentStart = saved?.currentStart ?? context.messages.length;
+    this.compaction = saved?.compaction;
+    this.archiveStart = saved?.archiveStart ?? saved?.currentStart ?? context.messages.length;
     this.text = saved?.text ?? '';
     this.pendingInputIds = new Set(saved?.pendingInputIds);
     this.turnId = saved?.turnId ?? this.newTurnId();
@@ -51,9 +55,21 @@ export class ManagedRunState {
     this.phase = 'ready';
   }
 
+  archiveMessages(): ModelMessage[] {
+    return this.compaction ? [...this.compaction.archived, ...this.messages.slice(this.compaction.start)] : this.messages;
+  }
+
+  async applyProjection(messages: ModelMessage[], currentStart: number) {
+    const archived = this.archiveMessages();
+    this.messages = messages;
+    this.currentStart = currentStart;
+    this.compaction = { archived, start: messages.length };
+    await this.save('ready');
+  }
+
   async save(phase: ManagedProgress['phase'], recovery?: ModelRecovery) {
     this.phase = phase;
-    await this.context.saveProgress?.({ messages: this.messages, currentStart: this.currentStart, text: this.text,
+    await this.context.saveProgress?.({ messages: this.messages, currentStart: this.currentStart, archiveStart: this.archiveStart, contextSignature: this.context.contextSignature, compaction: this.compaction, text: this.text,
       pendingInputIds: [...this.pendingInputIds], turnId: this.turnId, attempt: this.attempt, phase,
       ...(recovery ? { recovery } : {}) });
   }

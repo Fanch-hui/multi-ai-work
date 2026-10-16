@@ -15,9 +15,9 @@ export async function runManaged(client: OpenAI, context: RunContext, protocol: 
   let requestStep = 0;
   const requestOptions = { retryDelays, recovered: false, nextStep: () => ++requestStep,
     recordDuration: (durationMs: number) => { modelDurationMs += durationMs; } };
-  const result = (waiting = false): ProviderResult => ({ text: state.text, usage, messages: state.messages, modelDurationMs,
+  const result = (waiting = false): ProviderResult => ({ text: state.text, usage, messages: state.archiveMessages(), contextMessages: state.messages, modelDurationMs,
     ...(waiting ? { outcome: 'waiting_input' } : {}) });
-  const executed = new Set(state.messages.filter(message => message.role === 'tool').map(message => message.callId));
+  const executed = new Set(state.archiveMessages().filter(message => message.role === 'tool').map(message => message.callId));
   if (state.phase === 'tools' || state.phase === 'complete') await state.acknowledgeInput();
   if (state.phase === 'complete') return result();
   if (state.phase === 'tools') await completeToolBatch(context, state, executed);

@@ -63,6 +63,34 @@ describe('managed durable protocol progress', () => {
     expect(result.usage).toMatchObject({ inputTokens: 10, outputTokens: 2 });
   });
 
+  it('saves the compacted request before dispatch and resumes with full original tool evidence', async () => {
+    const { context, requests } = await fixture(index => [completed(index < 2 ? [call(index ? 'two' : 'one')] : [output])]);
+    const writes: string[] = [];
+    let saved!: ManagedProgress, interrupted = false;
+    context.executeTool = async (_name, _args, id) => { writes.push(id); return { written: id, detail: 'evidence '.repeat(500) }; };
+    context.compactContext = async (messages, options) => messages.filter(message => message.role === 'tool').length < 2
+      ? undefined : { messages: [messages[0], { role: 'assistant', content: 'First result saved', contextSummary: true }, ...messages.slice(-2)],
+        currentStart: options.currentStart };
+    context.saveProgress = async progress => {
+      saved = structuredClone(progress);
+      if (progress.compaction && progress.phase === 'ready' && !interrupted) {
+        interrupted = true;
+        throw new Error('exit after durable compaction');
+      }
+    };
+    await expect(runManaged(createClient(context.connection.baseUrl!), context, 'responses', [])).rejects.toThrow('durable compaction');
+    expect(requests).toHaveLength(2);
+    expect(saved.compaction?.archived.filter(message => message.role === 'tool')).toHaveLength(2);
+    context.progress = saved;
+    const result = await runManaged(createClient(context.connection.baseUrl!), context, 'responses', []);
+    expect(requests).toHaveLength(3);
+    expect(writes).toEqual(['one', 'two']);
+    expect(JSON.stringify(requests[2])).not.toContain('item-one');
+    expect(result.messages?.filter(message => message.role === 'tool').map(message => message.callId)).toEqual(['one', 'two']);
+    expect(result.contextMessages?.filter(message => message.role === 'tool').map(message => message.callId)).toEqual(['two']);
+    expect(result.text).toBe('完成');
+  });
+
   it('returns a saved complete reply without sending a new request or recounting old usage', async () => {
     const { context, requests } = await fixture(() => [completed()]);
     context.progress = progress('complete', 4);

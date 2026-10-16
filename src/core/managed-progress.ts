@@ -59,7 +59,7 @@ export function saveManagedProgress(storage: Storage, run: Run, task: Task, bind
 }
 
 export function restoreProgressInputs(storage: Storage, run: Run, saved: ManagedCheckpoint) {
-  const included = new Set(saved.progress.messages.flatMap(message => message.sourceMessageId ? [message.sourceMessageId] : []));
+  const included = new Set(progressMessages(saved.progress).flatMap(message => message.sourceMessageId ? [message.sourceMessageId] : []));
   for (const input of storage.all<TaskInput>('deliveries').filter(item => item.kind === 'user-input'
     && item.taskId === run.taskId && item.status !== 'delivered' && included.has(item.messageId)))
     storage.put('deliveries', { ...input, runId: run.id, status: 'claimed' });
@@ -67,7 +67,7 @@ export function restoreProgressInputs(storage: Storage, run: Run, saved: Managed
 
 export function restoreProgressTools(storage: Storage, task: Task, saved: ManagedCheckpoint,
   context: ToolExecutionContext): Record<string, string> {
-  const calls = new Set(saved.progress.messages.flatMap(message => message.toolCalls?.map(call => call.id) ?? []));
+  const calls = new Set(progressMessages(saved.progress).flatMap(message => message.toolCalls?.map(call => call.id) ?? []));
   const operations: Record<string, string> = {};
   for (const runId of task.runIds) {
     for (const operation of storage.byField<{ id: string; runId: string }>('tool_operations', 'runId', runId)) {
@@ -107,4 +107,9 @@ export function recoverManagedRuns(storage: Storage, runIds: string[]) {
     storage.put('provider_archive', { ...archive, checkpoint: { ...saved, progress } });
     storage.put('tasks', { ...task, status: 'recovering', recovery, resumeFromRunId: runId, error: undefined, updatedAt: now() });
   }
+}
+
+function progressMessages(progress: ManagedProgress) {
+  return progress.compaction
+    ? [...progress.compaction.archived, ...progress.messages.slice(progress.compaction.start)] : progress.messages;
 }

@@ -162,6 +162,14 @@ describe('managed recovery lifecycle', () => {
     await eventually(() => core.state.storage.get<Task>('tasks', taskId)?.status === 'failed');
     const readOperation = core.state.storage.all('tool_operations')[0];
     expect(readOperation).toMatchObject({ name: 'read_file', status: 'succeeded' });
+    const interruptedTask = core.state.storage.get<Task>('tasks', taskId)!;
+    const runId = interruptedTask.runIds[0];
+    const archived = core.state.storage.get<{ id: string; bindingId: string; entries: unknown[]; checkpoint: ManagedCheckpoint }>('provider_archive', runId)!;
+    const raw = archived.checkpoint.progress.messages;
+    const projected: ManagedProgress = { ...archived.checkpoint.progress, phase: 'ready', archiveStart: 0,
+      messages: [raw[0], { role: 'assistant', content: '文件已读取，后续编辑遵循原版本', contextSummary: true }],
+      compaction: { archived: raw, start: 2 } };
+    core.state.storage.put('provider_archive', { ...archived, checkpoint: { ...archived.checkpoint, progress: projected } });
     if (changed) await writeFile(path, 'original body\nexternal addition');
     await core.request('tasks.retry', { id: taskId });
     await eventually(() => core.state.storage.get<Task>('tasks', taskId)?.status === 'completed');

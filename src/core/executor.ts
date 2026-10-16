@@ -12,7 +12,7 @@ import { Vault } from '../security/vault.js';
 import { State, id, now } from './state.js';
 import { TaskService, terminal } from './tasks.js';
 import { ToolRuntime } from './tool-runtime.js';
-import { addUsage, prepareManagedContext, workingHistory } from './managed-context.js';
+import { addUsage, prepareManagedContext, workingHistory, projectedHistory, saveHistoryValidity } from './managed-context.js';
 import { publicError, required } from './errors.js';
 import { runPrompt } from './run-prompt.js';
 import { completeRunMessage, interruptRunMessage, runMessageSources } from './run-message.js';
@@ -138,7 +138,7 @@ export class Executor {
           nativeSessionId: result.nativeSessionId ?? s.get<SessionBinding>('session_bindings', binding.id)?.nativeSessionId,
           lastDeliveredSequence, memoryVersions: prepared.memoryVersions });
         if (!background) {
-          if (result.messages) this.saveHistory(binding, input, result.messages, published, inputCutoff, result.text);
+          if (result.messages) this.saveHistory(binding, input, result.messages, published, inputCutoff, result.text, result.contextMessages);
           else s.put('provider_archive', { id: run.id, bindingId: binding.id, entries: [], output: result.text });
         }
       });
@@ -207,13 +207,14 @@ export class Executor {
         inferenceUsage: result.usage, inferenceDurationMs: duration, modelDurationMs: result.modelDurationMs ?? s.get<Run>('runs', run.id)?.modelDurationMs });
       if (result.text.trim()) completeRunMessage(s, draft, result.text, []); else interruptRunMessage(s, draft.id);
       this.tasks.update(task, { status: question.status === 'answered' ? 'queued' : 'waiting_input', error: undefined });
-      if (result.messages && input) this.saveHistory(binding, input, result.messages, draft, cutoff, result.text);
+      if (result.messages && input) this.saveHistory(binding, input, result.messages, draft, cutoff, result.text, result.contextMessages);
       else s.put('provider_archive', { id: run.id, bindingId: binding.id, entries: [], output: result.text,
         toolOperations: s.byField('tool_operations', 'runId', run.id) });
       const current = s.get<SessionBinding>('session_bindings', binding.id) ?? binding;
       const renew = !result.messages;
       const delivered = renew ? 0 : this.inputs.complete(run.id, cutoff);
-      if (renew) s.db.prepare('DELETE FROM metadata WHERE key = ?').run(`history:${binding.id}`);
+      if (renew) s.db.prepare('DELETE FROM metadata WHERE key IN (?, ?)')
+        .run(`history:${binding.id}`, `history-validity:${binding.id}`);
       s.put('session_bindings', { ...current, lastDeliveredSequence: delivered,
         ...(renew ? { generation: current.generation + 1, nativeSessionId: undefined, memoryVersions: undefined } : {}) });
     });
@@ -232,7 +233,7 @@ export class Executor {
     const delta = archive.filter(message => message.sequence > delivered
       && !(message.authorBotId === bot.id && message.runId && s.get<Run>('runs', message.runId)?.bindingId === binding.id));
     const memoryUpdate = managed || task.kind ? undefined : sessionMemory(this.memory, bot, binding);
-    const { instructions, prompt } = runPrompt(this.state, this.memory, task, bot, room, toolContext, delta, memoryUpdate?.prompt);
+    const { instructions, prompt, contextInstructions } = runPrompt(this.state, this.memory, task, bot, room, toolContext, delta, memoryUpdate?.prompt);
     const root = dirname(fileURLToPath(import.meta.url));
     const compiled = root.includes(`${join('dist', 'src', 'core')}`);
     const nativeMcp = { command: process.execPath, args: compiled ? [join(root, 'mcp-worker.js')]
@@ -243,7 +244,7 @@ export class Executor {
         .flatMap(artifactId => { const image = modelImage(toolContext.findArtifact(artifactId)); return image ? [image] : []; }),
       resolveImage: imageResolver(this.state, toolContext),
       isWaitingForInput: () => !!this.tools.questions.forRun(run.id), inputSignal: this.tools.inputSignal(run.id),
-      prompt, messages: [], instructions, tools: this.tools.definitions(toolContext, bot), signal,
+      prompt, messages: [], instructions, contextInstructions, tools: this.tools.definitions(toolContext, bot), signal,
       nativeMcp,
       parallelToolNames: ['read_file', 'list_directory', 'find_files', 'search_text', 'read_skill'],
       ...(!task.kind ? { userInput: this.inputs.forRun(run, toolContext, draft, saved?.cutoff ?? draft.sequence - 1) } : {}),
@@ -275,10 +276,12 @@ export class Executor {
     return { input, summaryUsage, memoryVersions: memoryUpdate?.versions };
   }
 
-  private saveHistory(binding: SessionBinding, input: RunContext, messages: RunContext['messages'], draft: Message, cutoff: number, output: string) {
+  private saveHistory(binding: SessionBinding, input: RunContext, messages: RunContext['messages'], draft: Message, cutoff: number, output: string, projected?: RunContext['messages']) {
     const s = this.state.storage;
     const history = workingHistory(this.state, input, messages, draft, cutoff);
     s.put('provider_archive', { id: input.runId, bindingId: binding.id, entries: history.slice(input.messages.length), output });
-    s.setMetadata(`history:${binding.id}`, history);
+    const active = projected ? projectedHistory(history, projected) : history;
+    s.setMetadata(`history:${binding.id}`, active);
+    saveHistoryValidity(this.state, input);
   }
 }
