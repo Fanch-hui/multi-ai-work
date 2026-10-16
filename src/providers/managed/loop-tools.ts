@@ -36,7 +36,9 @@ export async function completeToolBatch(context: RunContext, state: ManagedRunSt
     start = end;
   }
   state.nextTurn();
-  await state.save('ready');
+  const projection = await context.prepareToolResults?.(state.messages, assistantIndex + 1);
+  if (projection) await state.applyProjection(projection, state.currentStart);
+  else await state.save('ready');
 }
 
 async function executeGroup<T extends { id: string; name: string; args: Record<string, unknown> }>(

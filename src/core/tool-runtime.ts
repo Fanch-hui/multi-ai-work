@@ -243,7 +243,8 @@ export class ToolRuntime {
       const command = name === 'run_command' && result && typeof result === 'object' && 'status' in result
         ? { commandStatus: result.status, exitCode: 'code' in result ? result.code : undefined } : {};
       s.event({ id: id(), runId: context.runId, type: 'tool', data: { name, callId, summary, status: 'completed', source: 'app', ...command }, createdAt: now() });
-      const modelResult = await this.compactResult(result, context, name);
+      const provider = s.get<Connection>('connections', currentBot.connectionId)?.provider;
+      const modelResult = provider === 'chatgpt' || provider === 'custom' ? result : await this.compactResult(result, context, name);
       s.put('tool_operations', { ...operation, status: 'succeeded', result, modelResult });
       this.state.changed(); return modelResult;
     } catch (error) {

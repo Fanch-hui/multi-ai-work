@@ -49,6 +49,7 @@ export interface RunContext {
   persistBinding(nativeSessionId: string): void;
   recoverContext?(messages: ModelMessage[]): Promise<ModelMessage[] | undefined>;
   compactContext?(messages: ModelMessage[], options: { force: boolean; currentStart: number }): Promise<{ messages: ModelMessage[]; currentStart: number } | undefined>;
+  prepareToolResults?(messages: ModelMessage[], batchStart: number): Promise<ModelMessage[] | undefined>;
   progress?: ManagedProgress;
   saveProgress?(progress: ManagedProgress): Promise<void>;
   deferRecovery?: boolean;

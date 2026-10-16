@@ -92,6 +92,13 @@ export class ContextReferences {
     }
   }
 
+  async readableArtifact(id: string): Promise<ContextReference | undefined> {
+    this.scope.signal.throwIfAborted();
+    if (!this.allowed('read_artifact')) return;
+    const artifact = this.artifacts().find(artifact => artifact.id === id);
+    return artifact && await readable(artifact) ? artifactReference(artifact) : undefined;
+  }
+
   private allowed(name: string): boolean {
     const bot = this.state.storage.get<Bot>('bots', this.scope.bot.id);
     return !!bot && !bot.archived && this.scope.toolNames.includes(name) && bot.toolNames.includes(name);

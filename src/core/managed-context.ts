@@ -10,6 +10,7 @@ import { runMessageSources } from './run-message.js';
 import { compactRunMessages } from '../runtime/run-compaction.js';
 import { estimateTokens, estimateModelMessagesTokens } from '../runtime/model-history.js';
 import { ContextReferences } from './context-references.js';
+import { prepareToolResultBudget } from './tool-result-budget.js';
 
 export { addUsage } from '../domain/usage.js';
 
@@ -33,6 +34,7 @@ export async function prepareManagedContext(input: RunContext, archive: Message[
   const task = run && s.get<Task>('tasks', run.taskId), room = s.get<Conversation>('conversations', input.binding.conversationId);
   const references = task && room ? new ContextReferences(state, { runId: input.runId, task, room, bot: input.bot,
     toolNames: input.tools.map(tool => tool.name), signal: input.signal, inlineToolLimit: budget ? Math.min(32000, Math.floor(budget * 0.5)) : 32000 }) : undefined;
+  input.prepareToolResults = prepareToolResultBudget(input, references, budget);
   const preserveReferences = references?.preserveReferences.bind(references);
   const { summarize, usage } = summaryRunner(input, adapter);
   const signature = contextCompatibilityHash({ ...input, protocol: input.connection.protocol });
