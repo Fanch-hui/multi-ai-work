@@ -71,6 +71,7 @@ describe('会话管理', () => {
     const binding = core.state.storage.all<SessionBinding>('session_bindings')[0];
     const run = core.state.snapshot().runs[0];
     core.state.storage.setMetadata(`history:${binding.id}`, [{ role: 'user', content: '待删除历史' }]);
+    core.state.storage.setMetadata(`history-validity:${binding.id}`, { signature: 'old', sourceIds: ['source'] });
     core.state.storage.put('context_checkpoints', { id: 'checkpoint', bindingId: binding.id });
     core.state.storage.put('compactions', { id: 'compaction', bindingId: binding.id });
     core.state.storage.put('provider_archive', { id: run.id, bindingId: binding.id });
@@ -84,6 +85,7 @@ describe('会话管理', () => {
     expect(core.state.storage.all('tool_operations')).toEqual([]);
     expect(core.state.storage.metadata('send:deleted-send')).toBeUndefined();
     expect(core.state.storage.metadata(`history:${binding.id}`)).toBeUndefined();
+    expect(core.state.storage.metadata(`history-validity:${binding.id}`)).toBeUndefined();
     expect(snapshot.artifacts).toEqual([artifact]);
     expect(await readFile(artifact.path, 'utf8')).toBe('成果保留');
     expect(core.state.storage.get('conversations', other.id)).toEqual(other);

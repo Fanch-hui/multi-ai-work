@@ -87,6 +87,8 @@ describe('技能与预设备份', () => {
 it('备份恢复包含未合并的流式尾文且刷新配置快照', async () => {
   const { state, backup, skill } = await setup();
   const storage = state.storage;
+  storage.setMetadata('history:binding', [{ message: { role: 'user', content: '旧工作投影' } }]);
+  storage.setMetadata('history-validity:binding', { signature: 'old', sourceIds: ['source'] });
   storage.appendMessage({ id: 'streamed', conversationId: 'room', authorType: 'bot', runId: 'run',
     content: '', artifactIds: [], status: 'draft', createdAt: new Date().toISOString() });
   storage.messageStream.append({ id: 'first', runId: 'run', type: 'text', data: { delta: '首段' }, createdAt: new Date().toISOString() }, 'streamed');
@@ -97,6 +99,8 @@ it('备份恢复包含未合并的流式尾文且刷新配置快照', async () =
   expect(state.snapshot().skills.find(item => item.id === skill.id)?.name).toBe('备份后改名');
   await backup.restore(created.path);
   expect(storage.getMessage('streamed')).toMatchObject({ content: '首段尾文', status: 'interrupted' });
+  expect(storage.metadata('history:binding')).toBeUndefined();
+  expect(storage.metadata('history-validity:binding')).toBeUndefined();
   expect(state.snapshot().skills.find(item => item.id === skill.id)?.name).toBe(skill.name);
   storage.messageStream.recover();
   expect(storage.getMessage('streamed')?.content).toBe('首段尾文');

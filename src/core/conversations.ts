@@ -109,8 +109,8 @@ export class ConversationService {
     const db = this.state.storage.db;
     db.prepare('DELETE FROM metadata WHERE key = ?').run(`conversation-read:${conversationId}`);
     db.prepare('DELETE FROM metadata WHERE key = ?').run(`message-sequence:${conversationId}`);
-    const rows = db.prepare('SELECT key, value FROM metadata WHERE key LIKE ? OR key LIKE ? OR key LIKE ? OR key LIKE ? OR key LIKE ? OR key LIKE ? OR key LIKE ?')
-      .all('send:%', 'task-group:%', 'history:%', 'results:%', 'coordination:%', 'requirements:%', 'returned-artifacts:%') as { key: string; value: string }[];
+    const rows = db.prepare('SELECT key, value FROM metadata WHERE key LIKE ? OR key LIKE ? OR key LIKE ? OR key LIKE ? OR key LIKE ? OR key LIKE ? OR key LIKE ? OR key LIKE ?')
+      .all('send:%', 'task-group:%', 'history:%', 'history-validity:%', 'results:%', 'coordination:%', 'requirements:%', 'returned-artifacts:%') as { key: string; value: string }[];
     const remove = db.prepare('DELETE FROM metadata WHERE key = ?');
     for (const row of rows) {
       const value = JSON.parse(row.value) as { conversationId?: string; taskId?: string; taskIds?: string[] };

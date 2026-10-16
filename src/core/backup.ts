@@ -78,7 +78,7 @@ export class BackupService {
           }
         }
         db.exec('DELETE FROM memory_search; INSERT INTO memory_search(id,content) SELECT id,json_extract(payload,\'$.content\') FROM memory_entries;');
-        db.prepare("DELETE FROM metadata WHERE key LIKE 'history:%' OR key LIKE 'results:%'").run();
+        db.prepare("DELETE FROM metadata WHERE key LIKE 'history:%' OR key LIKE 'history-validity:%' OR key LIKE 'results:%'").run();
         if (hostId) this.state.storage.setMetadata('oauth.hostId', hostId);
       })();
     } catch (error) { await rm(restoreDirectory, { recursive: true, force: true }); throw error; }
