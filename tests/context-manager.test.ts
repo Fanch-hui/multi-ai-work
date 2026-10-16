@@ -46,7 +46,9 @@ describe('ContextManager', () => {
     const prepared = await manager.prepare({ ...baseInput, messages, history, summarize: async prompt => { summaryPrompt = prompt; return '调查已完成，需交付文档。'; } });
     expect(prepared.messages.at(-1)?.content).toBe('最新请求：交付文档');
     expect(prepared.messages).toHaveLength(2);
-    expect(summaryPrompt).toContain('function_call_output');
+    expect(summaryPrompt).toContain('原始结果');
+    expect(summaryPrompt).toContain('read_file');
+    expect(summaryPrompt).not.toContain('providerItems');
     expect(checkpoint()?.sourceMessageIds).toEqual(['m1', 'm2']);
     expect(checkpoint()?.throughSequence).toBe(2);
     expect(messages).toHaveLength(3);
@@ -100,7 +102,7 @@ describe('ContextManager', () => {
     expect(records[1].sourceHash).toBe(records[0].sourceHash);
   });
 
-  it('分批失败保留旧检查点，记录失败与源版本；超大轮次不调用摘要', async () => {
+  it('分批失败保留旧检查点，超大轮次开始分段摘要并记录真实失败', async () => {
     const { manager, checkpoint, records } = setup();
     const first = [message(1, '旧内容'.repeat(100)), message(2, '目标')];
     await manager.prepare({ ...baseInput, messages: first, summarize: async () => '旧摘要' });
@@ -111,8 +113,8 @@ describe('ContextManager', () => {
       summarize: async () => { calls++; throw new Error('network'); } });
     expect(checkpoint()).toBe(old);
     expect(prepared.messages[0].content).toContain('旧摘要');
-    expect(calls).toBe(0);
-    expect(records.at(-1)).toMatchObject({ status: 'failed', reason: 'needs_split', generation: 1 });
+    expect(calls).toBe(1);
+    expect(records.at(-1)).toMatchObject({ status: 'failed', reason: 'summary_failed', generation: 1 });
     const failing = [...first, message(3, '后续资料'.repeat(100)), message(4, '补充资料'.repeat(100)), message(5, '其他资料'.repeat(100)), message(6, '交付')];
     let batches = 0;
     await manager.prepare({ ...baseInput, contextWindow: 1200, messages: failing,
