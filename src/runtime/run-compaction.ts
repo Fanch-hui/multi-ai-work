@@ -86,7 +86,7 @@ function removableRange(messages: ModelMessage[], currentStart: number): [number
   for (let index = 0; index < units.length; index++) {
     const unit = units[index];
     const eligible = unit[0].sequence >= currentStart && index < (latest < 0 ? units.length - 1 : latest) && toolsPaired(unit)
-      && !unit.some(entry => entry.message.role === 'user');
+      && !unit.some(entry => entry.message.role === 'user' && entry.message.appContext?.source !== 'app.repeat-tool-reminder');
     if (eligible) {
       start = start < 0 ? unit[0].sequence : start;
       end = unit.at(-1)!.sequence + 1;

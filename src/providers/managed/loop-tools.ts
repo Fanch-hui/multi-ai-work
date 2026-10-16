@@ -2,6 +2,7 @@ import type { RunContext } from '../../domain/provider.js';
 import { toolResultMessage } from '../images.js';
 import { parseToolArguments } from './messages.js';
 import type { ManagedRunState } from './progress.js';
+import { repeatToolReminders } from '../../runtime/repeat-tool-reminder.js';
 
 export async function completeToolBatch(context: RunContext, state: ManagedRunState, executed: Set<string | undefined>) {
   let assistantIndex = state.messages.length - 1;
@@ -36,8 +37,10 @@ export async function completeToolBatch(context: RunContext, state: ManagedRunSt
     start = end;
   }
   state.nextTurn();
+  const reminders = repeatToolReminders(state.archiveMessages().slice(state.archiveStart), calls.map(call => call.id));
   const projection = await context.prepareToolResults?.(state.messages, assistantIndex + 1);
-  if (projection) await state.applyProjection(projection, state.currentStart);
+  state.messages.push(...reminders);
+  if (projection) await state.applyProjection([...projection, ...reminders], state.currentStart);
   else await state.save('ready');
 }
 

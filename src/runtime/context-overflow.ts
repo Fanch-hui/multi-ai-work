@@ -16,7 +16,8 @@ export function isContextOverflow(error: unknown): boolean {
 export function isSmallerProjection(original: ModelMessage[], recovered: ModelMessage[], currentStart?: number, protocol?: Protocol): boolean {
   if (estimateModelMessagesTokens(recovered, protocol) >= estimateModelMessagesTokens(original, protocol)) return false;
   if (currentStart !== undefined) {
-    const expectedUsers = original.slice(currentStart).filter(message => message.role === 'user');
+    const expectedUsers = original.slice(currentStart).filter(message => message.role === 'user'
+      && message.appContext?.source !== 'app.repeat-tool-reminder');
     const actualUsers = recovered.filter(message => message.role === 'user');
     let cursor = 0;
     for (const user of expectedUsers) {
@@ -38,7 +39,8 @@ export function isSmallerProjection(original: ModelMessage[], recovered: ModelMe
     return toolsPaired(history) && preservesTail;
   }
   let current = original.length - 1;
-  while (current >= 0 && original[current].role !== 'user') current--;
+  while (current >= 0 && (original[current].role !== 'user'
+    || original[current].appContext?.source === 'app.repeat-tool-reminder')) current--;
   if (current < 0) return false;
   const tail = original.slice(current);
   const history = recovered.map((message, sequence) => ({ message, sequence, messageId: String(sequence) }));

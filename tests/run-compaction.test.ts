@@ -35,6 +35,19 @@ describe('compaction inside a long tool conversation', () => {
     expect(original.some(message => message.contextSummary)).toBe(false);
   });
 
+  it('can summarize old tool reminders while preserving the actual user request and runtime context', async () => {
+    const runtime: ModelMessage = { role: 'user', content: '当前资料', appContext: { source: 'app.runtime', version: '1' } };
+    const reminder: ModelMessage = { role: 'user', content: '工具重复提醒', appContext: { source: 'app.repeat-tool-reminder', version: 'v1:one' } };
+    const original: ModelMessage[] = [{ role: 'user', content: '继续完成报告' }, runtime,
+      ...exchange('one'), reminder, ...exchange('two'), ...exchange('three')];
+    const projected = await compactRunMessages(original, options);
+    expect(projected).toBeDefined();
+    expect(projected!.messages).toContainEqual(runtime);
+    expect(projected!.messages).not.toContainEqual(reminder);
+    expect(projected!.messages[0]).toEqual(original[0]);
+    expect(isSmallerProjection(original, projected!.messages, 0)).toBe(true);
+  });
+
   it('summarizes a single huge latest result only with an authorized full-output reference', async () => {
     const original: ModelMessage[] = [{ role: 'user', content: '分析完整结果' }, ...exchange('huge', '完整工具正文'.repeat(4000))];
     expect(await compactRunMessages(original, options)).toBeUndefined();
