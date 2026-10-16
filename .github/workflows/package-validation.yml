@@ -2,6 +2,11 @@ name: Validate desktop packages
 
 on:
   workflow_dispatch:
+    inputs:
+      upload_run_id:
+        description: Upload an existing successful run's release materials to the matching Release draft
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -16,6 +21,7 @@ env:
 
 jobs:
   packages:
+    if: ${{ inputs.upload_run_id == '' }}
     name: ${{ matrix.target }} package
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
@@ -143,6 +149,63 @@ jobs:
             release/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14
+
+  upload-release:
+    name: Upload validated materials to Release draft
+    if: ${{ inputs.upload_run_id != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.CI_NODE_VERSION }}
+      - name: Validate source run and unchanged production files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ inputs.upload_run_id }}
+        run: |
+          [[ "$SOURCE_RUN_ID" =~ ^[0-9]+$ ]]
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID" > "$RUNNER_TEMP/release-source.json"
+          node --input-type=module <<'NODE'
+          import { readFileSync, appendFileSync } from 'node:fs';
+          import assert from 'node:assert/strict';
+          const run = JSON.parse(readFileSync(`${process.env.RUNNER_TEMP}/release-source.json`, 'utf8'));
+          assert.equal(run.conclusion, 'success');
+          assert.equal(run.head_repository.full_name, process.env.GITHUB_REPOSITORY);
+          assert.equal(run.path, '.github/workflows/package-validation.yml');
+          assert.equal(run.head_branch, 'main');
+          assert.match(run.head_sha, /^[0-9a-f]{40}$/);
+          appendFileSync(process.env.GITHUB_ENV, `SOURCE_RUN_SHA=${run.head_sha}\n`);
+          NODE
+      - name: Check production source matches validated run
+        run: git diff --exit-code "$SOURCE_RUN_SHA" HEAD -- . ':!tests/**' ':!.github/workflows/**' ':!README.md'
+      - name: Download validated release materials
+        uses: actions/download-artifact@v4
+        with:
+          name: desktop-release-materials
+          path: release
+          run-id: ${{ inputs.upload_run_id }}
+          github-token: ${{ github.token }}
+      - name: Verify package bytes and generate update metadata
+        run: node scripts/ci/release-metadata.mjs
+      - name: Upload to matching Release draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(node -p "require('./package.json').version")
+          tag="v$version"
+          test "$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true
+          gh release upload "$tag" --repo "$GITHUB_REPOSITORY" --clobber \
+            "release/multi-AI-work-$version-arm64.dmg" \
+            "release/multi-AI-work-$version-arm64.zip" \
+            "release/multi-AI-work-$version-x64.exe" \
+            release/latest.json release/SHA256SUMS.txt
 
   release-materials:
     name: Assemble update release materials

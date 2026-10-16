@@ -31,6 +31,8 @@ pnpm desktop
 
 更新支持安装在 `/Applications` 的 macOS arm64 应用与 Windows x64 NSIS 安装版本。发布流程在两平台安装包门禁通过后生成 `desktop-release-materials`，包含更新 ZIP、EXE、`latest.json` 和 `SHA256SUMS.txt`；将这些文件上传至同版本 `v<version>` 的 GitHub Release 后，客户端即可检查到更新。本地可运行 `node scripts/ci/release-metadata.mjs <产物目录>` 生成清单，目录须同时包含当前版本的 macOS ZIP 与 Windows EXE。
 
+可再次运行“Validate desktop packages”，在 `upload_run_id` 填写已成功运行的编号，将其安装包与清单直接上传到同版本 Release 草稿。流程核对运行来源及运行代码未变化，重新计算文件大小与 SHA256 后上传；确认草稿文件齐全后公开发布。
+
 ## 配置连接
 
 在“连接与设置”添加连接，配置、授权和检测在同一窗口完成。连接可用后，为智能体选择模型和推理强度。账号并发限制按连接配置，已识别的同账号连接共享调度名额。
