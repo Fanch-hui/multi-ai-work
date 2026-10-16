@@ -66,9 +66,10 @@ export class MemoryService {
     );
   }
 
-  recall(identity: MemoryIdentity, query: string, limit = 8): MemoryEntry[] {
+  recall(identity: MemoryIdentity, query: string, limit = 8, topic?: string): MemoryEntry[] {
     if (limit <= 0) return [];
     const trimmed = query.trim();
+    const normalizedTopic = topic?.trim().toLocaleLowerCase();
     const terms = extractQueryTerms(trimmed);
     const hasQuery = terms.allTerms.length > 0;
     const candidates = this.store.search
@@ -77,13 +78,14 @@ export class MemoryService {
           conversationId: identity.conversationId,
           ftsQuery: terms.ftsQuery,
           shortTerms: terms.shortTerms,
+          topic: topic?.trim(),
           requireMatch: hasQuery,
-          limit: Math.max(limit * 4, 32),
         })
       : this.store.list().map(entry => ({ entry, ftsRank: undefined }));
 
     return candidates
       .filter(item => isAuthorizedMemory(item.entry, identity))
+      .filter(item => !normalizedTopic || memoryTopic(item.entry).toLocaleLowerCase() === normalizedTopic)
       .map(item => scoreMemoryEntry(item.entry, terms, {
         ftsRank: item.ftsRank,
         roleTerms: identity.roleTerms,
@@ -92,7 +94,7 @@ export class MemoryService {
       .filter(item => !hasQuery || item.relevanceScore > 0)
       .sort((a, b) => b.totalScore - a.totalScore || b.entry.updatedAt.localeCompare(a.entry.updatedAt))
       .slice(0, Math.max(0, limit))
-      .map(item => this. sanitizeSourceIds(item.entry, identity.conversationId));
+      .map(item => this.sanitizeSourceIds(item.entry, identity.conversationId));
   }
 
   query(
@@ -115,12 +117,11 @@ export class MemoryService {
 
     if (input.ids?.length) {
       const requested = new Set(input.ids);
-      matched = [...authorized.values()].filter(entry => requested.has(entry.id));
+      matched = [...authorized.values()]
+        .filter(entry => requested.has(entry.id))
+        .map(entry => this.sanitizeSourceIds(entry, identity.conversationId));
     } else if (input.query?.trim()) {
-      const recalled = this.recall(identity, input.query, Math.max(offset + limit + 20, 50));
-      matched = input.topic?.trim()
-        ? recalled.filter(entry => memoryTopic(entry).toLocaleLowerCase() === input.topic!.trim().toLocaleLowerCase())
-        : recalled;
+      matched = this.recall(identity, input.query, Number.MAX_SAFE_INTEGER, input.topic);
     } else {
       const all = [...authorized.values()]
         .filter(entry => !input.topic?.trim() || memoryTopic(entry).toLocaleLowerCase() === input.topic.trim().toLocaleLowerCase())

@@ -31,6 +31,7 @@ export function MemoryEditor({ memory, target, data, mutate, close }: {
         .filter(Boolean);
       await mutate("memories.save", {
         id: memory?.id,
+        ...(memory ? { expectedRevision: memory.revision } : {}),
         content,
         topic: topic.trim(),
         summary: summary.trim(),

@@ -1,4 +1,4 @@
-import type { Bot, MemoryEntry, Snapshot } from '../../../src/domain/types.js';
+import type { Bot, MemoryEntry, Snapshot, Task } from '../../../src/domain/types.js';
 import {
   computeMemoryBudgetTokens, estimateMemoryTokens, memoryTopic,
 } from '../../../src/domain/memory.js';
@@ -117,4 +117,36 @@ export function memoryNotebooks(data: Data, query = ''): MemoryNotebookData[] {
     || notebook.bot?.role.toLocaleLowerCase().includes(needle)
     || notebook.entries.some(entry => matchesMemoryQuery(entry, needle)),
   );
+}
+
+export function notebookReviewTasks(
+  notebook: MemoryNotebookData,
+  data: Pick<Snapshot, 'tasks' | 'memories'>,
+): Task[] {
+  const isBotNotebook = notebook.target.scope === 'bot';
+  const notebookMemoryIds = new Set(
+    data.memories
+      .filter(entry => isBotNotebook
+        ? entry.scope === 'bot' && entry.ownerId === notebook.target.ownerId
+        : entry.scope !== 'bot')
+      .map(entry => entry.id),
+  );
+  const allMemoryIds = data.memories.map(entry => entry.id);
+
+  return data.tasks.filter(task => {
+    if (task.kind !== 'memory-review') return false;
+    if (task.requestId.startsWith('memory:bot:')) {
+      const ownerId = task.requestId.split(':')[2];
+      return isBotNotebook && notebook.target.ownerId === ownerId;
+    }
+    if (task.requestId.startsWith('memory:public:')) {
+      return !isBotNotebook;
+    }
+    const text = `${task.requestId} ${task.goal}`;
+    const matchedNotebookEntry = [...notebookMemoryIds].some(id => text.includes(id));
+    if (matchedNotebookEntry) return true;
+    const matchedOtherEntry = allMemoryIds.some(id => !notebookMemoryIds.has(id) && text.includes(id));
+    if (matchedOtherEntry) return false;
+    return isBotNotebook && task.botId === notebook.target.ownerId;
+  });
 }

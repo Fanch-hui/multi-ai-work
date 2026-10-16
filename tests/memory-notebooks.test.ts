@@ -118,4 +118,61 @@ describe('member memory notebooks', () => {
     expect(html).toContain('自动注入 1 次 · 主动读取 0 次');
     expect(html).toContain('整理记忆');
   });
+
+  it('isolates consolidation status between chief personal notebook and public notebook', async () => {
+    const { core, chief, room, workspaceId, save } = await fixture();
+    save('管家个人工作偏好');
+    const group = core.entities.createConversation({
+      name: '公共项目群',
+      kind: 'group',
+      chiefId: chief.id,
+      memberIds: [chief.id],
+      workspaceId,
+    });
+    core.memories.save({ content: '团队公共交付规范', scope: 'team', ownerId: group.id, sourceIds: ['source'] });
+
+    core.state.storage.put('tasks', {
+      id: 'task-public-review',
+      conversationId: group.id,
+      botId: chief.id,
+      requestId: 'memory:public:batch-1',
+      depth: 0,
+      kind: 'memory-review',
+      goal: '整理长期记忆',
+      expectedOutput: '完成',
+      status: 'running',
+      dependencyIds: [],
+      artifactIds: [],
+      runIds: [],
+      createdAt: '2026-10-16T00:00:00.000Z',
+      updatedAt: '2026-10-16T00:00:00.000Z',
+    });
+
+    const data = core.state.snapshot();
+    const notebooks = memoryNotebooks(data);
+    const chiefNotebook = notebooks.find(item => item.id === chief.id)!;
+    const publicNotebook = notebooks.find(item => item.id === 'public')!;
+
+    const chiefHtml = renderToStaticMarkup(createElement(MemoryNotebook, {
+      notebook: chiefNotebook,
+      data,
+      mutate: async () => undefined as never,
+      edit: () => undefined,
+      add: () => undefined,
+    }));
+    const publicHtml = renderToStaticMarkup(createElement(MemoryNotebook, {
+      notebook: publicNotebook,
+      data,
+      mutate: async () => undefined as never,
+      edit: () => undefined,
+      add: () => undefined,
+    }));
+
+    expect(publicHtml).toContain('整理中…');
+    expect(publicHtml).toContain('正在后台整理记忆');
+    expect(chiefHtml).toContain('整理记忆');
+    expect(chiefHtml).not.toContain('整理中…');
+    expect(chiefHtml).not.toContain('正在后台整理记忆');
+    expect(room.id).toBeTruthy();
+  });
 });

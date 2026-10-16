@@ -104,7 +104,8 @@ export class MemoryManagement {
     const old = parsed.id ? required(s.get<MemoryEntry>('memory_entries', parsed.id), '记忆不存在') : undefined;
     if (old && parsed.expectedRevision !== undefined && old.revision !== parsed.expectedRevision)
       throw new Error(`记忆版本已变化（预期 ${parsed.expectedRevision}，实际 ${old.revision}），请重新读取`);
-    if (old) assertBatchConcurrency(this.state, actor.task, old);
+    if (old?.status === 'superseded')
+      throw new Error('该记忆已被合并替代，请刷新后编辑最新记忆');
     if (parsed.scope === 'bot') required(s.get<Bot>('bots', parsed.ownerId), '所属成员不存在');
     if (parsed.scope === 'team') required(s.get<Conversation>('conversations', parsed.ownerId), '所属会话不存在');
     for (const roomId of parsed.allowedConversationIds) required(s.get('conversations', roomId), '授权会话不存在');
@@ -112,6 +113,11 @@ export class MemoryManagement {
     const content = normalizeMemoryContent(parsed.content);
     const contentHash = createHash('sha256').update(content).digest('hex');
     const allowedConversationIds = parsed.scope === 'team' ? [parsed.ownerId] : [...new Set(parsed.allowedConversationIds)];
+    assertBatchConcurrency(this.state, actor.task, old, {
+      scope: parsed.scope,
+      ownerId: parsed.ownerId,
+      allowedConversationIds,
+    });
 
     if (!old) {
       const duplicate = this.findPartitionDuplicate(parsed.scope, parsed.ownerId, allowedConversationIds, contentHash);
@@ -147,6 +153,9 @@ export class MemoryManagement {
     const nextSummary = nextSummaryRaw ? memorySummary({ content, summary: nextSummaryRaw, revision }) : undefined;
     const nextTags = parsed.tags !== undefined ? [...new Set(parsed.tags.map(tag => tag.trim()).filter(Boolean))] : old?.tags;
     const nextPinned = parsed.pinned !== undefined ? parsed.pinned : old?.pinned;
+    const nextUserMaintained = Boolean(
+      old?.userMaintained || old?.createdBy === 'user' || old?.updatedBy === 'user' || actor.kind === 'user',
+    );
     const nextCreatedBy = old?.createdBy ?? actor.kind;
     const nextUpdatedBy = actor.kind ?? old?.updatedBy;
     const nextActorBotId = actor.botId ?? old?.actorBotId;
@@ -159,6 +168,7 @@ export class MemoryManagement {
       ...(nextSummary ? { summary: nextSummary, summaryRevision: revision } : {}),
       ...(nextTags?.length ? { tags: nextTags } : {}),
       ...(nextPinned !== undefined ? { pinned: nextPinned } : {}),
+      ...(nextUserMaintained ? { userMaintained: true } : {}),
       ...(nextCreatedBy ? { createdBy: nextCreatedBy } : {}),
       ...(nextUpdatedBy ? { updatedBy: nextUpdatedBy } : {}),
       ...(nextActorBotId ? { actorBotId: nextActorBotId } : {}),
@@ -224,7 +234,12 @@ export class MemoryManagement {
     const ownerId = input.ownerId ?? (entry?.scope === scope ? entry.ownerId : scope === 'team' ? conversationId : botId);
     const parsed = fields.parse({ allowedConversationIds: [conversationId], ...entry, ...input, scope, ownerId, pinned: entry?.pinned });
     if (!owns(parsed)) throw new Error('不能修改其他成员的记忆');
-    const authorizedRooms = parsed.scope === 'team' ? [parsed.ownerId] : parsed.allowedConversationIds;
+    const authorizedRooms = parsed.scope === 'team' ? [parsed.ownerId] : [...new Set(parsed.allowedConversationIds)];
+    assertBatchConcurrency(this.state, task, entry, {
+      scope: parsed.scope,
+      ownerId: parsed.ownerId,
+      allowedConversationIds: authorizedRooms,
+    });
     if (authorizedRooms.some(roomId => !s.get<Conversation>('conversations', roomId)?.memberIds.includes(botId)))
       throw new Error('记忆只能授权给自己参与的会话');
     if (!entry || parsed.sourceIds.length) assertUserMemorySources(this.state, parsed.sourceIds, authorizedRooms);

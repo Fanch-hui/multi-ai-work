@@ -86,6 +86,27 @@ describe('有预算的分层召回与通道同步', () => {
     expect(page.total).toBe(6);
     expect(page.entries).toHaveLength(3);
     expect(page.nextOffset).toBe(3);
+
+    // 70+ matching records where the unique target topic is at the oldest position
+    for (let index = 13; index <= 80; index++) {
+      const filler = core.memories.save({
+        scope: 'bot',
+        ownerId: member.id,
+        allowedConversationIds: [room.id],
+        topic: '日常填充',
+        content: `商業合同审查补充记录第 ${index} 条：争议解决与一般条款核对。`,
+      });
+      core.state.storage.put('memory_entries', {
+        ...filler,
+        updatedAt: `2026-10-${String((index % 28) + 1).padStart(2, '0')}T00:00:00.000Z`,
+      });
+    }
+    const deepTopicHit = core.memory.query(
+      { botId: member.id, conversationId: room.id },
+      { query: '争议解决', topic: '合同规范', offset: 0, limit: 8 },
+    ) as { entries: MemoryEntry[]; total: number };
+    expect(deepTopicHit.total).toBe(1);
+    expect(deepTopicHit.entries.map(entry => entry.id)).toEqual([oldRule.id]);
   });
 
   it('整体注入预算受控，超长记忆不截断冒充全文而是提供摘要与展开入口', async () => {
@@ -134,7 +155,7 @@ describe('有预算的分层召回与通道同步', () => {
     expect(estimateTokens(formatted)).toBeLessThanOrEqual(320);
   });
 
-  it('区分本轮未选中、正文修订与撤销：managed 不重建历史，native 不误报失效引用', async () => {
+  it('区分本轮未选中、正文修订与撤销：managed 不重建历史，native 不误报失效引用且修订补发严格受预算限制', async () => {
     const { core, bot: createBot } = await setup(async () => ({ text: '完成' }));
     const member = createBot('助手', ['recall_memory']);
     const room = core.entities.createConversation({
@@ -207,6 +228,24 @@ describe('有预算的分层召回与通道同步', () => {
     expect(turn3.prompt).toContain(`[${budgetRule.id}@2] [财务] 预算核算统一使用人民币并保留两位小数。`);
     expect(turn3.prompt).not.toContain('失效的记忆引用');
     expect(turn3.versions).toEqual({ [budgetRule.id]: 2, [codeRule.id]: 1 });
+
+    // Editing previously delivered budgetRule into an oversized text (>6,000 tokens) must NOT bypass the 2,000-token budget
+    const oversizedRevision = `超长财务核算与审计细则：${'每一笔预算支出均须附带完整科目编码、审批流水与复核签名记录。'.repeat(240)}`;
+    core.memories.save({
+      ...budgetRule,
+      summary: '超长财务核算细则摘要',
+      content: oversizedRevision,
+    });
+    const turnOversized = sessionMemory(
+      core.memory,
+      member,
+      { ...binding, memoryVersions: turn3.versions },
+      { query: '代码单元测试', budgetTokens: 2000 },
+    );
+    expect(estimateTokens(turnOversized.prompt)).toBeLessThanOrEqual(2000);
+    expect(turnOversized.prompt).toContain('未注入全文');
+    expect(turnOversized.prompt).not.toContain(oversizedRevision.slice(0, 300));
+    expect(turnOversized.versions[budgetRule.id]).toBeUndefined();
 
     // Revoking budgetRule sends invalidation notice
     core.memories.revoke(budgetRule.id);

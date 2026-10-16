@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { AlertTriangle, ChevronDown, ChevronRight, Pencil, Pin, Search, Sparkles, Trash2 } from 'lucide-react';
 import type { MemoryEntry, Snapshot } from '../../../src/domain/types.js';
 import type { Mutate } from './store.js';
-import { groupMemoriesByTopic, matchesMemoryQuery, type MemoryNotebookData } from './memory-notebooks.js';
+import { groupMemoriesByTopic, matchesMemoryQuery, notebookReviewTasks, type MemoryNotebookData } from './memory-notebooks.js';
 import { Button, Confirm, Empty, inputClass, timeLabel } from './components.js';
 
 const STALE_MS = 30 * 24 * 60 * 60 * 1000;
@@ -21,12 +21,7 @@ export function MemoryNotebook({ notebook, data, mutate, edit, add }: {
   const topicGroups = groupMemoriesByTopic(entries);
   const overflowSet = new Set(notebook.overflowIds);
 
-  const reviewTasks = data.tasks.filter(task =>
-    task.kind === 'memory-review'
-    && (notebook.target.scope === 'bot'
-      ? task.botId === notebook.target.ownerId
-      : task.botId === data.settings.mainBotId),
-  );
+  const reviewTasks = notebookReviewTasks(notebook, data);
   const runningReview = reviewTasks.find(task => !['completed', 'failed', 'cancelled'].includes(task.status));
   const latestCompletedReview = [...reviewTasks]
     .filter(task => task.status === 'completed')
@@ -126,6 +121,7 @@ export function MemoryNotebook({ notebook, data, mutate, edit, add }: {
                   <span>后台整理建议修订：{entry.reviewSuggestion.content}</span>
                   <Button variant="ghost" className="h-7 px-2 text-xs text-blue-700" onClick={() => void mutate('memories.save', {
                     ...entry,
+                    expectedRevision: entry.revision,
                     content: entry.reviewSuggestion!.content,
                     topic: entry.reviewSuggestion!.topic ?? entry.topic,
                     summary: entry.reviewSuggestion!.summary ?? entry.summary,

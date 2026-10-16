@@ -28,6 +28,7 @@ export interface MemoryEntry {
   tags?: string[];
   pinned?: boolean;
   contentHash?: string;
+  userMaintained?: boolean;
   createdBy?: MemoryActor;
   updatedBy?: MemoryActor;
   actorBotId?: string;
@@ -54,6 +55,7 @@ export interface MemoryRevisionRecord {
   summary?: string;
   tags?: string[];
   pinned?: boolean;
+  userMaintained?: boolean;
   scope: MemoryEntry['scope'];
   ownerId: string;
   allowedConversationIds: string[];

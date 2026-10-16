@@ -98,9 +98,6 @@ export function searchAuthorizedMemories(storage: Storage, query: MemorySearchQu
     scoreParams.push(...shortTerms);
   }
 
-  const limitClause = query.limit !== undefined ? ' LIMIT ? OFFSET ?' : '';
-  const limitParams = query.limit !== undefined ? [Math.max(1, Math.floor(query.limit)), Math.max(0, Math.floor(query.offset ?? 0))] : [];
-
   const sql = `
     SELECT m.id AS id, m.payload AS payload, (${scoreSql}) AS shortScore
     FROM memory_entries m
@@ -110,14 +107,29 @@ export function searchAuthorizedMemories(storage: Storage, query: MemorySearchQu
       (CASE WHEN json_extract(m.payload, '$.pinned') = 1 THEN 1 ELSE 0 END) DESC,
       shortScore DESC,
       json_extract(m.payload, '$.updatedAt') DESC
-    ${limitClause}
   `;
 
-  const rows = storage.prepare(sql).all(...scoreParams, ...params, ...limitParams) as { id: string; payload: string }[];
-  return rows.map(row => ({
+  const rows = storage.prepare(sql).all(...scoreParams, ...params) as { id: string; payload: string; shortScore: number }[];
+  const mapped = rows.map(row => ({
     entry: JSON.parse(row.payload) as MemoryEntry,
     ftsRank: ftsRanks.get(row.id),
+    shortScore: row.shortScore,
   }));
+  if (ftsRanks.size > 0) {
+    mapped.sort((a, b) => {
+      const pinDiff = Number(!!b.entry.pinned) - Number(!!a.entry.pinned);
+      if (pinDiff !== 0) return pinDiff;
+      const scoreA = a.shortScore + (a.ftsRank !== undefined ? 10 / (1 + Math.abs(a.ftsRank)) : 0);
+      const scoreB = b.shortScore + (b.ftsRank !== undefined ? 10 / (1 + Math.abs(b.ftsRank)) : 0);
+      if (scoreB !== scoreA) return scoreB - scoreA;
+      return b.entry.updatedAt.localeCompare(a.entry.updatedAt);
+    });
+  }
+  const offset = Math.max(0, Math.floor(query.offset ?? 0));
+  const sliced = query.limit !== undefined
+    ? mapped.slice(offset, offset + Math.max(1, Math.floor(query.limit)))
+    : (offset > 0 ? mapped.slice(offset) : mapped);
+  return sliced.map(({ entry, ftsRank }) => ({ entry, ftsRank }));
 }
 
 export function recordMemoryUsage(storage: Storage, memoryIds: string[], kind: 'auto' | 'active', scopeKey?: string) {

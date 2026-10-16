@@ -151,28 +151,51 @@ describe('记忆整理、版本溯源与并发保护', () => {
     expect(old2.status).toBe('superseded');
     expect(old2.supersededBy).toBe(merged.id);
 
+    await expect(core.request('memories.save', {
+      ...entry1,
+      content: '旧编辑弹窗试图覆盖已合并条目',
+      expectedRevision: entry1.revision,
+    })).rejects.toThrow('记忆版本已变化');
+    await expect(core.request('memories.save', {
+      ...old1,
+      content: '忽略版本号也不可覆盖已合并条目',
+    })).rejects.toThrow('已被合并替代');
+    expect(core.state.storage.get<MemoryEntry>('memory_entries', entry1.id)?.status).toBe('superseded');
+
     const recalled = core.memory.recall({ botId: member.id, conversationId: roomA.id }, '交付文档');
     expect(recalled.map(item => item.id)).toEqual([merged.id]);
   });
 
-  it('用户手动维护或置顶条目受保护：后台整理不覆盖正文、不停用、不合并替代，并且用户并发编辑优先', async () => {
+  it('用户手动维护或置顶条目受保护：后台补主题不清除保护、后台整理不能扩大授权范围，且用户并发编辑优先', async () => {
     const { core, bot } = await setup(async () => ({ text: '完成' }));
     const member = bot('成员');
     const workspaceId = core.state.snapshot().workspaces[0].id;
     const room = core.entities.createConversation({ name: '私聊', kind: 'private', memberIds: [member.id], workspaceId });
+    const roomB = core.entities.createConversation({ name: '另一私聊', kind: 'private', memberIds: [member.id], workspaceId });
+    const userMsg = core.state.storage.appendMessage({
+      id: id(), conversationId: room.id, authorType: 'user', content: '用户原始发言', artifactIds: [], status: 'committed', createdAt: now(),
+    });
 
-    const userEntry = await core.request('memories.save', {
+    // Bot creates -> User edits -> Background supplements topic -> Still protected on next background pass
+    const botCreated = core.memories.save({
       scope: 'bot',
       ownerId: member.id,
       allowedConversationIds: [room.id],
-      content: '用户亲手编写的核心偏好',
+      sourceIds: [userMsg.id],
+      content: '模型最初记录的偏好',
+    }, { kind: 'bot', botId: member.id });
+    const userEntry = await core.request('memories.save', {
+      ...botCreated,
+      content: '用户亲手修改后的核心偏好',
+      expectedRevision: botCreated.revision,
     }) as MemoryEntry;
+    expect(userEntry.userMaintained).toBe(true);
 
     const reviewTask: Task = {
       id: 'task-review-1',
       conversationId: room.id,
       botId: member.id,
-      requestId: 'memory:test',
+      requestId: `memory:bot:${member.id}:test`,
       depth: 0,
       kind: 'memory-review',
       goal: '整理记忆',
@@ -195,6 +218,30 @@ describe('记忆整理、版本溯源与并发保护', () => {
       touchedRevisions: {},
     });
 
+    // Background task cannot expand allowedConversationIds on existing or new entries
+    expect(() => core.memories.manage({
+      action: 'save',
+      id: userEntry.id,
+      content: userEntry.content,
+      allowedConversationIds: [room.id, roomB.id],
+    }, member.id, room.id, reviewTask)).toThrow('后台整理不可更改记忆的使用范围');
+    expect(() => core.memories.manage({
+      action: 'save',
+      content: '跨分区新建记忆',
+      allowedConversationIds: [room.id, roomB.id],
+    }, member.id, room.id, reviewTask)).toThrow('后台整理仅可写入当前批次授权分区的记忆');
+    expect(core.memory.recall({ botId: member.id, conversationId: roomB.id }, '核心偏好')).toEqual([]);
+
+    // Background supplements topic without changing content -> updatedBy becomes memory-review, but userMaintained stays true
+    const topicSupplemented = core.memories.manage({
+      action: 'save',
+      id: userEntry.id,
+      content: userEntry.content,
+      topic: '已补全主题',
+    }, member.id, room.id, reviewTask) as MemoryEntry;
+    expect(topicSupplemented.updatedBy).toBe('memory-review');
+    expect(topicSupplemented.userMaintained).toBe(true);
+
     expect(() => core.memories.manage({ action: 'revoke', id: userEntry.id }, member.id, room.id, reviewTask))
       .toThrow('用户手动维护或置顶');
 
@@ -206,8 +253,8 @@ describe('记忆整理、版本溯源与并发保护', () => {
       consolidationReason: '尝试润色',
     }, member.id, room.id, reviewTask) as MemoryEntry;
 
-    expect(suggested.content).toBe('用户亲手编写的核心偏好');
-    expect(suggested.revision).toBe(1);
+    expect(suggested.content).toBe('用户亲手修改后的核心偏好');
+    expect(suggested.revision).toBe(3);
     expect(suggested.reviewSuggestion).toMatchObject({
       content: '后台试图改写用户正文',
       topic: '核心偏好',
@@ -215,8 +262,9 @@ describe('记忆整理、版本溯源与并发保护', () => {
 
     // Simulate concurrent user edit while background review batch is still open
     await core.request('memories.save', {
-      ...userEntry,
+      ...suggested,
       content: '用户在后台整理期间更新了偏好',
+      expectedRevision: suggested.revision,
     });
 
     expect(() => core.memories.manage({

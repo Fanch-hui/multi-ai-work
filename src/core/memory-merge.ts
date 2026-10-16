@@ -23,7 +23,7 @@ export interface MemoryBatchMeta {
 }
 
 export function isUserProtectedMemory(entry: MemoryEntry): boolean {
-  return entry.createdBy === 'user' || entry.updatedBy === 'user' || !!entry.pinned;
+  return !!entry.userMaintained || entry.createdBy === 'user' || entry.updatedBy === 'user' || !!entry.pinned;
 }
 
 export function buildRevisionSnapshot(entry: MemoryEntry): MemoryRevisionRecord {
@@ -36,6 +36,7 @@ export function buildRevisionSnapshot(entry: MemoryEntry): MemoryRevisionRecord 
     ...(entry.summary ? { summary: entry.summary } : {}),
     ...(entry.tags?.length ? { tags: entry.tags } : {}),
     ...(entry.pinned !== undefined ? { pinned: entry.pinned } : {}),
+    ...(entry.userMaintained ? { userMaintained: true } : {}),
     scope: entry.scope,
     ownerId: entry.ownerId,
     allowedConversationIds: entry.allowedConversationIds,
@@ -51,16 +52,41 @@ export function buildRevisionSnapshot(entry: MemoryEntry): MemoryRevisionRecord 
   };
 }
 
-export function assertBatchConcurrency(state: State, task: Task | undefined, entry: MemoryEntry) {
+export function assertBatchConcurrency(
+  state: State,
+  task: Task | undefined,
+  entry?: MemoryEntry,
+  target?: Pick<MemoryEntry, 'scope' | 'ownerId' | 'allowedConversationIds'>,
+) {
   if (task?.kind !== 'memory-review') return;
+  if (entry && target && memoryPartitionKey(entry) !== memoryPartitionKey(target)) {
+    throw new Error('后台整理不可更改记忆的使用范围、归属或授权会话集合');
+  }
   const batch = state.storage.metadata<MemoryBatchMeta>(`memory-batch:${task.id}`);
-  if (!batch) return;
-  if (memoryPartitionKey(entry) !== batch.partitionKey) {
+  if (!batch) {
+    if (!entry && target) {
+      const fallbackPartition = memoryPartitionKey({
+        scope: target.scope,
+        ownerId: target.ownerId,
+        allowedConversationIds: [task.conversationId],
+      });
+      if (memoryPartitionKey(target) !== fallbackPartition) {
+        throw new Error('后台整理不可扩大记忆的授权会话范围');
+      }
+    }
+    return;
+  }
+  if (entry && memoryPartitionKey(entry) !== batch.partitionKey) {
     throw new Error('后台整理仅可操作当前批次授权分区的记忆');
   }
-  const expected = batch.touchedRevisions[entry.id] ?? batch.initialRevisions[entry.id];
-  if (expected !== undefined && entry.revision !== expected) {
-    throw new Error('记忆在后台整理期间已被修改，已拒绝覆盖最新内容');
+  if (target && memoryPartitionKey(target) !== batch.partitionKey) {
+    throw new Error('后台整理仅可写入当前批次授权分区的记忆，不可扩大或更改授权范围');
+  }
+  if (entry) {
+    const expected = batch.touchedRevisions[entry.id] ?? batch.initialRevisions[entry.id];
+    if (expected !== undefined && entry.revision !== expected) {
+      throw new Error('记忆在后台整理期间已被修改，已拒绝覆盖最新内容');
+    }
   }
 }
 

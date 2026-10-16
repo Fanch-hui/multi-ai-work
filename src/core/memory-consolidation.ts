@@ -68,11 +68,16 @@ export function schedulePartitionConsolidations(
       continue;
     }
 
+    const scopeTag = first.scope === 'bot' ? `bot:${first.ownerId}` : 'public';
     const partitionHash = createHash('sha256').update(partitionKey).digest('hex').slice(0, 16);
     const runningTask = allTasks.find(task =>
       task.kind === 'memory-review'
       && !terminal(task.status)
-      && (task.requestId.startsWith(`memory:${partitionHash}:`) || s.metadata<MemoryBatchMeta>(`memory-batch:${task.id}`)?.partitionKey === partitionKey),
+      && (
+        task.requestId.startsWith(`memory:${scopeTag}:${partitionHash}:`)
+        || task.requestId.startsWith(`memory:${partitionHash}:`)
+        || s.metadata<MemoryBatchMeta>(`memory-batch:${task.id}`)?.partitionKey === partitionKey
+      ),
     );
     if (runningTask) {
       statuses.push({ partitionKey, status: 'running', taskId: runningTask.id });
@@ -92,11 +97,13 @@ export function schedulePartitionConsolidations(
       options?.manual ? 'manual' : 'auto',
     );
     const singleCandidatePrefix = candidates.length === 1 && !options?.manual && approved.length <= 30
-      ? `memory:${candidates[0].id}:${candidates[0].revision}:${owner.revision}:${connection.revision}`
-      : `memory:${partitionHash}:${fingerprint}`;
+      ? `memory:${scopeTag}:${candidates[0].id}:${candidates[0].revision}:${owner.revision}:${connection.revision}`
+      : `memory:${scopeTag}:${partitionHash}:${fingerprint}`;
 
     const existingSame = allTasks.find(task =>
-      task.requestId === singleCandidatePrefix || task.requestId === `memory:${partitionHash}:${fingerprint}`,
+      task.requestId === singleCandidatePrefix
+      || task.requestId === `memory:${scopeTag}:${partitionHash}:${fingerprint}`
+      || task.requestId === `memory:${partitionHash}:${fingerprint}`,
     );
     if (existingSame) {
       if (existingSame.status === 'completed' || !terminal(existingSame.status)) {
