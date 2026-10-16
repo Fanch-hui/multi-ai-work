@@ -1,8 +1,13 @@
+export const windowsVersionCheck = String.raw`function Test-AppVersion([string]$actual, [string]$expected) {
+  return ($actual -ceq $expected -or $actual -ceq ($expected + '.0'))
+}`;
+
 export const windowsUpdateHelper = String.raw`param([Parameter(Mandatory=$true)][string]$ConfigPath)
 $ErrorActionPreference = 'Stop'
 $config = Get-Content -LiteralPath $ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
 $parentExited = $false
 $failed = $false
+${windowsVersionCheck}
 function Write-Receipt($path, $value) {
   [IO.File]::WriteAllText($path, ($value | ConvertTo-Json -Compress), (New-Object Text.UTF8Encoding($false)))
 }
@@ -37,7 +42,7 @@ try {
   $installer = Start-Process -FilePath $config.packagePath -ArgumentList $arguments -Wait -PassThru
   if ($installer.ExitCode -ne 0) { throw ('Installer exited with code ' + $installer.ExitCode) }
   $version = (Get-Item -LiteralPath $config.executablePath).VersionInfo.ProductVersion.Trim()
-  if ($version -cne $config.version) { throw 'Installed application version does not match the update' }
+  if (!(Test-AppVersion $version $config.version)) { throw 'Installed application version does not match the update' }
   Write-Receipt $config.receiptPath @{ status='installed'; version=$config.version }
 } catch {
   $failed = $true
