@@ -1,5 +1,5 @@
-import { readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { Bot, Task } from '../src/domain/types.js';
 import { eventually, setup } from './core-harness.js';
@@ -78,5 +78,51 @@ describe('Core 执行权限', () => {
     core.approvals.resolve(core.state.snapshot().approvals[0].id, true);
     await eventually(() => core.state.storage.get<Task>('tasks', sent.taskIds[0])?.status === 'completed');
     expect(await readFile(original, 'utf8')).toBe('保留');
+  });
+  it('审批等待期间撤回工具授权或关闭工作区可写权限，用户批准后立即拒绝且不创建父目录或写入目标文件', async () => {
+    let firstTarget = '', secondTarget = '';
+    const { core, root, bot } = await setup(async context => {
+      await context.executeTool('read_file', { path: firstTarget }, 'read-first');
+      const firstResult = await context.executeTool('write_artifact', {
+        path: firstTarget, format: 'markdown', content: '新内容1',
+      }, 'write-first');
+      expect(firstResult).toEqual({ error: '当前未授权工具：write_artifact' });
+
+      await context.executeTool('read_file', { path: secondTarget }, 'read-second');
+      const secondResult = await context.executeTool('write_file', {
+        path: secondTarget, content: '新内容2',
+      }, 'write-second');
+      expect(secondResult).toEqual({ error: '工作目录仅允许读取' });
+      return { text: '二次授权校验拦截完成' };
+    });
+    const workspace = core.state.snapshot().workspaces[0];
+    firstTarget = join(root, 'workspace', 'parent-one', 'report.md');
+    secondTarget = join(root, 'workspace', 'parent-two', 'notes.txt');
+    await mkdir(dirname(firstTarget), { recursive: true });
+    await writeFile(firstTarget, '旧内容1');
+    await mkdir(dirname(secondTarget), { recursive: true });
+    await writeFile(secondTarget, '旧内容2');
+
+    const worker = bot('文档员', ['read_file', 'write_artifact', 'write_file']);
+    const room = core.entities.createConversation({ name: '二次校验', kind: 'private', memberIds: [worker.id], workspaceId: workspace.id });
+    const sent = core.tasks.send({ conversationId: room.id, content: '覆盖写入' });
+
+    await eventually(() => core.state.snapshot().approvals.some(approval => approval.status === 'pending' && approval.toolName === 'write_artifact'));
+    const firstApproval = core.state.snapshot().approvals.find(approval => approval.status === 'pending' && approval.toolName === 'write_artifact')!;
+    await rm(dirname(firstTarget), { recursive: true, force: true });
+    core.entities.saveBot({ ...worker, toolNames: ['read_file', 'write_file'] });
+    core.approvals.resolve(firstApproval.id, true);
+    await expect(stat(dirname(firstTarget))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(stat(firstTarget)).rejects.toMatchObject({ code: 'ENOENT' });
+
+    await eventually(() => core.state.snapshot().approvals.some(approval => approval.status === 'pending' && approval.toolName === 'write_file'));
+    const secondApproval = core.state.snapshot().approvals.find(approval => approval.status === 'pending' && approval.toolName === 'write_file')!;
+    await rm(dirname(secondTarget), { recursive: true, force: true });
+    core.state.storage.put('workspaces', { ...workspace, writable: false });
+    core.approvals.resolve(secondApproval.id, true);
+
+    await eventually(() => core.state.storage.get<Task>('tasks', sent.taskIds[0])?.status === 'completed');
+    await expect(stat(dirname(secondTarget))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(stat(secondTarget)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 });

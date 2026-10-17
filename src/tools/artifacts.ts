@@ -28,9 +28,10 @@ export async function createArtifact(input: ArtifactInput, context: ToolExecutio
   else bytes = Buffer.from(input.title ? `# ${input.title}\n\n${content}` : content);
   if (previous) await approveFileChange(target, previous, 'write_artifact', context);
   context.signal.throwIfAborted();
+  if (!context.workspace.writable) throw new Error('工作目录仅允许读取');
   if (await filePath(target, context, true) !== target) throw new Error('目标路径已变化，请重新读取');
-  await ensureParent(target);
   context.markDispatched?.();
+  await ensureParent(target);
   await writeFile(target, bytes, { flag: previous ? 'w' : 'wx' });
   const stored = await readFile(target);
   const version = fileVersion(stored);

@@ -43,6 +43,7 @@ export async function renderDocument(input: RenderDocumentInput, context: ToolEx
     throw new Error('文档导出未获批准');
   }
   context.signal.throwIfAborted();
+  context.assertAuthorized?.();
   const output = await filePath(path.join(directory, '.office-previews', randomUUID()), context, true);
   await mkdir(output, { recursive: true });
   const reportPath = path.join(output, 'render-report.json');

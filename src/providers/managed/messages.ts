@@ -3,6 +3,11 @@ import type { ResponseInput } from 'openai/resources/responses/responses';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions/completions';
 import { imageUrl } from '../images.js';
 
+function serializeToolArguments(raw: unknown): string {
+  if (typeof raw === 'string') return raw;
+  try { return JSON.stringify(raw ?? {}); } catch { return '{}'; }
+}
+
 export function responsesInput(messages: ModelMessage[], images = new Map<string, string>()): ResponseInput {
   return messages.flatMap(message => {
     if (message.providerItems?.length) return message.providerItems;
@@ -12,7 +17,7 @@ export function responsesInput(messages: ModelMessage[], images = new Map<string
     ] : message.content;
     if (message.role === 'tool') return [{ type: 'function_call_output', call_id: message.callId, output: content }];
     const items: unknown[] = message.content || message.images?.length ? [{ role: message.role, content }] : [];
-    for (const call of message.toolCalls ?? []) items.push({ type: 'function_call', call_id: call.id, name: call.name, arguments: call.arguments });
+    for (const call of message.toolCalls ?? []) items.push({ type: 'function_call', call_id: call.id, name: call.name, arguments: serializeToolArguments(call.arguments) });
     return items;
   }) as ResponseInput;
 }
@@ -36,7 +41,7 @@ export function chatInput(messages: ModelMessage[], instructions: string, images
       ...message.images.map(image => ({ type: 'image_url' as const, image_url: { url: imageUrl(image, images) } })),
     ] : message.content });
     else result.push({ role: 'assistant', content: message.content || null,
-      ...(message.toolCalls?.length ? { tool_calls: message.toolCalls.map(call => ({ id: call.id, type: 'function', function: { name: call.name, arguments: call.arguments } })) } : {}) });
+      ...(message.toolCalls?.length ? { tool_calls: message.toolCalls.map(call => ({ id: call.id, type: 'function', function: { name: call.name, arguments: serializeToolArguments(call.arguments) } })) } : {}) });
   }
   flushImages();
   return result;

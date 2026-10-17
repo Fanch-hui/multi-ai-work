@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ManagedProgress, RunContext } from '../src/domain/provider.js';
 import { completeToolBatch } from '../src/providers/managed/loop-tools.js';
+import { chatInput, responsesInput } from '../src/providers/managed/messages.js';
 import { ManagedRunState } from '../src/providers/managed/progress.js';
 
 function deferred() {
@@ -132,5 +133,77 @@ describe('managed parallel tool batches', () => {
     await rejection;
     expect(started).toEqual(['0', '1', '2', '3']);
     expect(resultIds(state)).toEqual(['0', '1', '2', '3']);
+  });
+
+  it('isolates a tool call with corrupted JSON arguments so sibling calls succeed and next turn continues', async () => {
+    const { context, state, executed } = fixture(['read_file', 'read_file', 'read_file']);
+    state.messages.at(-1)!.toolCalls = [
+      { id: 'call-0', name: 'read_file', arguments: '{"path":"a.txt"}' },
+      { id: 'call-1', name: 'read_file', arguments: '{"path":' },
+      { id: 'call-2', name: 'read_file', arguments: '{"path":"b.txt"}' },
+    ];
+    const events: { callId: string; phase: string }[] = [];
+    const called: string[] = [];
+    context.emit = event => {
+      if (event.type === 'tool') {
+        const data = event.data as { callId: string; phase: string };
+        events.push({ callId: data.callId, phase: data.phase });
+      }
+    };
+    context.executeTool = async (_name, args, id) => {
+      called.push(id);
+      return { content: `read:${String(args.path)}` };
+    };
+    await completeToolBatch(context, state, executed);
+    expect(called).toEqual(['call-0', 'call-2']);
+    const toolMessages = state.messages.filter(message => message.role === 'tool');
+    expect(toolMessages.map(message => message.callId)).toEqual(['call-0', 'call-1', 'call-2']);
+    expect(JSON.parse(toolMessages[0].content)).toEqual({ content: 'read:a.txt' });
+    expect(JSON.parse(toolMessages[1].content)).toEqual({ error: '工具参数 JSON 格式无效' });
+    expect(JSON.parse(toolMessages[2].content)).toEqual({ content: 'read:b.txt' });
+    expect(events.filter(item => item.phase === 'started').map(item => item.callId)).toEqual(['call-0', 'call-1', 'call-2']);
+    expect(events.filter(item => item.phase === 'completed').map(item => item.callId).sort()).toEqual(['call-0', 'call-1', 'call-2']);
+
+    const chatPayload = chatInput(state.messages, 'system');
+    expect(chatPayload.filter(item => item.role === 'tool').map(item => (item as { tool_call_id: string }).tool_call_id))
+      .toEqual(['call-0', 'call-1', 'call-2']);
+    const responsesPayload = responsesInput(state.messages) as { type?: string; call_id?: string }[];
+    expect(responsesPayload.filter(item => item.type === 'function_call_output').map(item => item.call_id))
+      .toEqual(['call-0', 'call-1', 'call-2']);
+
+    state.messages.push({
+      role: 'assistant',
+      content: '',
+      toolCalls: [{ id: 'call-3', name: 'read_file', arguments: '{"path":"fixed.txt"}' }],
+    });
+    await completeToolBatch(context, state, executed);
+    expect(called).toEqual(['call-0', 'call-2', 'call-3']);
+    expect(resultIds(state)).toEqual(['call-0', 'call-1', 'call-2', 'call-3']);
+  });
+
+  it('executes read_messages, search_messages, and read_artifact in parallel and merges results in original order', async () => {
+    const names = ['read_messages', 'search_messages', 'read_artifact'];
+    const { context, state, executed } = fixture(names);
+    context.parallelToolNames = ['read_file', 'list_directory', 'find_files', 'search_text', 'read_skill', 'read_messages', 'search_messages', 'read_artifact'];
+    const gates = Array.from({ length: 3 }, deferred);
+    const started: string[] = [];
+    context.executeTool = async (name, _args, id) => {
+      started.push(`${id}:${name}`);
+      await gates[Number(id)].promise;
+      return { tool: name, id };
+    };
+    const done = completeToolBatch(context, state, executed);
+    expect(started).toEqual(['0:read_messages', '1:search_messages', '2:read_artifact']);
+    gates[2].resolve();
+    gates[1].resolve();
+    gates[0].resolve();
+    await done;
+    const toolMessages = state.messages.filter(message => message.role === 'tool');
+    expect(toolMessages.map(message => message.callId)).toEqual(['0', '1', '2']);
+    expect(toolMessages.map(message => JSON.parse(message.content))).toEqual([
+      { tool: 'read_messages', id: '0' },
+      { tool: 'search_messages', id: '1' },
+      { tool: 'read_artifact', id: '2' },
+    ]);
   });
 });

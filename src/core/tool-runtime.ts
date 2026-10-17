@@ -210,21 +210,35 @@ export class ToolRuntime {
     s.event({ id: id(), runId: context.runId, type: 'tool', data: { name: requestedName, callId, summary, status: 'running', source: 'app' }, createdAt: now() });
     this.state.changed();
     try {
+      const rawRequestApproval = context.requestApproval;
+      const assertAuthorized = () => {
+        context.signal.throwIfAborted();
+        const latestBot = this.state.storage.get<Bot>('bots', bot.id);
+        const latestRoom = this.state.storage.get<Conversation>('conversations', context.conversation.id) ?? context.conversation;
+        const latestContext: ToolExecutionContext = { ...context, conversation: latestRoom };
+        if (!latestBot || latestBot.archived
+          || !this.definitions(latestContext, latestBot).some(tool => tool.name === requestedName)
+          || !this.definitions(latestContext, latestBot).some(tool => tool.name === name))
+          throw new Error(`当前未授权工具：${name}`);
+        if (['call_mcp', 'search_web'].includes(name) && (typeof args.connectionId !== 'string' || !latestBot.toolConnectionIds?.includes(args.connectionId)
+          || !this.state.storage.get<ToolConnection>('tool_connections', args.connectionId)?.enabled)) throw new Error('外部连接未授权');
+        if (['write_artifact', 'write_file', 'edit_file', 'delete_file', 'run_command', 'render_document'].includes(name)
+          && (!context.workspace.writable || !this.state.storage.get<Workspace>('workspaces', context.workspace.id)?.writable))
+          throw new Error('工作目录仅允许读取');
+      };
       const execute = () => {
         if (this.questions.forRun(context.runId)) throw new Error('本轮正在等待用户回答');
-        const executionContext: ToolExecutionContext = { ...context, callId, assertAuthorized: () => {
-          context.signal.throwIfAborted();
-          const latestBot = this.state.storage.get<Bot>('bots', bot.id);
-          if (!latestBot || latestBot.archived || !this.definitions(context, latestBot).some(tool => tool.name === name))
-            throw new Error(`当前未授权工具：${name}`);
-          if (['call_mcp', 'search_web'].includes(name) && (typeof args.connectionId !== 'string' || !latestBot.toolConnectionIds?.includes(args.connectionId)
-            || !this.state.storage.get<ToolConnection>('tool_connections', args.connectionId)?.enabled)) throw new Error('外部连接未授权');
-          if (['write_artifact', 'write_file', 'edit_file', 'delete_file', 'run_command', 'render_document'].includes(name)
-            && !this.state.storage.get<Workspace>('workspaces', context.workspace.id)?.writable) throw new Error('工作目录仅允许读取');
-        }, markDispatched: () => {
-          executionContext.assertAuthorized!();
-          dispatched = true; s.put('tool_operations', { ...operation, status: 'dispatched' });
-        } };
+        const executionContext: ToolExecutionContext = { ...context, callId,
+          requestApproval: async (action, approveSummary, details) => {
+            const approved = await rawRequestApproval(action, approveSummary, details);
+            if (approved) assertAuthorized();
+            return approved;
+          },
+          assertAuthorized,
+          markDispatched: () => {
+            assertAuthorized();
+            dispatched = true; s.put('tool_operations', { ...operation, status: 'dispatched' });
+          } };
         executionContext.processes = this.processes.forContext(executionContext);
         Object.assign(executionContext, this.controls?.forContext(executionContext));
         return this.registry.execute(name, args, executionContext);

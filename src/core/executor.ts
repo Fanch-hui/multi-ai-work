@@ -247,7 +247,7 @@ export class Executor {
       prompt, messages: [], instructions, contextInstructions, runtimeContext, tools: this.tools.definitions(toolContext, bot)
         .sort((a, b) => managed ? (a.name < b.name ? -1 : a.name > b.name ? 1 : 0) : 0), signal,
       nativeMcp,
-      parallelToolNames: ['read_file', 'list_directory', 'find_files', 'search_text', 'read_skill'],
+      parallelToolNames: ['read_file', 'list_directory', 'find_files', 'search_text', 'read_skill', 'read_messages', 'search_messages', 'read_artifact'],
       ...(!task.kind ? { userInput: this.inputs.forRun(run, toolContext, draft, saved?.cutoff ?? draft.sequence - 1) } : {}),
       ...(!task.kind && connection.provider === 'qoder' ? { nativeTools: this.tools.nativeTools(toolContext, bot) } : {}),
       emit: event => {

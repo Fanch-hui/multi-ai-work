@@ -16,7 +16,8 @@ export async function completeToolBatch(context: RunContext, state: ManagedRunSt
     if (completed.has(call.id)) return [];
     if (executed.has(call.id)) throw new Error('模型重复提交工具调用，需要对账');
     if (!context.tools.some(tool => tool.name === call.name)) throw new Error(`模型请求未开放的工具：${call.name}`);
-    return [{ ...call, args: parseToolArguments(call.arguments) }];
+    try { return [{ ...call, args: parseToolArguments(call.arguments) }]; }
+    catch (error) { return [{ ...call, args: {}, parseError: error instanceof Error ? error.message : '工具参数 JSON 格式无效' }]; }
   });
   const parallel = new Set(context.parallelToolNames);
   const order = new Map(calls.map((call, index) => [call.id, index]));
@@ -44,7 +45,7 @@ export async function completeToolBatch(context: RunContext, state: ManagedRunSt
   else await state.save('ready');
 }
 
-async function executeGroup<T extends { id: string; name: string; args: Record<string, unknown> }>(
+async function executeGroup<T extends { id: string; name: string; args: Record<string, unknown>; parseError?: string }>(
   context: RunContext, state: ManagedRunState, calls: T[], saveResult: (call: T, result: unknown) => Promise<void>,
 ) {
   let next = 0;
@@ -57,6 +58,7 @@ async function executeGroup<T extends { id: string; name: string; args: Record<s
         const call = calls[next++];
         context.emit({ type: 'tool', data: { name: call.name, callId: call.id, phase: 'started' } });
         const result = state.waitingForInput() ? { error: '本轮正在等待用户回答，此调用未执行' }
+          : call.parseError ? { error: call.parseError }
           : await context.executeTool(call.name, call.args, call.id);
         // Persist every successful in-flight result, even after a sibling fails or is cancelled.
         const save = saving.then(() => saveResult(call, result));
