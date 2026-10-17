@@ -14,14 +14,20 @@ async function request(path: string, body?: unknown) {
   if (!response.ok || value.error) throw new Error(typeof value.error === 'string' ? value.error : '工具调用失败');
   return value;
 }
-const definitions = await request('/native/tools') as ToolDefinition[];
+async function loadTools() {
+  const definitions = await request('/native/tools') as ToolDefinition[];
+  return definitions.map(tool => ({ ...tool, inputSchema: { ...tool.inputSchema, type: 'object' as const } }));
+}
+await loadTools();
 const server = new Server({ name: 'ai-team', version: '0.1.0' }, { capabilities: { tools: {} } });
-server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: definitions.map(tool => ({ ...tool,
-  inputSchema: { ...tool.inputSchema, type: 'object' as const } })) }));
+server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: await loadTools() }));
 const yielding = new Set<string | number>();
 server.setRequestHandler(CallToolRequestSchema, async (input, extra) => {
   try {
-    const value = await request('/native/call', { name: input.params.name, args: input.params.arguments ?? {}, callId: randomUUID() });
+    const meta = input.params._meta as Record<string, unknown> | undefined;
+    const metaId = typeof meta?.callId === 'string' && meta.callId.trim() ? meta.callId.trim()
+      : typeof meta?.client_request_id === 'string' && meta.client_request_id.trim() ? meta.client_request_id.trim() : undefined;
+    const value = await request('/native/call', { name: input.params.name, args: input.params.arguments ?? {}, callId: metaId ?? randomUUID() });
     if (value.result?.waitingForInput === true) yielding.add(extra.requestId);
     const result = value.result;
     if (Array.isArray(result?.content)) {

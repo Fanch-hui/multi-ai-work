@@ -52,6 +52,55 @@ async function loadSdk(): Promise<Sdk> {
   return import('@qodercn-ai/qodercn-agent-sdk');
 }
 
+export const QODER_MODEL_CACHE_TTL_MS = 5 * 60 * 1000;
+interface QoderModelCacheEntry {
+  models: ModelInfo[];
+  accountScope: string;
+  expiresAt: number;
+}
+const qoderModelCache = new Map<string, QoderModelCacheEntry>();
+const qoderModelInFlight = new Map<string, Promise<QoderSdk.ModelInfo[]>>();
+
+export function clearQoderModelCache(): void {
+  qoderModelCache.clear();
+  qoderModelInFlight.clear();
+}
+
+function qoderCacheKey(connection: Connection, profile: string, options: QoderSdk.Options): string {
+  return JSON.stringify([
+    connection.id,
+    connection.revision,
+    connection.authMode,
+    connection.executable ?? '',
+    profile,
+    options.env?.QODER_SDK_AUTH_CONFIG_DIR ?? '',
+    options.env?.QODERCN_CONFIG_DIR ?? '',
+    options.env?.HOME ?? '',
+    connection.accountScope ?? '',
+  ]);
+}
+
+function readQoderModelCache(key: string): QoderModelCacheEntry | undefined {
+  const entry = qoderModelCache.get(key);
+  if (!entry) return undefined;
+  if (Date.now() >= entry.expiresAt) {
+    qoderModelCache.delete(key);
+    return undefined;
+  }
+  return entry;
+}
+
+function fetchQoderModels(key: string, query: QoderSdk.Query, signal: AbortSignal): Promise<QoderSdk.ModelInfo[]> {
+  let pending = qoderModelInFlight.get(key);
+  if (!pending) {
+    pending = query.getAvailableModels().finally(() => {
+      if (qoderModelInFlight.get(key) === pending) qoderModelInFlight.delete(key);
+    });
+    qoderModelInFlight.set(key, pending);
+  }
+  return bounded(pending, signal);
+}
+
 export class QoderAdapter implements ProviderAdapter {
   kind = 'qoder' as const;
   private active = new Map<QoderSdk.Query, Set<ChildProcessWithoutNullStreams>>();
@@ -63,6 +112,7 @@ export class QoderAdapter implements ProviderAdapter {
     const sdk = await this.loader();
     const children = new Set<ChildProcessWithoutNullStreams>();
     const options = await this.options(context, profile, profile, sdk, children);
+    const cacheKey = qoderCacheKey(context.connection, profile, options);
     const input = new NativeInput<QoderSdk.SDKUserMessage>();
     const query = sdk.query({ prompt: input, options: { ...options, persistSession: false, sessionId: randomUUID(), mcpServers: {} } });
     this.active.set(query, children);
@@ -82,7 +132,10 @@ export class QoderAdapter implements ProviderAdapter {
       capabilities.contextUsage = init.capabilities?.includes('context_usage_v1') ? 'supported' : 'unverified';
       capabilities.imageInput = 'supported';
       capabilities.permissionEnforcement = 'mixed';
-      return { models: qoderCatalog(models), capabilities, accountScope: accountDigest('qoder-cn', account.userId),
+      const catalog = qoderCatalog(models);
+      const accountScope = accountDigest('qoder-cn', account.userId);
+      qoderModelCache.set(cacheKey, { models: catalog, accountScope, expiresAt: Date.now() + QODER_MODEL_CACHE_TTL_MS });
+      return { models: catalog, capabilities, accountScope,
         version: context.connection.executable ? await runtimeVersion(context.connection.executable, profile, context.signal) : cliVersion };
     } catch (error) { context.signal.throwIfAborted(); throw qoderProbeError(error, stage); }
     finally { input.close(); await this.closeQuery(query, children); await drain.catch(() => {}); }
@@ -96,6 +149,7 @@ export class QoderAdapter implements ProviderAdapter {
     const input = new NativeInput<QoderSdk.SDKUserMessage>();
     const children = new Set<ChildProcessWithoutNullStreams>();
     const options = await this.runOptions(context, sdk, profile, sessionId, children);
+    const cacheKey = qoderCacheKey(context.connection, profile, options);
     const query = sdk.query({ prompt: input, options });
     this.active.set(query, children);
     const events = new QoderEvents(context);
@@ -122,7 +176,7 @@ export class QoderAdapter implements ProviderAdapter {
     try {
       preparationSignal.throwIfAborted();
       const [{ initialization, scope }, content] = await Promise.all([
-        this.prepare(query, context, nativeInitialization, result, preparationSignal),
+        this.prepare(query, context, nativeInitialization, result, preparationSignal, cacheKey),
         bounded(qoderImageContent({ ...context, signal: preparationSignal }), preparationSignal, 30 * 60 * 1000),
       ]);
       preparationSignal.throwIfAborted();
@@ -157,17 +211,30 @@ export class QoderAdapter implements ProviderAdapter {
   }
 
   private async prepare(query: QoderSdk.Query, context: RunContext, nativeInitialization: Promise<void>,
-    result: Promise<ProviderResult>, signal: AbortSignal) {
+    result: Promise<ProviderResult>, signal: AbortSignal, cacheKey: string) {
     const initialization = await bounded(query.initializationResult(), signal);
     await bounded(Promise.race([nativeInitialization, result.then(() => { throw new Error('Qoder 在输入前结束轮次'); })]), signal);
-    const [account, availableModels, servers] = await Promise.all([
-      bounded(query.accountInfo(), signal), bounded(query.getAvailableModels(), signal),
+    const cached = readQoderModelCache(cacheKey);
+    const canReuseCached = Boolean(cached
+      && (!context.bot.model || cached.models.some(model => model.id === context.bot.model))
+      && (!context.bot.reasoning || cached.models.find(model => model.id === context.bot.model)?.reasoning?.includes(context.bot.reasoning)));
+    const [account, prefetchedModels, servers] = await Promise.all([
+      bounded(query.accountInfo(), signal),
+      canReuseCached ? Promise.resolve(undefined) : fetchQoderModels(cacheKey, query, signal),
       bounded(query.mcpServerStatus(), signal),
     ]);
     if (!account.userId) throw new AuthenticationRequiredError('Qoder CN 需要本机官方登录');
     const scope = accountDigest('qoder-cn', account.userId);
     await validateOwnedAccount(context, scope);
-    this.validateModel(context, qoderCatalog(availableModels));
+    let catalog: ModelInfo[];
+    if (canReuseCached && cached?.accountScope === scope) {
+      catalog = cached.models;
+    } else {
+      const availableModels = prefetchedModels ?? await fetchQoderModels(cacheKey, query, signal);
+      catalog = qoderCatalog(availableModels);
+      qoderModelCache.set(cacheKey, { models: catalog, accountScope: scope, expiresAt: Date.now() + QODER_MODEL_CACHE_TTL_MS });
+    }
+    this.validateModel(context, catalog);
     if (!servers.some(server => server.name === 'ai-team' && server.status === 'connected')) throw new Error('Qoder 无法连接 multi-AI work 工具');
     return { initialization, scope };
   }

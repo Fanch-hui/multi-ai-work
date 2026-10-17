@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mkdtemp, rm, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir, tmpdir } from 'node:os';
@@ -6,11 +6,15 @@ import type { RunContext, ProviderEvent } from '../src/domain/provider.js';
 import type * as Qoder from '@qodercn-ai/qodercn-agent-sdk';
 import { NativeInput } from '../src/providers/native/input.js';
 import { QoderEvents } from '../src/providers/native/qoder-events.js';
-import { QoderAdapter, qoderOptions } from '../src/providers/native/qoder.js';
+import { QODER_MODEL_CACHE_TTL_MS, QoderAdapter, clearQoderModelCache, qoderOptions } from '../src/providers/native/qoder.js';
 import { accountDigest, recordOwnership, validateOwnedAccount, validateOwnership } from '../src/providers/native/runtime.js';
 
 const folders: string[] = [];
-afterEach(async () => { await Promise.all(folders.splice(0).map(folder => rm(folder, { recursive: true, force: true }))); });
+afterEach(async () => {
+  vi.useRealTimers();
+  clearQoderModelCache();
+  await Promise.all(folders.splice(0).map(folder => rm(folder, { recursive: true, force: true })));
+});
 async function context(): Promise<RunContext & { events: ProviderEvent[] }> {
   const folder = await mkdtemp(join(tmpdir(), 'ai-team-native-test-')); folders.push(folder);
   const workspace = join(folder, 'workspace'), profile = join(folder, 'profile');
@@ -74,7 +78,7 @@ describe('native adapter isolation', () => {
   });
 });
 
-function qoderFixture(account: () => string, completed: boolean, prompts: string[], opened: Qoder.Options[]) {
+function qoderFixture(account: () => string, completed: boolean, prompts: string[], opened: Qoder.Options[], onModels?: () => void) {
   return {
     qodercliAuth: () => ({ type: 'qodercli' }), ProcessTransport: { default: {} },
     query: ({ prompt, options }: { prompt: AsyncIterable<Qoder.SDKUserMessage>; options: Qoder.Options }) => {
@@ -89,7 +93,7 @@ function qoderFixture(account: () => string, completed: boolean, prompts: string
       })();
       return Object.assign(generator, {
         initializationResult: async () => ({ capabilities: [] }), accountInfo: async () => ({ userId: account() }),
-        getAvailableModels: async () => [{ value: 'model-a', displayName: 'Model A' }],
+        getAvailableModels: async () => { onModels?.(); return [{ value: 'model-a', displayName: 'Model A' }]; },
         mcpServerStatus: async () => [{ name: 'ai-team', status: 'connected' }],
         close: async () => { (prompt as NativeInput<Qoder.SDKUserMessage>).close(); }, interrupt: async () => {},
       });
@@ -114,6 +118,36 @@ describe('Qoder native turn boundaries', () => {
     expect(JSON.parse(prompts[1]).message.content).toEqual([{ type: 'text', text: ctx.prompt }]);
     account = 'account-b'; await expect(adapter.run(ctx)).rejects.toThrow('账号');
     expect(prompts).toHaveLength(2); await adapter.close();
+  });
+
+  it('caches Qoder available models for 5 minutes and isolates by connectionId, cliPath, and profile', async () => {
+    vi.useFakeTimers();
+    const ctx = await context(); ctx.connection.provider = 'qoder';
+    let modelCalls = 0;
+    const adapter = new QoderAdapter(async () => qoderFixture(() => 'account-a', true, [], [], () => { modelCalls++; }));
+    await adapter.run(ctx);
+    expect(modelCalls).toBe(1);
+
+    // Second run within 5-minute TTL reuses cached models without calling getAvailableModels again.
+    await adapter.run(ctx);
+    expect(modelCalls).toBe(1);
+
+    // Changing cliPath (executable) or connectionId isolates the cache key.
+    ctx.connection = { ...ctx.connection, executable: '/custom/qodercli' };
+    await adapter.run(ctx);
+    expect(modelCalls).toBe(2);
+
+    const otherCtx = await context();
+    otherCtx.connection = { ...otherCtx.connection, id: 'cn-other', provider: 'qoder' };
+    otherCtx.binding = { ...otherCtx.binding, connectionId: 'cn-other' };
+    await adapter.run(otherCtx);
+    expect(modelCalls).toBe(3);
+
+    // After 5-minute TTL expires, the next run refreshes the model catalog.
+    vi.advanceTimersByTime(QODER_MODEL_CACHE_TTL_MS + 1);
+    await adapter.run(otherCtx);
+    expect(modelCalls).toBe(4);
+    await adapter.close();
   });
 
   it('rejects an error terminal result instead of reporting completion', async () => {

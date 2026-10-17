@@ -11,13 +11,48 @@ export function modelImage(artifact?: Artifact): ModelImage | undefined {
     width: artifact.image?.width, height: artifact.image?.height };
 }
 
+type EncodedImage = Awaited<ReturnType<typeof resolveArtifactImage>>;
+interface ImageLruCache {
+  entries: Map<string, { value: EncodedImage; bytes: number }>;
+  bytes: number;
+}
+const MAX_IMAGE_CACHE_BYTES = 32 * 1024 * 1024;
+const sharedImageCache: ImageLruCache = { entries: new Map(), bytes: 0 };
+
+export function clearRunImageCache(): void {
+  sharedImageCache.entries.clear();
+  sharedImageCache.bytes = 0;
+}
+
+function readLru(store: ImageLruCache, key: string): EncodedImage | undefined {
+  const entry = store.entries.get(key);
+  if (!entry) return undefined;
+  store.entries.delete(key);
+  store.entries.set(key, entry);
+  return entry.value;
+}
+
+function writeLru(store: ImageLruCache, key: string, value: EncodedImage): void {
+  const bytes = value.data.length;
+  if (bytes > MAX_IMAGE_CACHE_BYTES) return;
+  const existing = store.entries.get(key);
+  if (existing) {
+    store.bytes -= existing.bytes;
+    store.entries.delete(key);
+  }
+  while (store.bytes + bytes > MAX_IMAGE_CACHE_BYTES && store.entries.size > 0) {
+    const oldest = store.entries.keys().next().value!;
+    store.bytes -= store.entries.get(oldest)!.bytes;
+    store.entries.delete(oldest);
+  }
+  store.entries.set(key, { value, bytes });
+  store.bytes += bytes;
+}
+
 export function imageResolver(state: State, context: ToolExecutionContext) {
-  type EncodedImage = Awaited<ReturnType<typeof resolveArtifactImage>>;
-  const cache = new Map<string, EncodedImage>();
+  const store: ImageLruCache = context.runId ? sharedImageCache : { entries: new Map(), bytes: 0 };
   const pending = new Map<string, Promise<EncodedImage>>();
   const normalizing = new Map<string, Promise<ImageMetadata>>();
-  const capacity = 32 * 1024 * 1024;
-  let cachedBytes = 0;
 
   function authorized(id: string) {
     context.signal.throwIfAborted();
@@ -49,24 +84,15 @@ export function imageResolver(state: State, context: ToolExecutionContext) {
     return current;
   }
 
-  function remember(key: string, image: EncodedImage) {
-    const bytes = image.data.length;
-    if (bytes > capacity || cache.has(key)) return;
-    while (cachedBytes + bytes > capacity) {
-      const oldest = cache.keys().next().value!;
-      cachedBytes -= cache.get(oldest)!.data.length;
-      cache.delete(oldest);
-    }
-    cache.set(key, image);
-    cachedBytes += bytes;
-  }
-
   return async (image: ModelImage) => {
     const artifact = await prepare(authorized(image.artifactId));
     const version = imageVersion(artifact);
     const metadata = await stat(artifact.image!.path);
-    const key = JSON.stringify([version, metadata.dev, metadata.ino, metadata.size, metadata.mtimeMs, metadata.ctimeMs]);
-    let result = cache.get(key);
+    const identity = artifact.sha256
+      ? `sha256:${artifact.sha256}`
+      : `path:${artifact.path}:${metadata.mtimeMs}:${metadata.size}`;
+    const key = JSON.stringify([identity, version, metadata.dev, metadata.ino, metadata.size, metadata.mtimeMs, metadata.ctimeMs]);
+    let result = readLru(store, key);
     if (!result) {
       let work = pending.get(key);
       if (!work) {
@@ -77,7 +103,7 @@ export function imageResolver(state: State, context: ToolExecutionContext) {
       finally { if (pending.get(key) === work) pending.delete(key); }
     }
     if (imageVersion(authorized(image.artifactId)) !== version) throw new Error('图片已变化，请重新读取');
-    remember(key, result);
+    writeLru(store, key, result);
     return { ...result };
   };
 }

@@ -3,7 +3,19 @@ import { providerFetch } from '../network.js';
 
 type CatalogRecord = Record<string, unknown>;
 const officialCatalogUrl = 'https://raw.githubusercontent.com/openai/codex/main/codex-rs/models-manager/models.json';
+export const OFFICIAL_CATALOG_TTL_MS = 30 * 60 * 1000;
+export const OFFICIAL_CATALOG_FAILURE_BACKOFF_MS = 30 * 1000;
+let cachedModels: ModelInfo[] | undefined;
+let expiresAt = 0;
+let retryAfter = 0;
 let officialCatalog: Promise<ModelInfo[]> | undefined;
+
+export function resetOfficialCatalogCache(): void {
+  cachedModels = undefined;
+  expiresAt = 0;
+  retryAfter = 0;
+  officialCatalog = undefined;
+}
 
 function record(value: unknown): CatalogRecord | undefined {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as CatalogRecord : undefined;
@@ -73,14 +85,28 @@ export async function loadOfficialModelCatalog(fetcher: typeof fetch = providerF
 }
 
 function cachedOfficialCatalog(): Promise<ModelInfo[]> {
-  if (!officialCatalog) {
-    const pending = loadOfficialModelCatalog().catch(error => {
-      if (officialCatalog === pending) officialCatalog = undefined;
-      throw error;
-    });
-    officialCatalog = pending;
-  }
-  return officialCatalog;
+  const now = Date.now();
+  if (cachedModels && now < expiresAt) return Promise.resolve(cachedModels);
+  if (officialCatalog) return officialCatalog;
+  if (!cachedModels && now < retryAfter) return Promise.resolve([]);
+  const pending = loadOfficialModelCatalog().then(models => {
+    cachedModels = models;
+    expiresAt = Date.now() + OFFICIAL_CATALOG_TTL_MS;
+    retryAfter = 0;
+    return models;
+  }).catch(error => {
+    const current = Date.now();
+    retryAfter = current + OFFICIAL_CATALOG_FAILURE_BACKOFF_MS;
+    if (cachedModels) {
+      expiresAt = current + OFFICIAL_CATALOG_FAILURE_BACKOFF_MS;
+      return cachedModels;
+    }
+    throw error;
+  }).finally(() => {
+    if (officialCatalog === pending) officialCatalog = undefined;
+  });
+  officialCatalog = pending;
+  return pending;
 }
 
 export async function supplementChatGptCatalog(models: ModelInfo[], loadCatalog = cachedOfficialCatalog): Promise<ModelInfo[]> {
