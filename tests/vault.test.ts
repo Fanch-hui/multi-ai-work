@@ -42,4 +42,57 @@ describe('vault persistence', () => {
     expect(await restored.get('first')).toBe('synthetic-first');
     expect(await restored.get('second')).toBe('synthetic-second');
   });
+
+  it('coalesces concurrent decrypts, caches repeated reads, retries failures, and invalidates on rotation/delete/load/clear', async () => {
+    const target = join(directory, 'vault.json');
+    let decryptCalls = 0;
+    let shouldFail = false;
+    let delayMs = 15;
+    const trackedCipher: CipherHost = {
+      encrypt: async value => `${Buffer.from(value).toString('base64')}:${decryptCalls}`,
+      decrypt: async value => {
+        decryptCalls++;
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        if (shouldFail) throw new Error('decrypt failed');
+        return Buffer.from(value.split(':')[0]!, 'base64').toString('utf8');
+      },
+    };
+    const vault = new Vault(target, trackedCipher);
+    await vault.set('token', 'synthetic-v1');
+    const [a, b, c] = await Promise.all([vault.get('token'), vault.get('token'), vault.get('token')]);
+    expect([a, b, c]).toEqual(['synthetic-v1', 'synthetic-v1', 'synthetic-v1']);
+    expect(decryptCalls).toBe(1);
+    expect(await vault.get('token')).toBe('synthetic-v1');
+    expect(decryptCalls).toBe(1);
+
+    await vault.set('token', 'synthetic-v2');
+    shouldFail = true;
+    await expect(vault.get('token')).rejects.toThrow('decrypt failed');
+    expect(decryptCalls).toBe(2);
+    shouldFail = false;
+    expect(await vault.get('token')).toBe('synthetic-v2');
+    expect(decryptCalls).toBe(3);
+
+    delayMs = 40;
+    vault.clear();
+    const staleRead = vault.get('token');
+    await new Promise(resolve => setTimeout(resolve, 5));
+    delayMs = 1;
+    await vault.set('token', 'synthetic-v3');
+    expect(await staleRead).toBe('synthetic-v2');
+    expect(await vault.get('token')).toBe('synthetic-v3');
+
+    vault.clear();
+    expect(await vault.get('token')).toBe('synthetic-v3');
+    expect(decryptCalls).toBe(6);
+
+    await vault.delete('token');
+    expect(await vault.get('token')).toBeUndefined();
+
+    await vault.set('ephemeral', 'synthetic-temp');
+    expect(await vault.get('ephemeral')).toBe('synthetic-temp');
+    await rm(target, { force: true });
+    await vault.load();
+    expect(await vault.get('ephemeral')).toBeUndefined();
+  });
 });
