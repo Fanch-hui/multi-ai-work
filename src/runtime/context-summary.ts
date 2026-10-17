@@ -1,7 +1,108 @@
-import { balancedHistoryUnits, estimateTokens, summaryMessageProjection, toolsPaired, type ModelHistoryEntry } from './model-history.js';
+import type { ModelMessage } from '../domain/provider.js';
+import { balancedHistoryUnits, estimateModelMessageTokens, estimateTokens, summaryMessageProjection, toolsPaired, type ModelHistoryEntry } from './model-history.js';
+
+type ToolCall = NonNullable<ModelMessage['toolCalls']>[number];
 
 export class SummaryNeedsSplit extends Error {
   constructor() { super('摘要窗口无法容纳历史资料片段与已有摘要'); }
+}
+
+const metadataKeys = /^(?:status|isError|error|errorCode|code|exitCode|signal|path|workingPath|name|version|previousVersion|fileVersion|requirementVersion|sha256|artifactId|artifactIds|mimeType|size|offset|nextOffset|endLine|cursor|nextCursor|total|totalLength|totalLines|hasMore|pagination|superseded|contentAvailable)$/;
+
+function parseObject(text: string): Record<string, unknown> | undefined {
+  try {
+    const value: unknown = JSON.parse(text);
+    return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+  } catch { return undefined; }
+}
+
+function retainedMetadata(value: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (metadataKeys.test(key) || /Ids?$/.test(key) || item === null || typeof item === 'number' || typeof item === 'boolean'
+      || typeof item === 'string' && item.length <= 256) result[key] = item;
+  }
+  return result;
+}
+
+function safeHead(text: string, length: number): string {
+  const end = length > 0 && /[\uD800-\uDBFF]/.test(text[length - 1]) ? length - 1 : length;
+  return text.slice(0, end);
+}
+
+function safeTail(text: string, length: number): string {
+  let start = Math.max(0, text.length - length);
+  if (/[\uDC00-\uDFFF]/.test(text[start] ?? '')) start++;
+  return text.slice(start);
+}
+
+export function projectSummaryToolMessage(message: ModelMessage, budget: number, call?: ToolCall): ModelMessage {
+  if (message.role !== 'tool') return message;
+  const projected = summaryMessageProjection(message) as { content: string };
+  const rawContent = projected.content;
+  const toolBudget = Math.max(160, Math.min(800, Math.floor(budget * 0.4)));
+  const parsed = parseObject(rawContent);
+  const alreadyProjected = Boolean(parsed && parsed.truncated === true
+    && (typeof parsed.preview === 'string' || typeof parsed.previewOmission === 'object'));
+  if (alreadyProjected && estimateTokens(rawContent) <= toolBudget) return message;
+  if (!alreadyProjected && rawContent.length <= 1200 && estimateTokens(rawContent) <= Math.floor(budget * 0.5)) return message;
+
+  const callArgs = call?.arguments ? parseObject(call.arguments) : undefined;
+  const fullResultArgId = parsed?.fullResult && typeof parsed.fullResult === 'object'
+    ? (parsed.fullResult as { arguments?: { artifactId?: unknown } }).arguments?.artifactId
+    : undefined;
+  const artifactId = message.contextArtifactIds?.[0]
+    ?? (typeof parsed?.artifactId === 'string' ? parsed.artifactId : undefined)
+    ?? (typeof fullResultArgId === 'string' ? fullResultArgId : undefined)
+    ?? (call?.name === 'read_artifact' && typeof callArgs?.artifactId === 'string' ? callArgs.artifactId : undefined);
+  const pathRef = (typeof parsed?.path === 'string' ? parsed.path : undefined)
+    ?? (typeof parsed?.workingPath === 'string' ? parsed.workingPath : undefined)
+    ?? (typeof callArgs?.path === 'string' ? callArgs.path : undefined)
+    ?? (typeof callArgs?.workingPath === 'string' ? callArgs.workingPath : undefined);
+  const metadata = parsed ? retainedMetadata(parsed) : {};
+  const source = parsed && typeof parsed.content === 'string' && parsed.content.length > 600 ? parsed.content
+    : parsed && typeof parsed.output === 'string' && parsed.output.length > 600 ? parsed.output
+    : parsed && typeof parsed.stdout === 'string' && parsed.stdout.length > 600 ? parsed.stdout
+    : rawContent;
+  const offset = parsed && typeof parsed.offset === 'number' ? parsed.offset : 0;
+  const maxPreviewChars = Math.min(900, Math.max(160, Math.floor(source.length * 0.5)));
+  const build = (characters: number): ModelMessage => {
+    const head = safeHead(source, Math.ceil(characters / 2));
+    const tail = safeTail(source, Math.floor(characters / 2));
+    return {
+      ...message,
+      providerItems: undefined,
+      ...(artifactId ? { contextArtifactIds: [...new Set([...(message.contextArtifactIds ?? []), artifactId])] } : {}),
+      content: JSON.stringify({
+        ...metadata,
+        ...(call?.name && !metadata.tool ? { tool: call.name } : {}),
+        ...(pathRef && !metadata.path && !metadata.workingPath ? { path: pathRef } : {}),
+        preview: `${head}\n[…中间内容已省略，请按完整结果引用读取…]\n${tail}`,
+        truncated: true,
+        previewOmission: { offset: offset + head.length, endOffset: offset + source.length - tail.length, totalLength: source.length },
+        ...(artifactId ? {
+          fullResult: {
+            tool: 'read_artifact',
+            arguments: { artifactId, offset: offset + head.length, limit: Math.max(1, Math.min(24000, Math.floor(toolBudget / 2))) },
+          },
+        } : {}),
+      }),
+    };
+  };
+  let low = Math.min(160, maxPreviewChars), high = maxPreviewChars;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    if (estimateModelMessageTokens(build(middle)) <= toolBudget) low = middle;
+    else high = middle - 1;
+  }
+  return build(low);
+}
+
+export function projectUnitForSummary(unit: ModelHistoryEntry[], budget: number): ModelHistoryEntry[] {
+  const calls = new Map(unit.flatMap(entry => entry.message.toolCalls ?? []).map(call => [call.id, call]));
+  return unit.map(entry => entry.message.role === 'tool'
+    ? { ...entry, message: projectSummaryToolMessage(entry.message, budget, entry.message.callId ? calls.get(entry.message.callId) : undefined) }
+    : entry);
 }
 
 function prompt(previous: string, records: string): string {
@@ -34,7 +135,8 @@ export async function summarizeUnits(
   const outputBudget = Math.floor(window * 0.25);
   const units = balancedHistoryUnits(history);
   if (units.some(unit => !toolsPaired(unit))) throw new Error('历史工具调用与结果未配对');
-  const records = units.map(unit => JSON.stringify(unit.map(entry => summaryMessageProjection(entry.message))));
+  const projectedUnits = units.map(unit => projectUnitForSummary(unit, budget));
+  const records = projectedUnits.map(unit => JSON.stringify(unit.map(entry => summaryMessageProjection(entry.message))));
   const weights = records.map(record => estimateTokens(record) + 1);
   let content = previous;
   const merge = async (text: string) => {

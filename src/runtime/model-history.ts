@@ -43,14 +43,24 @@ function messageProjection(message: ModelMessage, protocol: Protocol): unknown {
 /** Opaque state has unknown provider cost; reserve fixed overhead without treating ciphertext as prose. */
 const opaqueEstimate = '[opaque provider state]'.padEnd(256, ' ');
 
+const cjkPattern = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/gu;
+const symbolPattern = /[{}[\]()<>:;,.!?@#$%^&*+=|\\/~`'"\r\n\t]/g;
+
+export function estimateTextTokens(text: string): number {
+  if (!text) return 0;
+  const visible = text.replace(/data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/g, '[image]');
+  const cjkCount = (visible.match(cjkPattern) ?? []).length;
+  const symbolCount = (visible.match(symbolPattern) ?? []).length;
+  const otherCount = Math.max(0, visible.length - cjkCount - symbolCount);
+  return Math.ceil(cjkCount + symbolCount / 2 + otherCount / 4);
+}
+
 function estimateValue(value: unknown, protocol: Protocol): number {
   const text = typeof value === 'string' ? value : JSON.stringify(value, (key, item) => {
     if (key === 'encrypted_content') return opaqueEstimate;
     return isModelMessage(item) ? messageProjection(item, protocol) : item;
   }) ?? '';
-  const visible = text.replace(/data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/g, '[image]');
-  const cjkCount = (visible.match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/gu) ?? []).length;
-  return Math.ceil(cjkCount + (visible.length - cjkCount) / 4);
+  return estimateTextTokens(text);
 }
 
 export function estimateTokens(value: unknown): number {
@@ -87,6 +97,7 @@ export function summaryMessageProjection(message: ModelMessage): unknown {
     ...(message.appContext ? { source: message.appContext.source, version: message.appContext.version } : {}),
     ...(message.callId ? { callId: message.callId } : {}),
     ...(message.toolCalls?.length ? { toolCalls: message.toolCalls } : {}),
+    ...(message.contextArtifactIds?.length ? { contextArtifactIds: message.contextArtifactIds } : {}),
     ...(message.images?.length ? { imageArtifactIds: message.images.map(image => image.artifactId) } : {}),
   };
 }

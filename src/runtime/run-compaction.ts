@@ -28,9 +28,22 @@ export async function compactRunMessages(original: ModelMessage[], options: RunC
     const range = removableRange(messages, currentStart);
     if (!range) return compactLatestResult(messages, currentStart, options);
     const [start, end] = range;
-    const history = messages.slice(start, end).map((message, sequence) => ({ message, sequence, messageId: String(sequence) }));
-    const references = await options.preserveReferences?.(history.map(entry => entry.message),
+    const history = messages.slice(start, end).map((message, sequence) => ({ message: { ...message }, sequence, messageId: String(sequence) }));
+    let references = await options.preserveReferences?.(history.map(entry => entry.message),
       history.flatMap(entry => entry.message.contextArtifactIds ?? []));
+    if (!options.preserveReferences && options.preserveToolOutput) {
+      for (const entry of history) {
+        if (entry.message.role !== 'tool' || entry.message.content.length <= 1200 || entry.message.contextArtifactIds?.length) continue;
+        const preserved = await options.preserveToolOutput(entry.message);
+        if (preserved?.artifactIds.length) {
+          entry.message.contextArtifactIds = [...new Set([...(entry.message.contextArtifactIds ?? []), ...preserved.artifactIds])];
+          references = {
+            text: [references?.text, preserved.text].filter(Boolean).join('\n'),
+            artifactIds: [...new Set([...(references?.artifactIds ?? []), ...preserved.artifactIds])],
+          };
+        }
+      }
+    }
     const content = await summarizeUnits(history, '', options.budget, options.summarize, options.signal);
     options.signal.throwIfAborted();
     const summary: ModelMessage = { role: 'assistant', contextSummary: true, contextArtifactIds: references?.artifactIds,
@@ -61,7 +74,11 @@ async function compactLatestResult(messages: ModelMessage[], currentStart: numbe
     if (!reference?.artifactIds.length) return undefined;
     const call = messages[assistant].toolCalls!.find(call => call.id === tool.callId);
     if (!call) return undefined;
-    const history = [{ ...messages[assistant], toolCalls: [call] }, tool]
+    const annotatedTool: ModelMessage = {
+      ...tool,
+      contextArtifactIds: [...new Set([...(tool.contextArtifactIds ?? []), ...reference.artifactIds])],
+    };
+    const history = [{ ...messages[assistant], toolCalls: [call] }, annotatedTool]
       .map((message, sequence) => ({ message, sequence, messageId: String(sequence) }));
     const summary = await summarizeUnits(history, '', options.budget, options.summarize, options.signal);
     const replacement = { ...tool, providerItems: undefined, contextSummary: true, contextArtifactIds: reference.artifactIds,

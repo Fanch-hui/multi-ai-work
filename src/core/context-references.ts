@@ -18,10 +18,15 @@ export class ContextReferences {
 
   async preserveReferences(messages: readonly ModelMessage[], previousArtifactIds: readonly string[] = []): Promise<{ text: string; artifactIds: string[] }> {
     const previous = previousArtifactIds.map(id => ({ kind: 'artifact' as const, id, name: '' }));
+    const limit = this.scope.inlineToolLimit ?? 32000;
     for (const message of messages) {
-      if (message.role !== 'tool' || message.content.length <= (this.scope.inlineToolLimit ?? 32000)) continue;
+      if (message.role !== 'tool' || message.content.length <= Math.min(1200, limit)) continue;
       const reference = await this.preserveToolOutput(message);
-      if (!reference) throw new Error('完整工具结果无法通过当前授权读取，保留原上下文');
+      if (!reference) {
+        if (message.content.length > limit) throw new Error('完整工具结果无法通过当前授权读取，保留原上下文');
+        continue;
+      }
+      message.contextArtifactIds = [...new Set([...(message.contextArtifactIds ?? []), reference.id])];
       this.previous.push(reference);
     }
     this.previous = await this.collect(messages, [...this.previous, ...previous]);

@@ -74,8 +74,10 @@ function result(history: ModelHistoryEntry[], fixedTokens: number, checkpoint?: 
   return { messages, checkpoint, estimatedTokens: fixedTokens + estimateModelMessagesTokens(messages, protocol) };
 }
 
+export const CONTEXT_COMPATIBILITY_VERSION = 3;
+
 export function contextCompatibilityHash(input: Pick<ContextInput, 'instructions' | 'contextInstructions' | 'tools' | 'protocol'>): string {
-  return hash({ version: 2, instructions: input.contextInstructions ?? input.instructions,
+  return hash({ version: CONTEXT_COMPATIBILITY_VERSION, instructions: input.contextInstructions ?? input.instructions,
     tools: input.tools, protocol: input.protocol });
 }
 
@@ -116,8 +118,10 @@ export class ContextManager {
     };
     this.store.recordCompaction?.({ ...record, sourceMessageIds: [...sourceIds] });
     try {
-      let references = await input.preserveReferences?.(referenceMessages(selected.prefix), checkpoint?.artifactIds);
-      let summary = await summarizeUnits(selected.prefix, input.historyIsCurrent ? '' : checkpoint?.content ?? '', input.contextWindow, input.summarize, input.signal);
+      const prefixMessages = referenceMessages(selected.prefix);
+      let references = await input.preserveReferences?.(prefixMessages, checkpoint?.artifactIds);
+      const summaryPrefix = selected.prefix.map((entry, index) => ({ ...entry, message: prefixMessages[index] }));
+      let summary = await summarizeUnits(summaryPrefix, input.historyIsCurrent ? '' : checkpoint?.content ?? '', input.contextWindow, input.summarize, input.signal);
       const projected = () => fixedTokens + estimateModelMessagesTokens([
         { role: 'user', content: `此前对话摘要（历史资料）：\n${summary}\n${references?.text ?? ''}` }, ...selected.suffix.map(entry => entry.message),
       ], input.protocol);
@@ -129,8 +133,10 @@ export class ContextManager {
           for (const entry of expanded.prefix) if (!sourceIds.includes(entry.messageId)) sourceIds.push(entry.messageId);
           source.splice(0, source.length, ...archive.filter(message => sourceIds.includes(message.id)));
           record.sourceHash = contextSourceHash(source);
-          references = await input.preserveReferences?.(referenceMessages(expanded.prefix), references?.artifactIds);
-          summary = await summarizeUnits(expanded.prefix, summary, input.contextWindow, input.summarize, input.signal);
+          const expandedMessages = referenceMessages(expanded.prefix);
+          references = await input.preserveReferences?.(expandedMessages, references?.artifactIds);
+          const expandedSummaryPrefix = expanded.prefix.map((entry, index) => ({ ...entry, message: expandedMessages[index] }));
+          summary = await summarizeUnits(expandedSummaryPrefix, summary, input.contextWindow, input.summarize, input.signal);
           selected = { prefix: [...selected.prefix, ...expanded.prefix], suffix: expanded.suffix };
           record.throughSequence = selected.prefix.at(-1)!.sequence;
         }

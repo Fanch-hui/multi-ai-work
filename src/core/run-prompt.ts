@@ -1,5 +1,5 @@
-import type { Bot, Conversation, Message, Task, UserQuestion } from '../domain/types.js';
-import { memorySummary } from '../domain/memory.js';
+import type { Bot, Conversation, MemoryEntry, Message, Task, UserQuestion } from '../domain/types.js';
+import { memorySummary, memoryTopic, type MemorySelection } from '../domain/memory.js';
 import type { ToolExecutionContext } from '../domain/tools.js';
 import type { MemoryService } from '../runtime/memory.js';
 import { State } from './state.js';
@@ -10,6 +10,39 @@ import { taskPlanPrompt } from './task-plan-prompt.js';
 import { taskRequirement } from './task-requirements.js';
 import { memoryGuidance } from './memory-policy.js';
 import { runtimeContextMessage } from './run-runtime-context.js';
+
+function stableMemorySort(entries: readonly MemoryEntry[]): MemoryEntry[] {
+  return [...entries].sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) || a.id.localeCompare(b.id));
+}
+
+function stableDirectoryTopics(memory: MemoryService, botId: string, conversationId: string, selection: MemorySelection) {
+  if (!selection.directory.topics.length) return [];
+  const injectedIds = new Set([...selection.fullEntries, ...selection.omittedEntries].map(entry => entry.id));
+  const remaining = [...memory.authorizedEntries({ botId, conversationId }).values()]
+    .filter(entry => !injectedIds.has(entry.id))
+    .sort((a, b) => a.id.localeCompare(b.id));
+  const byTopic = new Map<string, MemoryEntry[]>();
+  for (const entry of remaining) {
+    const topic = memoryTopic(entry);
+    const list = byTopic.get(topic) ?? [];
+    list.push(entry);
+    byTopic.set(topic, list);
+  }
+  return [...selection.directory.topics]
+    .sort((a, b) => a.topic.localeCompare(b.topic))
+    .map(item => {
+      const list = byTopic.get(item.topic);
+      if (list && list.length === item.count) {
+        return {
+          topic: item.topic,
+          count: list.length,
+          summary: list.slice(0, 2).map(entry => memorySummary(entry, 36)).join('；'),
+          ids: list.slice(0, 4).map(entry => entry.id),
+        };
+      }
+      return { ...item, ids: [...item.ids].sort((a, b) => a.localeCompare(b)) };
+    });
+}
 
 export function memorySelectOptions(state: State, task: Task, bot: Bot, room: Conversation, delta: Message[]) {
   const s = state.storage;
@@ -109,20 +142,23 @@ export function runPrompt(state: State, memory: MemoryService, task: Task, bot: 
   const selection = managed && bot.memoryMode !== 'off'
     ? memory.selectContext({ botId: bot.id, conversationId: room.id, roleTerms: selectOptions.roleTerms }, selectOptions)
     : undefined;
+  const sortedFull = selection ? stableMemorySort(selection.fullEntries) : [];
+  const sortedOmitted = selection ? stableMemorySort(selection.omittedEntries) : [];
+  const sortedTopics = selection ? stableDirectoryTopics(memory, bot.id, room.id, selection) : [];
   const runtimeContext = managed ? runtimeContextMessage({
     identity: { source: 'bots', id: bot.id, name: bot.name, role: bot.role },
     conversation: { source: 'conversations', id: room.id, name: room.name },
     members: [...room.memberIds].sort().map(botId => ({ source: 'bots', id: botId, name: s.get<Bot>('bots', botId)?.name ?? botId })),
-    memories: selection ? selection.fullEntries.map(entry => ({
+    memories: sortedFull.map(entry => ({
       source: 'memory_entries',
       id: entry.id,
       revision: entry.revision,
       ...(entry.pinned ? { pinned: true } : {}),
       ...(entry.topic ? { topic: entry.topic } : {}),
       content: entry.content,
-    })) : [],
-    ...(selection?.omittedEntries.length ? {
-      omittedMemories: selection.omittedEntries.map(entry => ({
+    })),
+    ...(sortedOmitted.length ? {
+      omittedMemories: sortedOmitted.map(entry => ({
         source: 'memory_entries',
         id: entry.id,
         revision: entry.revision,
@@ -133,12 +169,12 @@ export function runPrompt(state: State, memory: MemoryService, task: Task, bot: 
         expandWith: 'recall_memory',
       })),
     } : {}),
-    ...(selection && (selection.directory.topics.length || selection.directory.totalRemaining > 0) ? {
+    ...(selection && (sortedTopics.length || selection.directory.totalRemaining > 0) ? {
       memoryDirectory: {
         totalRemaining: selection.directory.totalRemaining,
         hasMore: selection.directory.hasMore,
         hint: '其他获准记忆仅提供主题目录与摘要，未注入全文；需要时用 recall_memory 搜索或按 ID 展开。',
-        topics: selection.directory.topics,
+        topics: sortedTopics,
       },
     } : {}),
   }) : undefined;
