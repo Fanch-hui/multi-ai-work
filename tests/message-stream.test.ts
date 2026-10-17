@@ -28,6 +28,10 @@ function persisted(storage: Storage, id = 'message') {
     { payload: string; stream_sequence: number };
   return { message: JSON.parse(row.payload) as Message, sequence: row.stream_sequence };
 }
+function allEvents(storage: Storage): RunEvent[] {
+  return (storage.prepare('SELECT payload FROM run_events ORDER BY rowid').all() as { payload: string }[])
+    .map(row => JSON.parse(row.payload) as RunEvent);
+}
 afterEach(() => {
   vi.useRealTimers();
   for (const item of temporary.splice(0)) {
@@ -52,20 +56,29 @@ describe('逐段持久化的流式消息', () => {
     expect(storage.messages('room')[0].content).toBe('最终答复');
     storage.messageStream.flush('message'); storage.messageStream.flush('message');
     expect(persisted(storage)).toMatchObject({ sequence: 4, message: { content: '最终答复' } });
-    expect(storage.events().map(event => event.data.streamSequence)).toEqual([1, 2, 3, 4]);
+    expect(allEvents(storage).map(event => event.data.streamSequence)).toEqual([1, 2, 3, 4]);
   });
 
-  it('旧格式、其他运行和已提交消息事件不参与正文重放', () => {
+  it('旧格式、其他运行和已提交或已废弃消息事件不参与正文重放', () => {
     const storage = open();
     storage.event(text('legacy', { delta: '历史事件' }));
-    storage.messageStream.append(text('wrong-run', { delta: '串入' }, 'another-run'), 'message');
-    storage.messageStream.append(text('actual', { delta: '正确' }), 'message');
+    expect(storage.messageStream.append(text('missing-msg', { delta: '不存在' }), 'missing')).toBe(false);
+    expect(storage.messageStream.append(text('wrong-run', { delta: '串入' }, 'another-run'), 'message')).toBe(false);
+    expect(storage.messageStream.append(text('actual-1', { delta: '正' }), 'message')).toBe(true);
+    expect(storage.messageStream.append(text('actual-2', { delta: '确' }), 'message')).toBe(true);
     const projected = storage.getMessage('message')!;
+    expect(projected.content).toBe('正确');
     storage.updateMessage({ ...projected, status: 'committed' });
-    storage.messageStream.append(text('late', { delta: '迟到' }), 'message');
+    expect(storage.messageStream.append(text('late', { delta: '迟到' }), 'message')).toBe(false);
+    storage.appendMessage({ ...draft('discarded-msg'), status: 'discarded' as Message['status'] });
+    expect(storage.messageStream.append(text('discarded-delta', { delta: '废弃' }), 'discarded-msg')).toBe(false);
     storage.messageStream.flush('message');
+    storage.messageStream.flush('discarded-msg');
     expect(storage.getMessage('message')).toMatchObject({ status: 'committed', content: '正确' });
-    expect(storage.events().filter(event => ['legacy', 'wrong-run', 'late'].includes(event.id))
+    expect(storage.getMessage('discarded-msg')?.content).toBe('');
+    expect(allEvents(storage).filter(event => ['actual-1', 'actual-2'].includes(event.id))
+      .map(event => event.data.streamSequence)).toEqual([1, 2]);
+    expect(allEvents(storage).filter(event => ['legacy', 'missing-msg', 'wrong-run', 'late', 'discarded-delta'].includes(event.id))
       .every(event => event.data.streamSequence === undefined)).toBe(true);
   });
 
@@ -117,7 +130,7 @@ describe('逐段持久化的流式消息', () => {
       SELECT RAISE(ABORT, '片段写入失败'); END`);
     expect(() => writer.append(text('rejected', { delta: '未保存' }), 'message')).toThrow('片段写入失败');
     expect(storage.getMessage('message')?.content).toBe('');
-    expect(storage.events()).toEqual([]);
+    expect(allEvents(storage)).toEqual([]);
     writer.close();
   });
 
@@ -132,7 +145,7 @@ describe('逐段持久化的流式消息', () => {
     expect(() => writer.append(text('not-saved', { delta: '未保存' }), 'message')).toThrow('读取失败');
     failRead.mockRestore();
     expect(original({ payload: JSON.stringify(persisted(storage).message), stream_sequence: 0 }).message.content).toBe('已保存');
-    expect(storage.events()).toHaveLength(1);
+    expect(allEvents(storage)).toHaveLength(1);
     storage.messageStream.recover();
     expect(persisted(storage).message.content).toBe('已保存');
   });

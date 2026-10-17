@@ -1,8 +1,10 @@
 import { createHash } from 'node:crypto';
-import { readFile, realpath, stat } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { ToolExecutionContext } from '../domain/tools.js';
-import { workspacePath } from './paths.js';
+import { resolveCanonicalRoot, validateExistingWorkspaceCandidate, workspacePath } from './paths.js';
+
+export { resolveCanonicalRoot, validateExistingWorkspaceCandidate };
 
 export const scanExclusions = ['.git', 'node_modules', 'dist', 'build', 'release', 'coverage', '.cache', '.next', 'target', '.ssh', '.aws', '.gnupg', '.codex', '.agents'];
 export const credentialFileNames = ['.netrc', '_netrc', '.npmrc', '.pypirc', '.git-credentials'];
@@ -19,10 +21,10 @@ export function excludedFromScan(relative: string): boolean {
   return sensitivePath(relative) || relative.split(/[\\/]/).some(part => scanExclusions.includes(part));
 }
 
-export async function filePath(input: string, context: ToolExecutionContext, create = false): Promise<string> {
+export async function filePath(input: string, context: ToolExecutionContext, create = false, rootReal?: string): Promise<string> {
   if (sensitivePath(input)) throw new Error('工具不访问凭据文件或目录');
-  const target = await workspacePath(input, context, create);
-  const root = await realpath(context.workspace.path);
+  const root = rootReal ?? await resolveCanonicalRoot(context.workspace.path);
+  const target = await workspacePath(input, context, create, root);
   if (sensitivePath(path.relative(root, target))) throw new Error('工具不访问凭据文件或目录');
   return target;
 }

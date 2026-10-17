@@ -6,57 +6,97 @@ interface Fragment { sequence: number; payload: string; }
 
 // The cursor is stored beside the materialized message, never in the public message payload.
 export class MessageStream {
-  constructor(private storage: Storage) {}
+  private readonly rowStmt;
+  private readonly latestStmt;
+  private readonly appendStateStmt;
+  private readonly updateStmt;
+  private readonly draftIdsStmt;
+  private readonly appendTx: (event: RunEvent, messageId: string) => boolean;
+  private readonly flushTx: (messageId: string) => void;
+  private readonly updateTx: (message: Message) => void;
+  private readonly recoverTx: (rows: { id: string }[]) => void;
+
+  constructor(private storage: Storage) {
+    this.rowStmt = this.storage.prepare('SELECT payload, stream_sequence FROM messages WHERE id = ?');
+    this.latestStmt = this.storage.prepare(`SELECT json_extract(payload, '$.data.streamSequence') AS sequence FROM run_events
+      WHERE json_extract(payload, '$.data.messageId') = ? AND json_extract(payload, '$.data.streamSequence') IS NOT NULL
+      ORDER BY json_extract(payload, '$.data.streamSequence') DESC LIMIT 1`);
+    this.appendStateStmt = this.storage.prepare(`SELECT
+        json_extract(payload, '$.status') AS status,
+        json_extract(payload, '$.runId') AS runId,
+        CASE
+          WHEN json_extract(payload, '$.status') = 'draft' AND json_extract(payload, '$.runId') = ?
+          THEN COALESCE((
+            SELECT json_extract(payload, '$.data.streamSequence')
+            FROM run_events
+            WHERE json_extract(payload, '$.data.messageId') = messages.id
+              AND json_extract(payload, '$.data.streamSequence') IS NOT NULL
+            ORDER BY json_extract(payload, '$.data.streamSequence') DESC
+            LIMIT 1
+          ), 0)
+          ELSE 0
+        END AS maxSeq
+      FROM messages WHERE id = ?`);
+    this.updateStmt = this.storage.prepare('UPDATE messages SET payload = ?, stream_sequence = ? WHERE id = ?');
+    this.draftIdsStmt = this.storage.prepare(`SELECT id FROM messages WHERE json_extract(payload, '$.status') = 'draft'`);
+
+    this.appendTx = this.storage.db.transaction((event: RunEvent, messageId: string) => {
+      const target = this.appendStateStmt.get(event.runId, messageId) as
+        { status: string; runId?: string; maxSeq: number } | undefined;
+      if (!target || target.status !== 'draft' || target.runId !== event.runId) {
+        this.storage.event(event);
+        return false;
+      }
+      const sequence = Number(target.maxSeq ?? 0) + 1;
+      this.storage.event({ ...event, data: { ...event.data, messageId, streamSequence: sequence } });
+      return true;
+    });
+
+    this.flushTx = this.storage.db.transaction((messageId: string) => {
+      const row = this.row(messageId);
+      if (!row) return;
+      const { message, sequence } = this.project(row);
+      if (sequence === row.stream_sequence) return;
+      this.updateStmt.run(JSON.stringify(message), sequence, messageId);
+    });
+
+    this.updateTx = this.storage.db.transaction((message: Message) => {
+      // Callers supply the projected content or an explicit replacement. Consume the same log prefix atomically.
+      const sequence = this.latest(message.id);
+      this.updateStmt.run(JSON.stringify(message), sequence, message.id);
+    });
+
+    this.recoverTx = this.storage.db.transaction((rows: { id: string }[]) => {
+      for (const row of rows) this.flush(row.id);
+    });
+  }
 
   private row(id: string): MessageRow | undefined {
-    return this.storage.prepare('SELECT payload, stream_sequence FROM messages WHERE id = ?').get(id) as MessageRow | undefined;
+    return this.rowStmt.get(id) as MessageRow | undefined;
   }
 
   private latest(id: string): number {
-    const row = this.storage.prepare(`SELECT json_extract(payload, '$.data.streamSequence') AS sequence FROM run_events
-      WHERE json_extract(payload, '$.data.messageId') = ? AND json_extract(payload, '$.data.streamSequence') IS NOT NULL
-      ORDER BY json_extract(payload, '$.data.streamSequence') DESC LIMIT 1`).get(id) as { sequence: number } | undefined;
+    const row = this.latestStmt.get(id) as { sequence: number } | undefined;
     return row?.sequence ?? 0;
   }
 
-  append(event: RunEvent, messageId: string): void {
-    this.storage.transaction(() => {
-      const target = this.storage.prepare(`SELECT json_extract(payload, '$.status') AS status,
-        json_extract(payload, '$.runId') AS runId FROM messages WHERE id = ?`).get(messageId) as
-        { status: string; runId?: string } | undefined;
-      if (!target || target.status !== 'draft' || target.runId !== event.runId) {
-        this.storage.event(event); return;
-      }
-      const sequence = this.latest(messageId) + 1;
-      this.storage.event({ ...event, data: { ...event.data, messageId, streamSequence: sequence } });
-    });
+  append(event: RunEvent, messageId: string): boolean {
+    return this.appendTx(event, messageId);
   }
 
   project(row: MessageRow) { return projectStreamMessage(this.storage, row); }
 
   flush(messageId: string): void {
-    this.storage.transaction(() => {
-      const row = this.row(messageId);
-      if (!row) return;
-      const { message, sequence } = this.project(row);
-      if (sequence === row.stream_sequence) return;
-      this.storage.prepare('UPDATE messages SET payload = ?, stream_sequence = ? WHERE id = ?')
-        .run(JSON.stringify(message), sequence, messageId);
-    });
+    this.flushTx(messageId);
   }
 
   update(message: Message): void {
-    this.storage.transaction(() => {
-      // Callers supply the projected content or an explicit replacement. Consume the same log prefix atomically.
-      const sequence = this.latest(message.id);
-      this.storage.prepare('UPDATE messages SET payload = ?, stream_sequence = ? WHERE id = ?')
-        .run(JSON.stringify(message), sequence, message.id);
-    });
+    this.updateTx(message);
   }
 
   recover(): void {
-    const rows = this.storage.prepare(`SELECT id FROM messages WHERE json_extract(payload, '$.status') = 'draft'`).all() as { id: string }[];
-    this.storage.transaction(() => { for (const row of rows) this.flush(row.id); });
+    const rows = this.draftIdsStmt.all() as { id: string }[];
+    this.recoverTx(rows);
   }
 }
 

@@ -177,4 +177,32 @@ describe('file discovery and editing', () => {
     await expect(execute('write_file', { path: 'original.txt', content: 'three' })).rejects.toThrow('版本');
     expect(await readFile(target, 'utf8')).toBe('external');
   });
+
+  it('filters out-of-bounds symlinks and preserves stable candidate order under concurrent validation', async () => {
+    await writeFile(path.join(outside, 'escaped.txt'), 'needle-content\n');
+    await writeFile(path.join(directory, '.env'), 'needle-content\n');
+    const expectedPaths: string[] = [];
+    for (let i = 1; i <= 20; i++) {
+      const name = `item-${String(i).padStart(2, '0')}.txt`;
+      expectedPaths.push(name);
+      await writeFile(path.join(directory, name), `header\nneedle-content-${i}\n`);
+    }
+    await symlink(path.join(outside, 'escaped.txt'), path.join(directory, 'item-00-escape.txt'));
+    await symlink(outside, path.join(directory, 'escape-dir'));
+    await symlink(path.join(directory, '.env'), path.join(directory, 'item-10-env-alias.txt'));
+
+    const { execute } = context(directory);
+    const found1 = await execute('find_files', { pattern: '*.txt', limit: 50 });
+    const found2 = await execute('find_files', { pattern: '*.txt', limit: 50 });
+    expect(found1.items.map((item: { path: string }) => item.path)).toEqual(expectedPaths);
+    expect(found2.items.map((item: { path: string }) => item.path)).toEqual(expectedPaths);
+
+    const listed = await execute('list_directory', { limit: 50 });
+    expect(listed.items.map((item: { path: string }) => item.path)).toEqual(expectedPaths);
+
+    const searched = await execute('search_text', { query: 'needle-content', limit: 50 });
+    expect(searched.items).toHaveLength(20);
+    expect(searched.items.map((item: { path: string }) => item.path).sort()).toEqual(expectedPaths);
+    expect(searched.items.some((item: { path: string }) => item.path.includes('escape') || item.path.includes('env-alias'))).toBe(false);
+  });
 });

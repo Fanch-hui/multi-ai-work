@@ -70,6 +70,54 @@ describe('repeat tool reminders', () => {
     expect(repeatToolReminders(messages, calls.map(call => call.id)).map(message => message.appContext?.version))
       .toEqual(['v1:ordered:4']);
   });
+
+  it('detects 2-step alternating loops at 3, 5 and 8 cycles and deduplicates same cycle', () => {
+    const alternating = (cycles: number): ModelMessage[] =>
+      Array.from({ length: cycles }, (_, index) => [
+        ...exchange(`a-${index + 1}`, 'read_file', '{"path":"a.txt"}'),
+        ...exchange(`b-${index + 1}`, 'search_text', '{"query":"foo"}'),
+      ]).flat();
+
+    const messages = alternating(9);
+    const reminders = repeatToolReminders(messages, ids(messages));
+    expect(reminders).toHaveLength(3);
+    expect(reminders.map(message => message.appContext?.version)).toEqual([
+      'v2:cycle:["read_file",{"path":"a.txt"}]->["search_text",{"query":"foo"}]:3',
+      'v2:cycle:["read_file",{"path":"a.txt"}]->["search_text",{"query":"foo"}]:5',
+      'v2:cycle:["read_file",{"path":"a.txt"}]->["search_text",{"query":"foo"}]:8',
+    ]);
+    expect(reminders[0].content).toContain('两步工具交替循环调用');
+    expect(reminders[0].content).toContain('3 个周期');
+    expect(reminders[1].content).toContain('5 个周期');
+    expect(reminders[2].content).toContain('8 个周期');
+
+    messages.push(...reminders);
+    expect(repeatToolReminders(messages, ids(messages))).toEqual([]);
+  });
+
+  it('terminates 2-step alternating count when tool or arguments change', () => {
+    const messages = [
+      ...exchange('1', 'read_file', '{"path":"a.txt"}'),
+      ...exchange('2', 'read_file', '{"path":"b.txt"}'),
+      ...exchange('3', 'read_file', '{"path":"a.txt"}'),
+      ...exchange('4', 'read_file', '{"path":"b.txt"}'),
+      ...exchange('5', 'read_file', '{"path":"c.txt"}'),
+      ...exchange('6', 'read_file', '{"path":"d.txt"}'),
+    ];
+    expect(repeatToolReminders(messages, ids(messages))).toEqual([]);
+
+    messages.push(
+      ...exchange('7', 'read_file', '{"path":"c.txt"}'),
+      ...exchange('8', 'read_file', '{"path":"d.txt"}'),
+      ...exchange('9', 'read_file', '{"path":"c.txt"}'),
+      ...exchange('10', 'read_file', '{"path":"d.txt"}'),
+    );
+    const reminders = repeatToolReminders(messages, ['9', '10']);
+    expect(reminders).toHaveLength(1);
+    expect(reminders[0].appContext?.version).toBe(
+      'v2:cycle:["read_file",{"path":"c.txt"}]->["read_file",{"path":"d.txt"}]:3',
+    );
+  });
 });
 
 describe('managed reminder persistence', () => {

@@ -1,14 +1,23 @@
 import { execFile } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { promisify } from 'node:util';
-import { readFile, readdir, realpath, stat } from 'node:fs/promises';
+import { readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import ignore from 'ignore';
 import type { ToolExecutionContext } from '../domain/tools.js';
-import { credentialFileNames, excludedFromScan, filePath, scanExclusions } from './file-policy.js';
+import {
+  credentialFileNames,
+  excludedFromScan,
+  filePath,
+  resolveCanonicalRoot,
+  scanExclusions,
+  sensitivePath,
+  validateExistingWorkspaceCandidate,
+} from './file-policy.js';
 
 const executeFile = promisify(execFile);
 const require = createRequire(import.meta.url);
+const SEARCH_VALIDATION_CONCURRENCY = 8;
 type Page = { path: string; offset: number; limit: number };
 type Search = Page & { query: string; regex: boolean; glob?: string; contextLines: number };
 const privateGlobs = [...credentialFileNames, '.env*', 'credentials*', 'secret*', 'id_rsa*', 'id_ed25519*', 'id_ecdsa*', '*.pem', '*.p12', '*.pfx', '*.key'];
@@ -17,16 +26,35 @@ function paginate<T>(items: T[], offset: number, limit: number) {
   return { items: items.slice(offset, offset + limit), offset, nextOffset: offset + limit < items.length ? offset + limit : null, total: items.length };
 }
 
-async function directory(input: string, context: ToolExecutionContext): Promise<string> {
-  const target = await filePath(input, context);
+async function mapConcurrent<T, R>(items: readonly T[], concurrency: number, mapper: (item: T, index: number) => Promise<R>): Promise<R[]> {
+  if (items.length === 0) return [];
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+  const workerCount = Math.min(concurrency, items.length);
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (nextIndex < items.length) {
+      const current = nextIndex++;
+      results[current] = await mapper(items[current], current);
+    }
+  }));
+  return results;
+}
+
+async function directory(input: string, context: ToolExecutionContext, rootReal?: string): Promise<string> {
+  const target = await filePath(input, context, false, rootReal);
   if (!(await stat(target)).isDirectory()) throw new Error('目标不是目录');
   return target;
 }
 
-async function visiblePath(target: string, context: ToolExecutionContext): Promise<string | undefined> {
-  const root = await realpath(context.workspace.path);
+async function visiblePath(target: string, context: ToolExecutionContext, root: string): Promise<string | undefined> {
   if (excludedFromScan(path.relative(root, target))) return undefined;
-  try { return await filePath(target, context); } catch { return undefined; }
+  try {
+    const canonical = await validateExistingWorkspaceCandidate(root, context.workspace.path, target);
+    if (sensitivePath(path.relative(root, canonical))) return undefined;
+    return canonical;
+  } catch {
+    return undefined;
+  }
 }
 
 async function ignoreRules(root: string, target: string, context: ToolExecutionContext) {
@@ -39,7 +67,7 @@ async function ignoreRules(root: string, target: string, context: ToolExecutionC
   for (const base of directories) {
     const matcher = ignore();
     for (const name of ['.gitignore', '.ignore', '.rgignore']) {
-      try { matcher.add(await readFile(await filePath(path.join(base, name), context, true), 'utf8')); }
+      try { matcher.add(await readFile(await filePath(path.join(base, name), context, true, root), 'utf8')); }
       catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
     }
     rules.push({ base, matcher });
@@ -48,14 +76,14 @@ async function ignoreRules(root: string, target: string, context: ToolExecutionC
 }
 
 export async function listDirectory(input: Page, context: ToolExecutionContext): Promise<unknown> {
-  const target = await directory(input.path, context);
-  const root = await realpath(context.workspace.path);
+  const root = await resolveCanonicalRoot(context.workspace.path);
+  const target = await directory(input.path, context, root);
   const rules = await ignoreRules(root, target, context);
-  const entries: { path: string; name: string; type: string; size: number }[] = [];
-  for (const item of await readdir(target, { withFileTypes: true })) {
+  const items = await readdir(target, { withFileTypes: true });
+  const checked = await mapConcurrent(items, SEARCH_VALIDATION_CONCURRENCY, async item => {
     const candidate = path.join(target, item.name);
-    const canonical = await visiblePath(candidate, context);
-    if (!canonical) continue;
+    const canonical = await visiblePath(candidate, context, root);
+    if (!canonical) return undefined;
     const info = await stat(canonical);
     let ignored = false;
     for (const rule of rules) {
@@ -63,10 +91,15 @@ export async function listDirectory(input: Page, context: ToolExecutionContext):
       const verdict = rule.matcher.test(relative);
       if (verdict.ignored || verdict.unignored) ignored = verdict.ignored;
     }
-    if (ignored) continue;
-    entries.push({ path: path.relative(root, candidate).split(path.sep).join('/'), name: item.name,
-      type: item.isSymbolicLink() ? 'symlink' : info.isDirectory() ? 'directory' : 'file', size: info.size });
-  }
+    if (ignored) return undefined;
+    return {
+      path: path.relative(root, candidate).split(path.sep).join('/'),
+      name: item.name,
+      type: item.isSymbolicLink() ? 'symlink' : info.isDirectory() ? 'directory' : 'file',
+      size: info.size,
+    };
+  });
+  const entries = checked.filter((entry): entry is NonNullable<typeof entry> => entry !== undefined);
   entries.sort((a, b) => a.path.localeCompare(b.path));
   return { path: target, ...paginate(entries, input.offset, input.limit) };
 }
@@ -89,15 +122,16 @@ async function ripgrep(args: string[], cwd: string, context: ToolExecutionContex
 }
 
 export async function findFiles(input: Page & { pattern: string }, context: ToolExecutionContext): Promise<unknown> {
-  const target = await directory(input.path, context);
-  const root = await realpath(context.workspace.path);
+  const root = await resolveCanonicalRoot(context.workspace.path);
+  const target = await directory(input.path, context, root);
   const output = await ripgrep(['--files', '--null', '.'], target, context);
-  const matches: { path: string }[] = [];
-  for (const relative of output.split('\0').filter(Boolean)) {
-    if (!matchesPattern(relative, input.pattern)) continue;
+  const candidates = output.split('\0').filter(relative => Boolean(relative) && matchesPattern(relative, input.pattern));
+  const validated = await mapConcurrent(candidates, SEARCH_VALIDATION_CONCURRENCY, async relative => {
     const candidate = path.resolve(target, relative);
-    if (await visiblePath(candidate, context)) matches.push({ path: path.relative(root, candidate).split(path.sep).join('/') });
-  }
+    if (!await visiblePath(candidate, context, root)) return undefined;
+    return { path: path.relative(root, candidate).split(path.sep).join('/') };
+  });
+  const matches = validated.filter((item): item is { path: string } => item !== undefined);
   matches.sort((a, b) => a.path.localeCompare(b.path));
   return { path: target, ...paginate(matches, input.offset, input.limit) };
 }
@@ -109,12 +143,12 @@ function matchesPattern(relative: string, pattern: string): boolean {
 
 type EventData = { path?: { text?: string }; line_number?: number; lines?: { text?: string } };
 export async function searchText(input: Search, context: ToolExecutionContext): Promise<unknown> {
-  const target = await directory(input.path, context);
-  const root = await realpath(context.workspace.path);
+  const root = await resolveCanonicalRoot(context.workspace.path);
+  const target = await directory(input.path, context, root);
   const options = ['--json', '--context', String(input.contextLines), '--max-columns', '2000'];
   if (!input.regex) options.push('--fixed-strings');
   const output = await ripgrep([...options, '--', input.query, '.'], target, context);
-  const files = new Map<string, { canonical: string; lines: Map<number, string>; matches: number[] }>();
+  const pendingFiles = new Map<string, { lines: Map<number, string>; matches: number[] }>();
   for (const line of output.split('\n').filter(Boolean)) {
     const event = JSON.parse(line) as { type: string; data: EventData };
     if (event.type !== 'match' && event.type !== 'context') continue;
@@ -122,19 +156,25 @@ export async function searchText(input: Search, context: ToolExecutionContext): 
     if (!data.path?.text || !data.line_number || data.lines?.text === undefined) continue;
     if (input.glob && !matchesPattern(data.path.text, input.glob)) continue;
     const candidate = path.resolve(target, data.path.text);
-    let record = files.get(candidate);
+    let record = pendingFiles.get(candidate);
     if (!record) {
-      const canonical = await visiblePath(candidate, context);
-      if (!canonical) continue;
-      record = { canonical, lines: new Map(), matches: [] }; files.set(candidate, record);
+      record = { lines: new Map(), matches: [] };
+      pendingFiles.set(candidate, record);
     }
     record.lines.set(data.line_number, data.lines.text.replace(/\r?\n$/, ''));
     if (event.type === 'match') record.matches.push(data.line_number);
   }
-  const matches = [...files].flatMap(([candidate, record]) => record.matches.map(number => ({
-    path: path.relative(root, candidate).split(path.sep).join('/'), line: number, text: record.lines.get(number),
-    context: [...record.lines].filter(([line]) => line >= number - input.contextLines && line <= number + input.contextLines)
-      .map(([line, text]) => ({ line, text }))
-  })));
+  const validatedEntries = await mapConcurrent([...pendingFiles.entries()], SEARCH_VALIDATION_CONCURRENCY, async ([candidate, record]) => {
+    const canonical = await visiblePath(candidate, context, root);
+    if (!canonical) return undefined;
+    return [candidate, record] as const;
+  });
+  const matches = validatedEntries
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== undefined)
+    .flatMap(([candidate, record]) => record.matches.map(number => ({
+      path: path.relative(root, candidate).split(path.sep).join('/'), line: number, text: record.lines.get(number),
+      context: [...record.lines].filter(([line]) => line >= number - input.contextLines && line <= number + input.contextLines)
+        .map(([line, text]) => ({ line, text }))
+    })));
   return { path: target, ...paginate(matches, input.offset, input.limit) };
 }
