@@ -135,7 +135,7 @@ describe('task process management', () => {
       if (table === 'processes') processPuts++;
       return rawPut(table, value);
     }) as typeof state.storage.put;
-    const script = 'let i=0;const timer=setInterval(()=>{process.stdout.write(`chunk-${i++}\\n`);if(i>=200)clearInterval(timer)},1)';
+    const script = 'let i=0;const timer=setInterval(()=>{let b=0;const step=()=>{if(i>=200){clearInterval(timer);return;}process.stdout.write(`chunk-${i++}\\n`);if(++b<10)setImmediate(step);};step();},15)';
     const started = await ctx.processes!.run({ ...command(script), background: true }) as any;
     let liveRead: any;
     await waitFor(async () => {
@@ -146,7 +146,7 @@ describe('task process management', () => {
     await waitFor(() => !service.hasActive());
     const putsAtCompletion = processPuts;
     expect(putsAtCompletion).toBeGreaterThanOrEqual(3);
-    expect(putsAtCompletion).toBeLessThan(25);
+    expect(putsAtCompletion).toBeLessThan(15);
     const persisted = state.storage.get<any>('processes', started.processId);
     expect(persisted.status).toBe('completed');
     expect(persisted.stdout).toContain('chunk-0\n');
