@@ -9,7 +9,7 @@ export function accessibleArtifacts(state: State, room: Conversation, botId: str
       for (const artifactId of message.artifactIds) returned.add(artifactId);
   }
   if (room.purpose === 'chief' && botId === state.settings().mainBotId) {
-    for (const task of s.all<Task>('tasks').filter(item => item.conversationId === room.id)) {
+    for (const task of s.byField<Task>('tasks', 'conversationId', room.id)) {
       for (const artifactId of s.metadata<string[]>(`returned-artifacts:${task.id}`) ?? []) {
         const artifact = s.get<Artifact>('artifacts', artifactId);
         const group = artifact && s.get<Conversation>('conversations', artifact.conversationId);
@@ -33,15 +33,30 @@ export function accessibleArtifacts(state: State, room: Conversation, botId: str
       for (const artifactId of task.inputArtifactIds ?? []) if (inherited.has(artifactId)) returned.add(artifactId);
     }
   }
-  return s.all<Artifact>('artifacts').filter(item => item.conversationId === room.id || returned.has(item.id));
+  const artifacts = s.byField<Artifact>('artifacts', 'conversationId', room.id);
+  const seen = new Set(artifacts.map(item => item.id));
+  for (const id of returned) {
+    if (seen.has(id)) continue;
+    const artifact = s.get<Artifact>('artifacts', id);
+    if (artifact) {
+      seen.add(id);
+      artifacts.push(artifact);
+    }
+  }
+  return artifacts;
 }
 
 export function ownsTaskFile(state: State, task: Task, path: string, version: string): boolean {
   const s = state.storage;
-  if (s.all<Artifact>('artifacts').some(item => item.taskId === task.id && item.workingPath === path && item.sha256 === version)) return true;
-  return s.all<{ runId: string; name: string; status: string; result?: { path?: string; version?: string } }>('tool_operations')
-    .some(item => s.get<Run>('runs', item.runId)?.taskId === task.id && ['write_file', 'edit_file'].includes(item.name)
-      && item.status === 'succeeded' && item.result?.path === path && item.result.version === version);
+  if (s.byField<Artifact>('artifacts', 'taskId', task.id).some(item => item.workingPath === path && item.sha256 === version)) return true;
+  const runIds = new Set([...task.runIds, ...(s.get<Task>('tasks', task.id)?.runIds ?? []), ...s.byField<Run>('runs', 'taskId', task.id).map(run => run.id)]);
+  for (const runId of runIds) {
+    const matched = s.byField<{ runId: string; name: string; status: string; result?: { path?: string; version?: string } }>('tool_operations', 'runId', runId)
+      .some(item => ['write_file', 'edit_file'].includes(item.name)
+        && item.status === 'succeeded' && item.result?.path === path && item.result.version === version);
+    if (matched) return true;
+  }
+  return false;
 }
 
 export function messageTools(state: State, roomId: string) {

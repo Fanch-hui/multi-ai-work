@@ -1,5 +1,6 @@
+import { createHash } from 'node:crypto';
 import type { MemoryEntry, MemoryRevisionRecord, MemoryUsage } from '../domain/memory.js';
-import { searchableMemoryText } from '../domain/memory.js';
+import { memoryPartitionKey, normalizeMemoryContent, searchableMemoryText } from '../domain/memory.js';
 import type { MemorySearchMatch, MemorySearchQuery, MemoryStore } from '../runtime/memory.js';
 import type { Storage } from './storage.js';
 
@@ -179,16 +180,81 @@ export function getMemoryUsage(storage: Storage, memoryId: string): MemoryUsage 
   };
 }
 
+export function ensureMemoryContentHashes(storage: Storage) {
+  const rows = storage.prepare("SELECT id, payload FROM memory_entries WHERE json_extract(payload, '$.contentHash') IS NULL").all() as { id: string; payload: string }[];
+  if (!rows.length) return;
+  const update = storage.prepare('UPDATE memory_entries SET payload = ? WHERE id = ?');
+  storage.transaction(() => {
+    for (const row of rows) {
+      const entry = JSON.parse(row.payload) as MemoryEntry;
+      const contentHash = createHash('sha256').update(normalizeMemoryContent(entry.content)).digest('hex');
+      update.run(JSON.stringify({ ...entry, contentHash }), row.id);
+    }
+  });
+}
+
+export function findDuplicateMemory(
+  storage: Storage,
+  scope: MemoryEntry['scope'],
+  ownerId: string,
+  allowedConversationIds: string[],
+  contentHash: string,
+  excludeId?: string,
+): MemoryEntry | undefined {
+  const rows = storage.prepare(`
+    SELECT payload FROM memory_entries
+    WHERE json_extract(payload, '$.scope') = ?
+      AND json_extract(payload, '$.ownerId') = ?
+      AND json_extract(payload, '$.contentHash') = ?
+      AND json_extract(payload, '$.status') IN ('approved', 'candidate')
+    ORDER BY rowid
+  `).all(scope, ownerId, contentHash) as { payload: string }[];
+  const targetKey = memoryPartitionKey({ scope, ownerId, allowedConversationIds });
+  for (const row of rows) {
+    const item = JSON.parse(row.payload) as MemoryEntry;
+    if (item.id === excludeId) continue;
+    if (memoryPartitionKey(item) === targetKey) return item;
+  }
+  return undefined;
+}
+
+export function listMemoriesWithUsage(storage: Storage): MemoryEntry[] {
+  const rows = storage.prepare(`
+    SELECT m.payload AS payload, u.payload AS usagePayload
+    FROM memory_entries m
+    LEFT JOIN memory_usage u ON u.id = m.id
+    ORDER BY m.rowid
+  `).all() as { payload: string; usagePayload: string | null }[];
+  return rows.map(row => {
+    const entry = JSON.parse(row.payload) as MemoryEntry;
+    if (!row.usagePayload) return entry;
+    const record = JSON.parse(row.usagePayload) as MemoryUsageRecord;
+    return {
+      ...entry,
+      usage: {
+        autoInjectedCount: record.autoInjectedCount,
+        activeReadCount: record.activeReadCount,
+        lastRecalledAt: record.lastRecalledAt,
+        lastAutoInjectedAt: record.lastAutoInjectedAt,
+        lastActiveReadAt: record.lastActiveReadAt,
+      },
+    };
+  });
+}
+
 export function listMemoryRevisions(storage: Storage, memoryId: string): MemoryRevisionRecord[] {
   return storage.byField<MemoryRevisionRecord>('memory_revisions', 'memoryId', memoryId)
     .sort((a, b) => b.revision - a.revision);
 }
 
 export function createStorageMemoryStore(storage: Storage): MemoryStore {
+  ensureMemoryContentHashes(storage);
   if (!storage.metadata('memory-search-v2')) rebuildMemorySearch(storage);
   return {
     list: () => storage.all<MemoryEntry>('memory_entries'),
     save: entry => { storage.put('memory_entries', entry); },
+    findDuplicate: (scope, ownerId, allowedConversationIds, contentHash, excludeId) =>
+      findDuplicateMemory(storage, scope, ownerId, allowedConversationIds, contentHash, excludeId),
     search: query => searchAuthorizedMemories(storage, query),
     revisions: memoryId => listMemoryRevisions(storage, memoryId),
     saveRevision: record => { storage.put('memory_revisions', record); },

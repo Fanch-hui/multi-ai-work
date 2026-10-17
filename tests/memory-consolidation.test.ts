@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Bot, MemoryEntry, Task } from '../src/domain/types.js';
 import { eventually, setup } from './core-harness.js';
 import { id, now } from '../src/core/state.js';
+import { ensureMemoryContentHashes } from '../src/core/memory-storage.js';
 
 describe('记忆整理、版本溯源与并发保护', () => {
   it('同一分区内按内容哈希确定性去重并合并来源，不递增语义版本；跨分区独立保存', async () => {
@@ -458,5 +459,94 @@ describe('记忆整理、版本溯源与并发保护', () => {
     });
     const restoredHistory = await core.request('memories.history', { id: entry.id }) as { revisions: unknown[] };
     expect(restoredHistory.revisions).toHaveLength(1);
+  });
+
+  it('旧条目缺失 contentHash 回填不改写版本与保护标记，按分区哈希索引去重且 usage 投影准确', async () => {
+    const { core, bot } = await setup(async () => ({ text: '完成' }));
+    const member = bot('成员');
+    const workspaceId = core.state.snapshot().workspaces[0].id;
+    const roomA = core.entities.createConversation({ name: '会话甲', kind: 'private', memberIds: [member.id], workspaceId });
+    const roomB = core.entities.createConversation({ name: '会话乙', kind: 'private', memberIds: [member.id], workspaceId });
+
+    const fixedTime = '2026-01-02T03:04:05.000Z';
+    const legacyEntry: MemoryEntry = {
+      id: 'legacy-mem-1',
+      scope: 'bot',
+      ownerId: member.id,
+      allowedConversationIds: [roomB.id, roomA.id],
+      sourceIds: ['msg-old'],
+      content: '保持输出简洁清晰',
+      pinned: true,
+      userMaintained: true,
+      status: 'approved',
+      revision: 3,
+      createdAt: fixedTime,
+      updatedAt: fixedTime,
+    };
+    core.state.storage.put('memory_entries', legacyEntry);
+
+    ensureMemoryContentHashes(core.state.storage);
+    const backfilled = core.state.storage.get<MemoryEntry>('memory_entries', legacyEntry.id)!;
+    expect(backfilled.contentHash).toBeTruthy();
+    expect(backfilled.revision).toBe(3);
+    expect(backfilled.updatedAt).toBe(fixedTime);
+    expect(backfilled.pinned).toBe(true);
+    expect(backfilled.userMaintained).toBe(true);
+
+    const plan = core.state.storage.prepare(`
+      EXPLAIN QUERY PLAN SELECT payload FROM memory_entries
+      WHERE json_extract(payload, '$.scope') = ?
+        AND json_extract(payload, '$.ownerId') = ?
+        AND json_extract(payload, '$.contentHash') = ?
+        AND json_extract(payload, '$.status') IN ('approved', 'candidate')
+      ORDER BY rowid
+    `).all('bot', member.id, backfilled.contentHash);
+    expect(JSON.stringify(plan)).toContain('memories_by_partition_hash');
+
+    const proposed = core.memories.propose({
+      scope: 'bot',
+      ownerId: member.id,
+      allowedConversationIds: [roomA.id, roomB.id],
+      sourceIds: ['msg-new'],
+      content: '  保持输出简洁清晰 \r\n',
+    });
+    expect(proposed.id).toBe(legacyEntry.id);
+    expect(proposed.revision).toBe(3);
+    expect(proposed.sourceIds).toEqual(['msg-old', 'msg-new']);
+
+    const noUsageEntry = core.memories.save({
+      scope: 'bot',
+      ownerId: member.id,
+      allowedConversationIds: [roomB.id],
+      sourceIds: ['msg-2'],
+      content: '另一条无统计记忆',
+    });
+
+    let snapMemories = core.state.snapshot().memories;
+    expect(snapMemories.find(item => item.id === legacyEntry.id)?.usage).toBeUndefined();
+    expect(snapMemories.find(item => item.id === noUsageEntry.id)?.usage).toBeUndefined();
+
+    core.memory.selectContext({ botId: member.id, conversationId: roomA.id }, {
+      query: '简洁清晰',
+      recordAutoInject: true,
+      scopeKey: 'run-a',
+    });
+    snapMemories = core.state.snapshot().memories;
+    expect(snapMemories.find(item => item.id === legacyEntry.id)?.usage).toMatchObject({
+      autoInjectedCount: 1,
+      activeReadCount: 0,
+    });
+    expect(snapMemories.find(item => item.id === noUsageEntry.id)?.usage).toBeUndefined();
+
+    core.memory.query({ botId: member.id, conversationId: roomA.id }, { ids: [legacyEntry.id] }, {
+      recordActiveRead: true,
+      scopeKey: 'run-a',
+    });
+    snapMemories = core.state.snapshot().memories;
+    expect(snapMemories.find(item => item.id === legacyEntry.id)?.usage).toMatchObject({
+      autoInjectedCount: 1,
+      activeReadCount: 1,
+      lastActiveReadAt: expect.any(String),
+    });
   });
 });

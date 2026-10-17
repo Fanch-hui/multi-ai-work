@@ -28,6 +28,13 @@ export interface MemorySearchQuery {
 export interface MemoryStore {
   list(): MemoryEntry[];
   save(entry: MemoryEntry): void;
+  findDuplicate?(
+    scope: MemoryEntry['scope'],
+    ownerId: string,
+    allowedConversationIds: string[],
+    contentHash: string,
+    excludeId?: string,
+  ): MemoryEntry | undefined;
   search?(query: MemorySearchQuery): MemorySearchMatch[];
   revisions?(memoryId: string): MemoryRevisionRecord[];
   saveRevision?(record: MemoryRevisionRecord): void;
@@ -295,6 +302,9 @@ export class MemoryService {
   }
 
   private findDuplicate(scope: MemoryEntry['scope'], ownerId: string, allowedConversationIds: string[], contentHash: string): MemoryEntry | undefined {
+    if (this.store.findDuplicate) {
+      return this.store.findDuplicate(scope, ownerId, allowedConversationIds, contentHash);
+    }
     const targetAllowed = (scope === 'team' ? [ownerId] : [...new Set(allowedConversationIds)].sort()).join(',');
     return this.store.list().find(item => {
       if (item.status !== 'approved' && item.status !== 'candidate') return false;

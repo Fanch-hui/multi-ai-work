@@ -44,7 +44,7 @@ export class TaskService {
     const connection = required(s.get<Connection>('connections', bot.connectionId), '请先为智能体配置模型连接');
     if (bot.id === this.state.settings().mainBotId && !isChiefProvider(connection.provider))
       throw new Error('管家请选择 ChatGPT 或自定义 API 连接');
-    const existing = s.all<Task>('tasks').find(task => task.requestId === requestId);
+    const existing = s.firstByField<Task>('tasks', 'requestId', requestId);
     if (existing) {
       if (existing.conversationId !== room.id || existing.botId !== bot.id || existing.goal !== input.goal)
         throw new Error('任务请求 ID 与任务内容不匹配');
@@ -60,7 +60,7 @@ export class TaskService {
       throw new Error('只有主管智能体可委派任务');
     if (parent && bot.id === parent.botId && !taskGroupStart) throw new Error('不能向自己委派任务');
     const depth = parent ? parent.depth + 1 : 0;
-    if (parent && s.all<Task>('tasks').filter(task => task.parentId === parent.id).length >= this.state.settings().maxChildren) throw new Error('达到子任务数量上限');
+    if (parent && s.countByField('tasks', 'parentId', parent.id) >= this.state.settings().maxChildren) throw new Error('达到子任务数量上限');
     const planned = input.planStepId ? new TaskPlanService(this.state).delegation(required(parent, '安排委派缺少主管任务'), room, bot.id, input.planStepId) : undefined;
     const dependencies = [...new Set([...(input.dependencyIds ?? []), ...(planned?.dependencyIds ?? [])])];
     for (const dependencyId of dependencies) {
@@ -145,7 +145,7 @@ export class TaskService {
     const bot = required(this.state.storage.get<Bot>('bots', old.botId), '智能体不存在');
     if (bot.archived || !room.memberIds.includes(bot.id)) throw new Error('智能体不是当前会话的有效成员');
     if (old.status === 'waiting_input' && old.coordinationPaused) {
-      const children = this.state.storage.all<Task>('tasks').filter(task => task.parentId === old.id);
+      const children = this.state.storage.byField<Task>('tasks', 'parentId', old.id);
       if (children.some(child => !terminal(child.status) || child.reconciliationRequired)) throw new Error('请先核查并等待成员任务停止');
       this.state.storage.setMetadata(`results:${old.id}`, children.map(child => ({ taskId: child.id, botId: child.botId,
         status: child.status, result: child.result, error: child.error, artifactIds: child.artifactIds, updatedAt: child.updatedAt })));
@@ -155,7 +155,7 @@ export class TaskService {
     }
     if (!['failed', 'cancelled', 'interrupted'].includes(old.status)) throw new Error('只有已停止的任务可以重试');
     if (old.reconciliationRequired) throw new Error('执行结果尚未确认，请先核查外部操作');
-    const children = this.state.storage.all<Task>('tasks').filter(task => task.parentId === old.id);
+    const children = this.state.storage.byField<Task>('tasks', 'parentId', old.id);
     if (children.some(child => child.reconciliationRequired)) throw new Error('请先核查成员任务的外部操作');
     if (children.some(child => !terminal(child.status))) throw new Error('请等待成员任务停止');
     if (children.length) this.state.storage.setMetadata(`results:${old.id}`, children.map(child => ({ taskId: child.id, botId: child.botId,

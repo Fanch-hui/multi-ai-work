@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import type { MemoryEntry, Message, RunEvent, RunEventPage } from '../domain/types.js';
+import type { MemoryEntry, Message, RunEvent, RunEventPage, SessionBinding } from '../domain/types.js';
 import type { MessagePage } from '../domain/snapshot-sync.js';
 import { StorageChangesBuffer } from './storage-changes.js';
 import { MessageStream } from './message-stream.js';
@@ -11,7 +11,16 @@ export const entityTables = ['connections', 'bots', 'conversations', 'workspaces
   'tasks', 'runs', 'approvals', 'artifacts', 'memory_entries', 'memory_revisions', 'memory_usage', 'context_checkpoints',
   'tool_connections', 'skills', 'tool_operations', 'deliveries', 'notifications', 'compactions', 'provider_archive', 'questions', 'processes', 'preset_installations', 'task_plans'] as const;
 export type EntityTable = typeof entityTables[number];
-const indexedFields = { status: '$.status', parentId: '$.parentId', runId: '$.runId', bindingId: '$.bindingId', memoryId: '$.memoryId' } as const;
+const indexedFields = {
+  status: '$.status',
+  parentId: '$.parentId',
+  runId: '$.runId',
+  bindingId: '$.bindingId',
+  memoryId: '$.memoryId',
+  requestId: '$.requestId',
+  taskId: '$.taskId',
+  conversationId: '$.conversationId',
+} as const;
 
 export class Storage {
   readonly db: Database.Database;
@@ -56,6 +65,18 @@ export class Storage {
         CREATE INDEX IF NOT EXISTS checkpoints_by_binding ON context_checkpoints(json_extract(payload, '$.bindingId'));
         CREATE INDEX IF NOT EXISTS tasks_by_status ON tasks(json_extract(payload, '$.status'));
         CREATE INDEX IF NOT EXISTS tasks_by_parent ON tasks(json_extract(payload, '$.parentId'));
+        CREATE INDEX IF NOT EXISTS tasks_by_request ON tasks(json_extract(payload, '$.requestId'));
+        CREATE INDEX IF NOT EXISTS tasks_by_conversation ON tasks(json_extract(payload, '$.conversationId'));
+        CREATE INDEX IF NOT EXISTS runs_by_task ON runs(json_extract(payload, '$.taskId'));
+        CREATE INDEX IF NOT EXISTS bindings_by_owner_generation ON session_bindings(
+          json_extract(payload, '$.botId'), json_extract(payload, '$.conversationId'),
+          json_extract(payload, '$.purpose'), json_extract(payload, '$.generation') DESC);
+        CREATE INDEX IF NOT EXISTS questions_by_task ON questions(json_extract(payload, '$.taskId'));
+        CREATE INDEX IF NOT EXISTS artifacts_by_conversation ON artifacts(json_extract(payload, '$.conversationId'));
+        CREATE INDEX IF NOT EXISTS artifacts_by_task ON artifacts(json_extract(payload, '$.taskId'));
+        CREATE INDEX IF NOT EXISTS memories_by_partition_hash ON memory_entries(
+          json_extract(payload, '$.scope'), json_extract(payload, '$.ownerId'), json_extract(payload, '$.contentHash'))
+          WHERE json_extract(payload, '$.status') IN ('approved', 'candidate');
         CREATE INDEX IF NOT EXISTS operations_by_run ON tool_operations(json_extract(payload, '$.runId'));
         CREATE INDEX IF NOT EXISTS revisions_by_memory ON memory_revisions(json_extract(payload, '$.memoryId'));
         CREATE VIRTUAL TABLE IF NOT EXISTS memory_search USING fts5(id UNINDEXED, content, tokenize='trigram');
@@ -84,6 +105,27 @@ export class Storage {
   byField<T>(table: EntityTable, field: keyof typeof indexedFields, value: string): T[] {
     const rows = this.prepare(`SELECT payload FROM ${table} WHERE json_extract(payload, '${indexedFields[field]}') = ? ORDER BY rowid`).all(value) as { payload: string }[];
     return rows.map(row => JSON.parse(row.payload) as T);
+  }
+  firstByField<T>(table: EntityTable, field: keyof typeof indexedFields, value: string): T | undefined {
+    const row = this.prepare(`SELECT payload FROM ${table} WHERE json_extract(payload, '${indexedFields[field]}') = ? ORDER BY rowid LIMIT 1`).get(value) as { payload: string } | undefined;
+    return row ? JSON.parse(row.payload) as T : undefined;
+  }
+  countByField(table: EntityTable, field: keyof typeof indexedFields, value: string): number {
+    const row = this.prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE json_extract(payload, '${indexedFields[field]}') = ?`).get(value) as { count: number };
+    return row.count;
+  }
+  latestBinding(botId: string, conversationId: string, purpose?: SessionBinding['purpose']): SessionBinding | undefined {
+    const row = (purpose === undefined
+      ? this.prepare(`SELECT payload FROM session_bindings
+          WHERE json_extract(payload, '$.botId') = ? AND json_extract(payload, '$.conversationId') = ?
+            AND json_extract(payload, '$.purpose') IS NULL
+          ORDER BY json_extract(payload, '$.generation') DESC, rowid DESC LIMIT 1`).get(botId, conversationId)
+      : this.prepare(`SELECT payload FROM session_bindings
+          WHERE json_extract(payload, '$.botId') = ? AND json_extract(payload, '$.conversationId') = ?
+            AND json_extract(payload, '$.purpose') = ?
+          ORDER BY json_extract(payload, '$.generation') DESC, rowid DESC LIMIT 1`).get(botId, conversationId, purpose)
+    ) as { payload: string } | undefined;
+    return row ? JSON.parse(row.payload) as SessionBinding : undefined;
   }
   put<T extends { id: string }>(table: EntityTable, value: T): T {
     this.prepare(`INSERT INTO ${table}(id,payload) VALUES (?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload`).run(value.id, JSON.stringify(value));

@@ -86,11 +86,12 @@ export function runPrompt(state: State, memory: MemoryService, task: Task, bot: 
     `成员 ID：${[...room.memberIds].sort().join('；')}`, ...compatibilityKnowledge].filter(Boolean).join('\n\n');
   const results = s.metadata(`results:${task.id}`);
   const requirement = taskRequirement(s, task);
-  const receipts = s.all<{ runId: string; name: string; status: string; modelResult?: unknown; result?: unknown }>('tool_operations')
-    .filter(operation => task.runIds.includes(operation.runId) && operation.status === 'succeeded'
+  const receipts = task.runIds
+    .flatMap(runId => s.byField<{ runId: string; name: string; status: string; modelResult?: unknown; result?: unknown }>('tool_operations', 'runId', runId))
+    .filter(operation => operation.status === 'succeeded'
       && ['create_task_group', 'delegate_task', 'configure_bot', 'write_artifact', 'delete_file', 'run_command', 'call_mcp'].includes(operation.name))
     .map(operation => ({ tool: operation.name, result: operation.modelResult ?? operation.result }));
-  const questions = s.all<UserQuestion>('questions').filter(item => item.taskId === task.id && item.status === 'answered');
+  const questions = s.byField<UserQuestion>('questions', 'taskId', task.id).filter(item => item.status === 'answered');
   const prompt = [`当前 App 会话 ID：${room.id}`, `当前任务 ID：${task.id}`, `当前任务：${task.goal}`, task.expectedOutput ? `交付要求：${task.expectedOutput}` : '',
     task.inputArtifactIds?.length ? `本任务输入资料 ID：${task.inputArtifactIds.join('、')}；可用 read_artifact 查阅，委派时显式传递相关 artifactIds。` : '',
     questions.length ? `已回答的任务问题：\n${questions.map(item => `${item.answerSource === 'chief' ? '主管代答' : '用户回答'}：${item.question}：${item.answer}${item.answerReason ? `\n依据：${item.answerReason}` : ''}`).join('\n')}` : '',

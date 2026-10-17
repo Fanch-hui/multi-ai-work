@@ -16,6 +16,7 @@ import {
   isUserProtectedMemory, mergeMemories, promoteMemory, recordBatchTouch,
 } from './memory-merge.js';
 import { schedulePartitionConsolidations } from './memory-consolidation.js';
+import { findDuplicateMemory } from './memory-storage.js';
 
 const fields = z.object({
   id: z.string().optional(),
@@ -54,13 +55,7 @@ export class MemoryManagement {
   }
 
   private findPartitionDuplicate(scope: MemoryEntry['scope'], ownerId: string, allowedConversationIds: string[], contentHash: string, excludeId?: string) {
-    const targetKey = memoryPartitionKey({ scope, ownerId, allowedConversationIds });
-    return this.state.storage.all<MemoryEntry>('memory_entries').find(item => {
-      if (item.id === excludeId || (item.status !== 'approved' && item.status !== 'candidate')) return false;
-      if (memoryPartitionKey(item) !== targetKey) return false;
-      const hash = item.contentHash ?? createHash('sha256').update(normalizeMemoryContent(item.content)).digest('hex');
-      return hash === contentHash;
-    });
+    return findDuplicateMemory(this.state.storage, scope, ownerId, allowedConversationIds, contentHash, excludeId);
   }
 
   propose(rawInput: unknown, actor: MemoryWriteActor = { kind: 'bot' }): MemoryEntry {

@@ -13,9 +13,7 @@ export function sessionBinding(state: State, bot: Bot, room: Conversation, conne
       return [skillId, skill?.content, ...(skill?.digest ? [skill.digest] : [])];
     }),
   })).digest('hex');
-  const previous = s.all<SessionBinding>('session_bindings')
-    .filter(item => item.botId === bot.id && item.conversationId === room.id && item.purpose === purpose)
-    .sort((a, b) => b.generation - a.generation)[0];
+  const previous = s.latestBinding(bot.id, room.id, purpose);
   // Older bindings have no identity snapshot; their recorded revision must still match.
   const sameIdentity = previous?.identityHash ? previous.identityHash === identityHash
     : previous?.configRevision === bot.revision;
