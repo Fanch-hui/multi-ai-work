@@ -101,4 +101,47 @@ describe('versioned UI snapshots', () => {
     const view = await core.request('state.view', { conversationId: room.id }) as SnapshotView;
     expect(view.snapshot.bots.find(item => item.id === core.state.settings().mainBotId)?.instructions).toBe('');
   });
+
+  it('appends non-text events by cursor, skips duplicate event changes, and avoids scanning run_events on text deltas', () => {
+    const { state, s, room } = stateFixture();
+    for (let i = 1; i <= 210; i++) {
+      s.event({ id: `tool-${i}`, runId: 'run', type: 'tool', data: { name: 'read_file', status: 'completed' }, createdAt: `2026-10-16T00:00:${String(i).padStart(3, '0')}Z` });
+    }
+    s.event({ id: 'text-0', runId: 'run', type: 'text', data: { delta: 'chunk' }, createdAt: '2026-10-16T00:05:00Z' });
+    state.changed('content');
+    expect(s.event({ id: 'tool-210', runId: 'run', type: 'tool', data: { name: 'read_file', status: 'completed' }, createdAt: '2026-10-16T00:00:210Z' })).toBe(false);
+    expect(s.changes.take().entities.size).toBe(0);
+
+    const initial = state.sync.view(room.id);
+    expect(initial.snapshot.events).toHaveLength(200);
+    expect(initial.snapshot.events[0].id).toBe('tool-11');
+    expect(initial.snapshot.events.at(-1)?.id).toBe('tool-210');
+    expect(initial.cursor.eventSequence).toBeGreaterThan(0);
+
+    const eventsSpy = vi.spyOn(s, 'events');
+    const eventsAfterSpy = vi.spyOn(s, 'eventsAfter');
+    s.event({ id: 'text-1', runId: 'run', type: 'text', data: { delta: 'more' }, createdAt: '2026-10-16T00:06:00Z' });
+    state.changed('content');
+    const textDelta = state.sync.delta(initial.cursor, room.id);
+    expect(textDelta.reset).toBeUndefined();
+    expect(textDelta.events).toBeUndefined();
+    expect(textDelta.cursor.eventSequence).toBe(initial.cursor.eventSequence);
+    expect(eventsSpy).not.toHaveBeenCalled();
+    expect(eventsAfterSpy).not.toHaveBeenCalled();
+
+    s.event({ id: 'tool-211', runId: 'run', type: 'tool', data: { name: 'write_file', status: 'started' }, createdAt: '2026-10-16T00:07:00Z' });
+    s.event({ id: 'text-2', runId: 'run', type: 'text', data: { delta: 'tail' }, createdAt: '2026-10-16T00:07:01Z' });
+    s.event({ id: 'tool-212', runId: 'run', type: 'tool', data: { name: 'write_file', status: 'completed' }, createdAt: '2026-10-16T00:07:02Z' });
+    state.changed('content');
+    const toolDelta = state.sync.delta(textDelta.cursor, room.id);
+    expect(toolDelta.events?.map(item => item.id)).toEqual(['tool-211', 'tool-212']);
+    expect(toolDelta.cursor.eventSequence).toBeGreaterThan(textDelta.cursor.eventSequence!);
+    expect(eventsSpy).not.toHaveBeenCalled();
+    expect(eventsAfterSpy).toHaveBeenCalledTimes(1);
+
+    const legacyDelta = state.sync.delta({ epoch: initial.cursor.epoch, version: textDelta.cursor.version }, room.id);
+    expect(legacyDelta.events).toHaveLength(200);
+    expect(legacyDelta.events?.at(-1)?.id).toBe('tool-212');
+    expect(legacyDelta.cursor.eventSequence).toBe(toolDelta.cursor.eventSequence);
+  });
 });

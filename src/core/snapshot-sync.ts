@@ -7,7 +7,7 @@ import { taskActivityReader } from './task-activity.js';
 import { unreadConversationCounts } from './conversation-read.js';
 
 interface Change extends StorageChanges { version: number; }
-const supported = new Set(['messages', 'tasks', 'runs', 'processes', 'events', 'provider_archive']);
+const supported = new Set(['messages', 'tasks', 'runs', 'processes', 'events', 'text_events', 'provider_archive']);
 export const publicProcess = (item: ProcessRecord): ProcessRecord => ({ id: item.id, runId: item.runId, taskId: item.taskId,
   botId: item.botId, conversationId: item.conversationId, workspaceId: item.workspaceId, command: item.command,
   args: item.args, status: item.status, createdAt: item.createdAt, endedAt: item.endedAt, code: item.code, signal: item.signal,
@@ -18,7 +18,9 @@ export class SnapshotSync {
   private version = 0;
   private log: Change[] = [];
   constructor(private state: State) {}
-  cursor(): SnapshotCursor { return { epoch: this.epoch, version: this.version }; }
+  cursor(eventSequence = this.state.storage.latestNonTextEventSequence()): SnapshotCursor {
+    return { epoch: this.epoch, version: this.version, eventSequence };
+  }
   changed(kind: StateChange) {
     const changes = this.state.storage.changes.take();
     if (changes.invalidated) this.epoch = randomUUID();
@@ -33,13 +35,18 @@ export class SnapshotSync {
   }
   delta(cursor: SnapshotCursor, conversationId?: string): SnapshotDelta {
     const changes = this.log.filter(change => change.version > cursor.version);
-    const result: SnapshotDelta = { cursor: this.cursor(), messages: [], tasks: [], runs: [], processes: [] };
+    const result: SnapshotDelta = { cursor: { epoch: this.epoch, version: this.version, eventSequence: cursor.eventSequence },
+      messages: [], tasks: [], runs: [], processes: [] };
     if (cursor.epoch !== this.epoch || cursor.version > this.version
       || cursor.version < (this.log[0]?.version ?? this.version + 1) - 1 || changes.some(change => change.reset))
       return { ...result, reset: true };
+    const s = this.state.storage;
+    if (cursor.eventSequence === undefined) {
+      result.events = s.events();
+      result.cursor.eventSequence = s.latestNonTextEventSequence();
+    }
     if (!changes.length) return result;
     const ids = (table: string) => [...new Set(changes.flatMap(change => [...change.entities.get(table) ?? []]))];
-    const s = this.state.storage;
     result.messages = ids('messages').map(id => s.getMessage(id)).filter((item): item is Message => !!item && item.conversationId === conversationId);
     const runs = ids('runs').map(id => s.get<Run>('runs', id)).filter((item): item is Run => !!item);
     const eventRuns = ids('events').map(id => s.get<Run>('runs', id)).filter((item): item is Run => !!item);
@@ -52,7 +59,11 @@ export class SnapshotSync {
     result.tasks = tasks.map(task => this.state.taskSnapshot(task, readActivity));
     result.runs = runs;
     result.processes = ids('processes').map(id => s.get<ProcessRecord>('processes', id)).filter((item): item is ProcessRecord => !!item).map(publicProcess);
-    result.events = s.events();
+    if (cursor.eventSequence !== undefined && ids('events').length) {
+      const next = s.eventsAfter(cursor.eventSequence, 200);
+      result.events = next.events;
+      result.cursor.eventSequence = next.eventSequence;
+    }
     if (ids('messages').length) result.conversations = unreadConversationCounts(s);
     return result;
   }

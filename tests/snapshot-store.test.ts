@@ -74,4 +74,42 @@ describe('UI snapshot synchronization', () => {
     const calls = request.mock.calls.filter(([method]) => method === 'state.view');
     expect(calls.at(-1)?.[1]?.from).toBeUndefined();
   });
+
+  it('replaces events on full view and idempotently appends up to 200 events on delta updates', async () => {
+    const makeEvent = (id: string, createdAt = id) => ({ id, runId: 'run', type: 'tool' as const, data: { status: createdAt }, createdAt });
+    const initialEvents = Array.from({ length: 199 }, (_, i) => makeEvent(`e${i + 1}`));
+    let step = 0;
+    const { store } = fixture(async method => {
+      if (method === 'state.view') {
+        return {
+          snapshot: { ...snapshot([message('m1', 1)]), events: step === 0 ? initialEvents : [makeEvent('reset-event')] },
+          cursor: { epoch: 'epoch', version: step === 0 ? 1 : 5, eventSequence: step === 0 ? 199 : 205 },
+        };
+      }
+      step++;
+      if (step === 1) return { ...delta([message('m1', 1, 'stream-1')], 2), cursor: { epoch: 'epoch', version: 2, eventSequence: 199 } };
+      if (step === 2) return {
+        ...delta([], 3),
+        cursor: { epoch: 'epoch', version: 3, eventSequence: 202 },
+        events: [makeEvent('e199', 'updated'), makeEvent('e200'), makeEvent('e201')],
+      };
+      return { ...delta([], 4), reset: true, cursor: { epoch: 'epoch', version: 4, eventSequence: 202 } };
+    });
+
+    await store.refresh(true);
+    expect(store.current().data?.events).toHaveLength(199);
+
+    await store.refresh();
+    expect(store.current().data?.events).toHaveLength(199);
+
+    await store.refresh();
+    const merged = store.current().data?.events ?? [];
+    expect(merged).toHaveLength(200);
+    expect(merged[0]?.id).toBe('e2');
+    expect(merged.find(item => item.id === 'e199')?.data.status).toBe('updated');
+    expect(merged.slice(-2).map(item => item.id)).toEqual(['e200', 'e201']);
+
+    await store.refresh();
+    expect(store.current().data?.events.map(item => item.id)).toEqual(['reset-event']);
+  });
 });

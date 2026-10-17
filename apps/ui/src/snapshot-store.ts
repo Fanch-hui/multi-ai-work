@@ -1,4 +1,4 @@
-import type { Message, Snapshot } from '../../../src/domain/types.js';
+import type { Message, RunEvent, Snapshot } from '../../../src/domain/types.js';
 import type { MessagePage, SnapshotCursor, SnapshotDelta, SnapshotView } from '../../../src/domain/snapshot-sync.js';
 
 type Request = <T>(method: string, params?: Record<string, unknown>) => Promise<T>;
@@ -10,6 +10,7 @@ export function upsert<T extends { id: string }>(items: T[], updates: T[]): T[] 
   return [...values.values()];
 }
 const orderedMessages = (items: Message[], updates: Message[]) => upsert(items, updates).sort((a, b) => a.sequence - b.sequence);
+const recentEvents = (items: RunEvent[], updates?: RunEvent[]) => updates?.length ? upsert(items, updates).slice(-200) : items;
 
 export class TeamSnapshotStore {
   private value: TeamView = { error: '', loadingHistory: false };
@@ -59,7 +60,7 @@ export class TeamSnapshotStore {
           this.emit({ data: { ...data, messages: orderedMessages(data.messages, delta.messages),
             tasks: upsert(data.tasks, delta.tasks), runs: upsert(data.runs, delta.runs),
             processes: upsert(data.processes, delta.processes),
-            conversations: delta.conversations ?? data.conversations, events: delta.events ?? data.events }, error: '' });
+            conversations: delta.conversations ?? data.conversations, events: recentEvents(data.events, delta.events) }, error: '' });
         }
       } catch (error) {
         if (generation === this.generation) this.emit({ error: error instanceof Error ? error.message : String(error) });

@@ -187,9 +187,12 @@ export class Storage {
     this.changes.mark('messages', message.id);
   }
   event(event: RunEvent) {
-    this.changes.mark('events', event.runId);
+    const inserted = this.prepare('INSERT OR IGNORE INTO run_events(id,run_id,payload) VALUES (?,?,?)')
+      .run(event.id, event.runId, JSON.stringify(event)).changes > 0;
+    if (!inserted) return false;
+    this.changes.mark(event.type === 'text' ? 'text_events' : 'events', event.runId);
     if (typeof event.data.messageId === 'string') this.changes.mark('messages', event.data.messageId);
-    return this.prepare('INSERT OR IGNORE INTO run_events(id,run_id,payload) VALUES (?,?,?)').run(event.id, event.runId, JSON.stringify(event)).changes > 0;
+    return true;
   }
   runEvents(runId: string, cursor?: number, limit = 200): RunEventPage {
     const size = Math.max(1, Math.min(200, Math.floor(limit)));
@@ -200,8 +203,23 @@ export class Storage {
     return { events: page.map(row => JSON.parse(row.payload) as RunEvent).reverse(),
       nextCursor: rows.length > size ? page.at(-1)?.cursor : undefined };
   }
+  latestNonTextEventSequence(): number {
+    const row = this.prepare(`SELECT COALESCE((SELECT rowid FROM run_events
+      WHERE json_extract(payload, '$.type') != 'text' ORDER BY rowid DESC LIMIT 1), 0) AS seq`).get() as { seq: number };
+    return row.seq;
+  }
+  eventsAfter(afterSequence: number, limit = 200): { events: RunEvent[]; eventSequence: number } {
+    const size = Math.max(1, Math.min(200, Math.floor(limit)));
+    const rows = this.prepare(`SELECT rowid, payload FROM run_events
+      WHERE rowid > ? AND json_extract(payload, '$.type') != 'text'
+      ORDER BY rowid DESC LIMIT ?`).all(afterSequence, size) as { rowid: number; payload: string }[];
+    const eventSequence = rows[0]?.rowid ?? (afterSequence > 0 ? afterSequence : this.latestNonTextEventSequence());
+    return { events: rows.map(row => JSON.parse(row.payload) as RunEvent).reverse(), eventSequence };
+  }
   events(): RunEvent[] {
-    return (this.prepare('SELECT payload FROM run_events ORDER BY rowid DESC LIMIT 200').all() as { payload: string }[]).map(row => JSON.parse(row.payload) as RunEvent).reverse();
+    return (this.prepare(`SELECT payload FROM run_events
+      WHERE json_extract(payload, '$.type') != 'text'
+      ORDER BY rowid DESC LIMIT 200`).all() as { payload: string }[]).map(row => JSON.parse(row.payload) as RunEvent).reverse();
   }
   transaction<T>(action: () => T): T { return this.db.transaction(action)(); }
   async backup(path: string) { await this.db.backup(path); }
