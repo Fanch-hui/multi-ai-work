@@ -6,9 +6,22 @@ import { publicRequest } from './web.js';
 import { searchConnection, tavilySearchTool } from './search.js';
 import type { ToolDefinition } from '../domain/provider.js';
 
+function freezeSchema<T>(value: T): T {
+  if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
+  Object.freeze(value);
+  for (const item of Object.values(value as Record<string, unknown>)) freezeSchema(item);
+  return value;
+}
+
 export function createToolRegistry(): ToolRegistry {
   const mcp = new McpConnections();
   const builtins = createBuiltins(mcp);
+  const builtinCatalog = Object.entries(builtins).map(([name, tool]) => ({
+    name,
+    description: tool.description,
+    inputSchema: freezeSchema(z.toJSONSchema(tool.schema, { target: 'draft-7' })),
+    available: tool.available,
+  }));
   const catalogs = new Map<string, ToolDefinition[]>();
   return {
     async prepare(context) {
@@ -28,9 +41,11 @@ export function createToolRegistry(): ToolRegistry {
       return { name, args };
     },
     definitions(context) {
-      return [...Object.entries(builtins).filter(([, tool]) => !tool.available || tool.available(context))
-        .map(([name, tool]) => ({ name, description: tool.description, inputSchema: z.toJSONSchema(tool.schema, { target: 'draft-7' }) })),
-        ...(catalogs.get(context.runId) ?? []).filter(tool => !!mcp.resolve(tool.name, context))];
+      return [
+        ...builtinCatalog.filter(tool => !tool.available || tool.available(context))
+          .map(({ name, description, inputSchema }) => ({ name, description, inputSchema })),
+        ...(catalogs.get(context.runId) ?? []).filter(tool => !!mcp.resolve(tool.name, context)),
+      ];
     },
     async execute(name, args, context) {
       context.signal.throwIfAborted();

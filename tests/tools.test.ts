@@ -114,6 +114,28 @@ describe('workspace tools', () => {
     await expect(registry.execute('fetch_web', { url: 'http://127.0.0.1/latest/meta-data' }, ctx)).rejects.toThrow('元数据');
   });
 
+  it('reuses static inputSchema across definitions calls while reflecting dynamic context permissions immediately', async () => {
+    const ctx = context(directory); ctx.workspace.writable = false;
+    const first = registry.definitions(ctx), second = registry.definitions(ctx);
+    expect(first).not.toBe(second);
+    const firstRead = first.find(tool => tool.name === 'read_file')!, secondRead = second.find(tool => tool.name === 'read_file')!;
+    expect(firstRead).not.toBe(secondRead);
+    expect(firstRead.inputSchema).toBe(secondRead.inputSchema);
+    expect(Object.isFrozen(firstRead.inputSchema)).toBe(true);
+    expect(first.some(tool => tool.name === 'write_artifact' || tool.name === 'read_skill' || tool.name === 'search_web')).toBe(false);
+    await expect(registry.execute('write_artifact', { path: 'x.md', format: 'markdown', content: 'ok' }, ctx)).rejects.toThrow('不可用');
+    await expect(registry.execute('read_skill', { skillId: 'skill-1' }, ctx)).rejects.toThrow('不可用');
+    await expect(registry.execute('search_web', { query: 'test' }, ctx)).rejects.toThrow('不可用');
+
+    ctx.workspace.writable = true;
+    ctx.skills = [{ id: 'skill-1', name: 'Skill 1', description: 'desc', content: 'skill-content', path: directory }];
+    ctx.toolConnections = [{ id: 'search-1', name: 'Search', kind: 'search', enabled: true, url: 'https://example.com', toolNames: ['search_web'], status: 'ready' }];
+    const updatedNames = registry.definitions(ctx).map(tool => tool.name);
+    expect(updatedNames).toEqual(expect.arrayContaining(['write_artifact', 'read_skill', 'search_web']));
+    await expect(registry.execute('write_artifact', { path: 'x.md', format: 'markdown', content: 'ok' }, ctx)).resolves.toMatchObject({ name: 'x.md' });
+    await expect(registry.execute('read_skill', { skillId: 'skill-1' }, ctx)).resolves.toMatchObject({ id: 'skill-1', content: 'skill-content' });
+  });
+
   it('lists and calls a real MCP server and reuses durable Bridge mutation receipts', async () => {
     const require = createRequire(import.meta.url);
     const moduleUrl = (name: string) => pathToFileURL(require.resolve(name)).href;
