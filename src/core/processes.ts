@@ -8,7 +8,10 @@ import { waitOperation } from './wait-operation.js';
 
 type LogChunk = { stream: 'stdout' | 'stderr'; text: string; offset: number };
 type StoredProcess = ProcessRecord & { log?: LogChunk[]; logStart?: number; logEnd?: number };
-type ActiveProcess = { record: StoredProcess; runner: ReturnType<typeof startCommand>; done: Promise<void>; listeners: Set<() => void> };
+type ActiveProcess = {
+  record: StoredProcess; runner: ReturnType<typeof startCommand>; done: Promise<void>;
+  listeners: Set<() => void>; dirty?: boolean; flushTimer?: ReturnType<typeof setTimeout>;
+};
 const LOG_LIMIT = 90_000;
 
 function summary(record: StoredProcess) {
@@ -24,10 +27,16 @@ export class ProcessService {
     return this.run(input, context, true, environment);
   }
 
+  output(processId: string): { stdout: string; stderr: string; truncated: boolean } | undefined {
+    const record = this.active.get(processId)?.record ?? this.state.storage.get<StoredProcess>('processes', processId);
+    return record ? { stdout: record.stdout ?? '', stderr: record.stderr ?? '', truncated: !!record.truncated } : undefined;
+  }
+
   forContext(context: ToolExecutionContext) {
     return {
       run: (input: CommandInput, options?: { approved: boolean }) => this.run(input, context, options?.approved),
-      list: () => this.state.storage.all<StoredProcess>('processes').filter(item => this.authorized(item, context, true)).map(summary),
+      list: () => this.state.storage.all<StoredProcess>('processes').map(item => this.active.get(item.id)?.record ?? item)
+        .filter(item => this.authorized(item, context, true)).map(summary),
       read: (input: { processId: string; offset?: number; limit?: number; waitMs?: number }) => this.read(input, context),
       stop: (processId: string) => this.stop(processId, context),
     };
@@ -89,8 +98,15 @@ export class ProcessService {
     return record;
   }
 
+  private clearFlush(processId: string) {
+    const active = this.active.get(processId);
+    if (!active) return;
+    if (active.flushTimer) { clearTimeout(active.flushTimer); active.flushTimer = undefined; }
+    active.dirty = false;
+  }
+
   private save(record: StoredProcess, contentOnly = false) {
-    this.state.storage.put('processes', record); this.state.changed(contentOnly ? 'content' : 'state');
+    this.clearFlush(record.id); this.state.storage.put('processes', record); this.state.changed(contentOnly ? 'content' : 'state');
   }
 
   private async run(input: CommandInput, context: ToolExecutionContext, approved = false, environment?: NodeJS.ProcessEnv) {
@@ -115,9 +131,11 @@ export class ProcessService {
     this.active.set(record.id, active);
     this.save(record);
     active.done = runner.done.then(outcome => {
+      this.clearFlush(record.id);
       record.status = outcome.status; record.code = outcome.code ?? undefined; record.signal = outcome.signal ?? undefined;
-      record.endedAt = now(); this.save(record); this.active.delete(record.id);
-      for (const listener of active.listeners) listener();
+      record.endedAt = now();
+      try { this.save(record); }
+      finally { this.active.delete(record.id); for (const listener of active.listeners) listener(); }
     });
     if (input.background) return summary(record);
     await active.done;
@@ -138,8 +156,16 @@ export class ProcessService {
       if (!first.text) record.log!.shift();
       record.truncated = true;
     }
-    this.save(record, true);
-    for (const listener of this.active.get(record.id)?.listeners ?? []) listener();
+    const active = this.active.get(record.id);
+    if (!active) return;
+    for (const listener of active.listeners) listener();
+    active.dirty = true;
+    active.flushTimer ??= setTimeout(() => {
+      active.flushTimer = undefined;
+      if (this.active.get(record.id) !== active || !active.dirty) return;
+      active.dirty = false;
+      try { this.save(record, true); } catch { active.dirty = true; }
+    }, 100);
   }
 
   private async read(input: { processId: string; offset?: number; limit?: number; waitMs?: number }, context: ToolExecutionContext) {

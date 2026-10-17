@@ -45,7 +45,7 @@ import { inspectTask } from './task-inspection.js';
 import { deleteArtifact } from './artifact-delete.js';
 import { MAX_MESSAGE_ATTACHMENTS, requireAttachmentCapacity } from '../domain/attachment-policy.js';
 import { MaintenanceAdmission } from './maintenance-admission.js';
-import { createStorageMemoryStore } from './memory-storage.js';
+import { createStorageMemoryStore, ensureMemoryContentHashes } from './memory-storage.js';
 
 export type HostRequest = (method: 'chooseDirectory' | 'chooseFile' | 'chooseAvatar' | 'openPath', params?: Record<string, unknown>) => Promise<unknown>;
 export class CoreService {
@@ -93,7 +93,7 @@ export class CoreService {
     this.logins.close(); await this.toolConnections.close();
     this.questionDecisions.close(); this.memories.close(); this.oauth.close();
     await this.market.quiesce(); await this.previews.close(); await this.scheduler.close();
-    await this.tools.processes.close(); await this.registry.close(); await this.vault.flush(); this.state.storage.close();
+    await this.tools.processes.close(); await this.registry.close(); await this.vault.flush(); this.vault.clear(); this.state.storage.close();
   }
 
   async request(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
@@ -279,7 +279,7 @@ export class CoreService {
         if (this.scheduler.hasActive()) throw new Error('请先停止所有运行，再恢复备份');
         this.maintenance = true; this.scheduler.pause();
         await this.market.quiesce();
-        try { const result = await this.backup.restore(z.string().parse(params.path)); migrateProviders(s); migrateContextSettings(s); this.state.syncMainTeam(); syncOfficeSkills(this.state); return result; }
+        try { const result = await this.backup.restore(z.string().parse(params.path)); migrateProviders(s); migrateContextSettings(s); ensureMemoryContentHashes(s); this.state.syncMainTeam(); syncOfficeSkills(this.state); return result; }
         finally { this.market.resume(); this.scheduler.resume(true); this.maintenance = false; this.state.changed(); }
       }
       case 'artifacts.read': {
@@ -294,16 +294,13 @@ export class CoreService {
       case 'artifacts.delete': return deleteArtifact(this.state, objectId(), this.previews);
       case 'artifacts.previewDocument': return this.previews.describe(objectId());
       case 'artifacts.previewPage': return this.previews.page(objectId(), z.number().int().positive().parse(params.page));
-      case 'processes.output': {
-        const record = required(s.get<ProcessRecord>('processes', objectId()), '命令记录不存在');
-        return { stdout: record.stdout ?? '', stderr: record.stderr ?? '', truncated: !!record.truncated };
-      }
+      case 'processes.output': return required(this.tools.processes.output(objectId()), '命令记录不存在');
       case 'artifacts.preview': {
         const artifact = required(s.get<Artifact>('artifacts', objectId()), '成果不存在');
         if (params.conversationId) {
           const room = required(s.get<Conversation>('conversations', z.string().parse(params.conversationId)), '对话不存在');
           const visible = [...accessibleArtifacts(this.state, room, room.chiefId ?? room.memberIds[0]),
-            ...s.all<Task>('tasks').filter(task => task.conversationId === room.id)
+            ...s.byField<Task>('tasks', 'conversationId', room.id)
               .flatMap(task => accessibleArtifacts(this.state, room, task.botId, task))];
           if (!visible.some(item => item.id === artifact.id)) throw new Error('图片不在当前会话授权范围');
         }
