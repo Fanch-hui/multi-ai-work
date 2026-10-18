@@ -9,10 +9,11 @@ import { requestManagedTurn } from './loop-request.js';
 import { createResponsesTransport } from './responses-transport.js';
 import { ResponsesCacheDiagnostics } from './cache-diagnostics.js';
 import { ChatReplayCompatibility } from './chat-replay-compatibility.js';
+import type { ResponsesSessionPool } from './responses-session-pool.js';
 
 export async function runManaged(client: OpenAI, context: RunContext, protocol: Protocol,
-  retryDelays?: readonly number[], resources: { chatReplay?: ChatReplayCompatibility } = {}): Promise<ProviderResult> {
-  const transport = protocol === 'responses' ? createResponsesTransport(client, context) : undefined;
+  retryDelays?: readonly number[], resources: { chatReplay?: ChatReplayCompatibility; responses?: ResponsesSessionPool } = {}): Promise<ProviderResult> {
+  const transport = protocol === 'responses' ? createResponsesTransport(client, context, resources.responses) : undefined;
   try {
     const state = new ManagedRunState(context);
     let usage: Usage | undefined;
@@ -45,6 +46,7 @@ export async function runManaged(client: OpenAI, context: RunContext, protocol: 
       }
       const calls = turn.message.toolCalls ?? [];
       await state.save(calls.length ? 'tools' : 'complete');
+      transport?.confirm(turn.message.providerItems ?? []);
       await state.acknowledgeInput();
       usage = addUsage(usage, turn.usage ?? { source: 'unknown' });
       context.emit({ type: 'usage', data: { ...usage, scope: 'cumulative' } });
@@ -55,5 +57,6 @@ export async function runManaged(client: OpenAI, context: RunContext, protocol: 
       if (state.waitingForInput()) return result(true);
       if (!state.takeUserInput()) return result();
     }
-  } finally { transport?.close(); }
+  } catch (error) { transport?.reset(); throw error; }
+  finally { transport?.close(); }
 }

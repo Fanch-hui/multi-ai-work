@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ResponseCreateParamsStreaming } from 'openai/resources/responses/responses';
 import type { RunContext } from '../src/domain/provider.js';
 import { configureProviderWebSocket, type ProviderSocket } from '../src/providers/network.js';
+import { ResponsesSessionPool } from '../src/providers/managed/responses-session-pool.js';
 import { createResponsesTransport } from '../src/providers/managed/responses-transport.js';
 import { OAUTH_ISSUER } from '../src/providers/managed/oauth-tokens.js';
 
@@ -21,18 +22,19 @@ function completed(socket: WebSocket, id = 'response') {
 }
 const body = (input: unknown[] = [{ role: 'user', content: 'start' }]): ResponseCreateParamsStreaming =>
   ({ model: 'gpt-6.1-sol', instructions: 'fixture', input, store: false, stream: true }) as ResponseCreateParamsStreaming;
-const context = (): RunContext => ({ connection: { id: 'connection', provider: 'custom' }, binding: { id: 'binding' },
+const context = (): RunContext => ({ connection: { id: 'connection', provider: 'custom' }, binding: { id: 'binding', generation: 1 },
   signal: new AbortController().signal }) as RunContext;
-function setup(baseURL = 'https://api.openai.com/v1', run = context()) {
+function setup(baseURL = 'https://api.openai.com/v1', run = context(), pool?: ResponsesSessionPool, apiKey = 'fixture') {
   const http = vi.fn(async (_input: Parameters<typeof fetch>[0], _init?: RequestInit) => new Response(`data: ${JSON.stringify({ type: 'response.completed', response: { id: 'http', status: 'completed', output } })}\n\n`,
     { headers: { 'content-type': 'text/event-stream' } }));
-  const transport = createResponsesTransport(new OpenAI({ apiKey: 'fixture', baseURL, fetch: http, maxRetries: 0 }), run);
+  const transport = createResponsesTransport(new OpenAI({ apiKey, baseURL, fetch: http, maxRetries: 0 }), run, pool);
   transports.push(transport);
   return { transport, http };
 }
 async function consume(transport: ReturnType<typeof createResponsesTransport>, request = body(), signal = new AbortController().signal) {
   const events = [];
   for await (const event of await transport.stream(request, signal)) events.push(event);
+  transport.confirm(output);
   return events;
 }
 
@@ -170,6 +172,75 @@ describe('Responses WebSocket transport', () => {
     run.binding.id = 'another-binding'; await consume(transport);
     expect(connections).toBe(3); expect(sessions).toEqual(['binding', 'binding', 'another-binding']);
     for (const request of requests) expect(request).not.toHaveProperty('previous_response_id');
+  });
+
+
+  it('reuses confirmed continuation across separate run wrappers with fresh cancellation', async () => {
+    const pool = new ResponsesSessionPool();
+    const old = new AbortController();
+    const first = setup(undefined, { ...context(), signal: old.signal }, pool);
+    await consume(first.transport); first.transport.close(); old.abort();
+    const next = body([...(body().input as unknown[]), ...output, { role: 'user', content: 'next' }]);
+    const second = setup(undefined, context(), pool);
+    await consume(second.transport, next); second.transport.close();
+    expect(connections).toBe(1);
+    expect(requests[1]).toMatchObject({ previous_response_id: 'response', input: [{ role: 'user', content: 'next' }] });
+    pool.close();
+  });
+
+  it('discards completed responses that have not been confirmed after persistence', async () => {
+    const pool = new ResponsesSessionPool();
+    const first = setup(undefined, context(), pool);
+    for await (const _event of await first.transport.stream(body(), new AbortController().signal)) { /* deliberately not confirmed */ }
+    first.transport.close();
+    const second = setup(undefined, context(), pool);
+    await consume(second.transport, body([...(body().input as unknown[]), ...output]));
+    expect(connections).toBe(2);
+    expect(requests[1]).not.toHaveProperty('previous_response_id');
+    second.transport.close(); pool.close();
+  });
+
+  it('allows nested runs on the same binding without sharing an active connection', async () => {
+    const pool = new ResponsesSessionPool();
+    const outer = setup(undefined, context(), pool);
+    await consume(outer.transport);
+    const inner = setup(undefined, context(), pool);
+    await consume(inner.transport, { ...body(), instructions: 'summary' }); inner.transport.close();
+    const next = body([...(body().input as unknown[]), ...output, { role: 'user', content: 'outer' }]);
+    await consume(outer.transport, next); outer.transport.close();
+    const final = setup(undefined, context(), pool);
+    await consume(final.transport, body([...(next.input as unknown[]), ...output, { role: 'user', content: 'final' }]));
+    expect(connections).toBe(2);
+    expect(requests[2]).toHaveProperty('previous_response_id');
+    expect(requests[3]).toHaveProperty('previous_response_id');
+    final.transport.close(); pool.close();
+  });
+
+
+  it('drops a cancelled lease before the next run and does not reuse its confirmed baseline', async () => {
+    const pool = new ResponsesSessionPool(), controller = new AbortController();
+    const first = setup(undefined, { ...context(), signal: controller.signal }, pool);
+    await consume(first.transport); controller.abort(); first.transport.close();
+    const second = setup(undefined, context(), pool);
+    await consume(second.transport, body([...(body().input as unknown[]), ...output]));
+    expect(connections).toBe(2); expect(requests[1]).not.toHaveProperty('previous_response_id');
+    second.transport.close(); pool.close();
+  });
+
+  it('isolates binding generation, connection revision, and credentials between runs', async () => {
+    const pool = new ResponsesSessionPool();
+    const first = setup(undefined, context(), pool); await consume(first.transport); first.transport.close();
+    const rotated = setup(undefined, context(), pool, 'rotated');
+    await consume(rotated.transport, body([...(body().input as unknown[]), ...output])); rotated.transport.close();
+    const different = context(); different.binding.id = 'other';
+    const other = setup(undefined, different, pool); await consume(other.transport); other.transport.close();
+    const revised = context(); revised.connection.revision = 2;
+    const revision = setup(undefined, revised, pool); await consume(revision.transport); revision.transport.close();
+    const restored = context(); restored.binding.generation = 2;
+    const generation = setup(undefined, restored, pool); await consume(generation.transport); generation.transport.close();
+    expect(connections).toBe(5);
+    for (const request of requests) expect(request).not.toHaveProperty('previous_response_id');
+    pool.close();
   });
 
   it('keeps unknown custom API endpoints on HTTP with full input', async () => {
