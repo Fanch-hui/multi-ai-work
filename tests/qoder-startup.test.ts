@@ -4,11 +4,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type * as Qoder from '@qodercn-ai/qodercn-agent-sdk';
 import type { RunContext } from '../src/domain/provider.js';
-import { QoderAdapter } from '../src/providers/native/qoder.js';
+import { clearQoderModelCache, QoderAdapter } from '../src/providers/native/qoder.js';
 import type { NativeInput } from '../src/providers/native/input.js';
 
 const folders: string[] = [];
-afterEach(async () => { await Promise.all(folders.splice(0).map(path => rm(path, { recursive: true, force: true }))); });
+afterEach(async () => {
+  clearQoderModelCache();
+  await Promise.all(folders.splice(0).map(path => rm(path, { recursive: true, force: true })));
+});
 
 function deferred<T>() {
   let resolve!: (value: T) => void, reject!: (error: unknown) => void;
@@ -16,7 +19,7 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-async function fixture() {
+async function fixture(rejectModelsOnClose = false) {
   const root = await mkdtemp(join(tmpdir(), 'multi-ai-qoder-startup-')); folders.push(root);
   const workspace = join(root, 'workspace'), profile = join(root, 'profile');
   await mkdir(workspace); await mkdir(profile);
@@ -42,7 +45,10 @@ async function fixture() {
         accountInfo: () => { calls.push('account'); return account.promise; },
         getAvailableModels: () => { calls.push('models'); return models.promise; },
         mcpServerStatus: () => { calls.push('mcp'); return mcp.promise; },
-        close: async () => { closed = true; prompt.close(); nativeInit.resolve(); }, interrupt: async () => {},
+        close: async () => {
+          closed = true; prompt.close(); nativeInit.resolve();
+          if (rejectModelsOnClose) models.reject(new Error('Qoder query closed'));
+        }, interrupt: async () => {},
       });
     },
   } as unknown as typeof Qoder;
@@ -64,6 +70,55 @@ async function fixture() {
 }
 
 describe('Qoder preparation', () => {
+  it('keeps another cold initialization running when the first Query is cancelled', async () => {
+    const first = await fixture(true), second = await fixture(), cancelled = new AbortController();
+    first.context.signal = cancelled.signal;
+    second.context.connection = first.context.connection;
+    const firstRun = first.adapter.run(first.context);
+    const firstFailure = expect(firstRun).rejects.toThrow('cancelled');
+    first.initialized.resolve(); first.nativeInit.resolve();
+    await expect.poll(() => first.calls).toContain('models');
+    const secondRun = second.adapter.run(second.context);
+    second.initialized.resolve(); second.nativeInit.resolve();
+    await expect.poll(() => second.calls).toContain('mcp');
+    cancelled.abort(new Error('cancelled'));
+    await firstFailure;
+    second.account.resolve({ userId: 'fixture-account' });
+    second.models.resolve([{ value: 'model' }]);
+    second.mcp.resolve([{ name: 'ai-team', status: 'connected' }]);
+    second.image.resolve({ mimeType: 'image/png', data: 'fixture-image' });
+    expect(await secondRun).toMatchObject({ text: 'done' });
+    expect(first.prompts).toHaveLength(0);
+    expect(second.prompts).toHaveLength(1);
+    expect(first.closed()).toBe(true);
+    expect(second.closed()).toBe(true);
+  });
+
+  it('uses independent cold model requests and shares the completed catalog with later runs', async () => {
+    const first = await fixture(), second = await fixture();
+    second.context.connection = first.context.connection;
+    const firstRun = first.adapter.run(first.context), secondRun = second.adapter.run(second.context);
+    for (const test of [first, second]) {
+      test.initialized.resolve(); test.nativeInit.resolve();
+      await expect.poll(() => test.calls).toContain('models');
+    }
+    for (const test of [first, second]) {
+      test.account.resolve({ userId: 'fixture-account' }); test.models.resolve([{ value: 'model' }]);
+      test.mcp.resolve([{ name: 'ai-team', status: 'connected' }]);
+      test.image.resolve({ mimeType: 'image/png', data: 'fixture-image' });
+    }
+    expect(await Promise.all([firstRun, secondRun])).toMatchObject([{ text: 'done' }, { text: 'done' }]);
+    const later = await fixture(); later.context.connection = first.context.connection;
+    const laterRun = later.adapter.run(later.context);
+    later.initialized.resolve(); later.nativeInit.resolve(); later.account.resolve({ userId: 'fixture-account' });
+    later.mcp.resolve([{ name: 'ai-team', status: 'connected' }]);
+    later.image.resolve({ mimeType: 'image/png', data: 'fixture-image' });
+    expect(await laterRun).toMatchObject({ text: 'done' });
+    expect(later.calls).not.toContain('models');
+    expect(later.calls).toEqual(expect.arrayContaining(['account', 'mcp']));
+    expect(later.prompts).toHaveLength(1);
+  });
+
   it('overlaps images with initialization and sends only after all parallel checks succeed', async () => {
     const test = await fixture(), running = test.adapter.run(test.context);
     await expect.poll(() => test.calls).toEqual(['init', 'image']);

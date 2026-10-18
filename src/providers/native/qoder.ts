@@ -59,11 +59,9 @@ interface QoderModelCacheEntry {
   expiresAt: number;
 }
 const qoderModelCache = new Map<string, QoderModelCacheEntry>();
-const qoderModelInFlight = new Map<string, Promise<QoderSdk.ModelInfo[]>>();
 
 export function clearQoderModelCache(): void {
   qoderModelCache.clear();
-  qoderModelInFlight.clear();
 }
 
 function qoderCacheKey(connection: Connection, profile: string, options: QoderSdk.Options): string {
@@ -88,17 +86,6 @@ function readQoderModelCache(key: string): QoderModelCacheEntry | undefined {
     return undefined;
   }
   return entry;
-}
-
-function fetchQoderModels(key: string, query: QoderSdk.Query, signal: AbortSignal): Promise<QoderSdk.ModelInfo[]> {
-  let pending = qoderModelInFlight.get(key);
-  if (!pending) {
-    pending = query.getAvailableModels().finally(() => {
-      if (qoderModelInFlight.get(key) === pending) qoderModelInFlight.delete(key);
-    });
-    qoderModelInFlight.set(key, pending);
-  }
-  return bounded(pending, signal);
 }
 
 export class QoderAdapter implements ProviderAdapter {
@@ -220,7 +207,7 @@ export class QoderAdapter implements ProviderAdapter {
       && (!context.bot.reasoning || cached.models.find(model => model.id === context.bot.model)?.reasoning?.includes(context.bot.reasoning)));
     const [account, prefetchedModels, servers] = await Promise.all([
       bounded(query.accountInfo(), signal),
-      canReuseCached ? Promise.resolve(undefined) : fetchQoderModels(cacheKey, query, signal),
+      canReuseCached ? Promise.resolve(undefined) : bounded(query.getAvailableModels(), signal),
       bounded(query.mcpServerStatus(), signal),
     ]);
     if (!account.userId) throw new AuthenticationRequiredError('Qoder CN 需要本机官方登录');
@@ -230,7 +217,7 @@ export class QoderAdapter implements ProviderAdapter {
     if (canReuseCached && cached?.accountScope === scope) {
       catalog = cached.models;
     } else {
-      const availableModels = prefetchedModels ?? await fetchQoderModels(cacheKey, query, signal);
+      const availableModels = prefetchedModels ?? await bounded(query.getAvailableModels(), signal);
       catalog = qoderCatalog(availableModels);
       qoderModelCache.set(cacheKey, { models: catalog, accountScope: scope, expiresAt: Date.now() + QODER_MODEL_CACHE_TTL_MS });
     }
