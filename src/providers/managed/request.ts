@@ -15,8 +15,13 @@ export class ModelRequest {
   private outputStarted = false;
   private modelActivity: ModelActivity;
   private completed = false;
+  private readonly began = performance.now();
+  private firstEvent = false;
+  private firstOutput = false;
+  private readyCalls = new Set<string>();
 
-  constructor(private context: Pick<RunContext, 'signal' | 'emit' | 'userInput' | 'isWaitingForInput' | 'inputSignal'>) {
+  constructor(private context: Pick<RunContext, 'signal' | 'emit' | 'userInput' | 'isWaitingForInput' | 'inputSignal'>,
+    private readonly requestId?: string) {
     this.modelActivity = new ModelActivity(event => context.emit(event));
     this.signal = AbortSignal.any([context.signal, this.controller.signal]);
     this.unsubscribe = context.userInput?.subscribe(() => {
@@ -28,6 +33,8 @@ export class ModelRequest {
   }
 
   activity(kind: string, hasOutput: boolean, activityKind?: ModelActivityKind) {
+    if (!this.firstEvent) { this.firstEvent = true; this.timing('model-first-event'); }
+    if (hasOutput && !this.firstOutput) { this.firstOutput = true; this.timing('model-first-output'); }
     this.outputStarted ||= hasOutput;
     if (this.completed) return;
     this.arm();
@@ -36,6 +43,12 @@ export class ModelRequest {
   }
 
   error(error: unknown) { return this.signal.aborted ? this.signal.reason : error; }
+
+  toolReady(name: string, callId: string) {
+    if (this.readyCalls.has(callId)) return;
+    this.readyCalls.add(callId);
+    this.timing('tool-ready', { name, callId });
+  }
 
   complete() {
     if (this.completed) return;
@@ -48,6 +61,11 @@ export class ModelRequest {
     clearTimeout(this.timer);
     this.unsubscribe?.();
     this.controller.abort();
+  }
+
+  private timing(stage: string, details: Record<string, unknown> = {}) {
+    this.context.emit({ type: 'status', data: { phase: 'performance', stage,
+      ...(this.requestId ? { requestId: this.requestId } : {}), durationMs: performance.now() - this.began, ...details } });
   }
 
   private arm() {

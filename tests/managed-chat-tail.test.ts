@@ -1,6 +1,6 @@
 import { createServer, type Server } from 'node:http';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { RunContext } from '../src/domain/provider.js';
+import type { ProviderEvent, RunContext } from '../src/domain/provider.js';
 import { createClient } from '../src/providers/managed/client.js';
 import { runManaged } from '../src/providers/managed/loop.js';
 import { ModelRequest } from '../src/providers/managed/request.js';
@@ -16,14 +16,16 @@ afterEach(async () => {
 describe('completed Chat stream tails', () => {
   it('keeps a fixed deadline for usage after completion even when more metadata arrives', () => {
     vi.useFakeTimers();
-    const events: unknown[] = [];
+    const events: ProviderEvent[] = [];
     const request = new ModelRequest({ signal: new AbortController().signal, emit: event => { events.push(event); } });
     request.complete();
     vi.advanceTimersByTime(600);
     request.activity('chat.chunk', false, 'waiting'); request.complete();
     vi.advanceTimersByTime(400);
     expect(request.signal.aborted).toBe(true);
-    expect(events).toEqual([{ type: 'status', data: { phase: 'model-activity', activity: 'chat.completed', activityKind: 'finishing' } }]);
+    expect(events.filter(event => event.data.phase !== 'performance')).toEqual([
+      { type: 'status', data: { phase: 'model-activity', activity: 'chat.completed', activityKind: 'finishing' } },
+    ]);
     request.close();
   });
   it('waits briefly for reported usage after finish_reason', async () => {

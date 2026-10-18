@@ -31,6 +31,7 @@ import { artifactRequirement } from './task-requirements.js';
 import type { TaskControlService } from './task-control.js';
 import { assertUserMemorySources } from './memory-policy.js';
 import { prepareWebToolResult } from './web-tool-result.js';
+import { ToolTiming } from './tool-timing.js';
 
 interface Operation { id: string; fingerprint: string; runId: string; name: string; status: 'prepared' | 'dispatched' | 'succeeded' | 'failed' | 'unknown'; result?: unknown; modelResult?: unknown; error?: string; errorCode?: string; requirementVersion?: number; }
 export class ToolRuntime {
@@ -179,7 +180,14 @@ export class ToolRuntime {
   }
 
   execute(name: string, args: Record<string, unknown>, callId: string, context: ToolExecutionContext, bot: Bot): Promise<unknown> {
-    const operation = this.executeOperation(name, args, callId, context, bot);
+    const timing = new ToolTiming();
+    const operation = this.executeOperation(name, args, callId, context, bot, timing).finally(() => {
+      if (context.signal.aborted) timing.status = 'cancelled';
+      timing.finish(name, callId, event => {
+        this.state.storage.event({ id: id(), runId: context.runId, ...event, createdAt: now() });
+        this.state.changed('content');
+      });
+    });
     const pending = this.pending.get(context.runId) ?? new Set();
     pending.add(operation); this.pending.set(context.runId, pending);
     void operation.finally(() => { pending.delete(operation); if (!pending.size) this.pending.delete(context.runId); }).catch(() => {});
@@ -187,19 +195,22 @@ export class ToolRuntime {
   }
   async settle(runId: string) { await Promise.allSettled([...(this.pending.get(runId) ?? [])]); }
 
-  private async executeOperation(name: string, args: Record<string, unknown>, callId: string, context: ToolExecutionContext, bot: Bot): Promise<unknown> {
+  private async executeOperation(name: string, args: Record<string, unknown>, callId: string, context: ToolExecutionContext, bot: Bot, timing: ToolTiming): Promise<unknown> {
+    const authorizationStart = performance.now();
     context.signal.throwIfAborted();
     if (context.task.kind === 'question-decision') throw new Error('主管代答任务仅可决定回答');
     const currentBot = this.state.storage.get<Bot>('bots', bot.id);
     if (!currentBot || currentBot.archived) throw new Error('智能体已归档');
     context = this.currentContext(context, currentBot);
     const requestedName = name;
-    if (!this.definitions(context, currentBot).some(tool => tool.name === requestedName)) throw new Error(`当前未授权工具：${requestedName}`);
+    const availableNames = new Set(this.definitions(context, currentBot).map(tool => tool.name));
+    if (!availableNames.has(requestedName)) throw new Error(`当前未授权工具：${requestedName}`);
     const canonical = this.registry.canonical?.(name, args, context);
     if (canonical) { name = canonical.name; args = canonical.args; }
     if (name === 'search_web' && context.toolConnections.find(item => item.id === args.connectionId)?.kind !== 'search'
       && !currentBot.toolNames.includes('call_mcp')) throw new Error('MCP 搜索需要外部工具权限及连接授权');
-    if (!this.definitions(context, currentBot).some(tool => tool.name === name)) throw new Error(`当前未授权工具：${name}`);
+    if (!availableNames.has(name)) throw new Error(`当前未授权工具：${name}`);
+    timing.record('authorizationMs', performance.now() - authorizationStart);
     const resumedId = context.resumeOperations?.[callId];
     const operationId = resumedId ?? `${context.runId}:${callId}`;
     const fingerprint = createHash('sha256').update(JSON.stringify({ name, args })).digest('hex');
@@ -211,7 +222,7 @@ export class ToolRuntime {
     }
     if (existing) {
       if (existing.fingerprint !== fingerprint) throw new Error('工具调用 ID 与参数不匹配');
-      if (existing.status === 'succeeded') return existing.modelResult ?? existing.result;
+      if (existing.status === 'succeeded') { timing.status = 'reused'; return existing.modelResult ?? existing.result; }
       if (resumedId && existing.status === 'failed') return { error: existing.error ?? '工具执行失败' };
       if (!resumedId || existing.status !== 'prepared') throw new Error('工具调用已有执行记录，请先核查实际结果');
     }
@@ -220,13 +231,14 @@ export class ToolRuntime {
       requirementVersion: this.state.storage.get<Run>('runs', context.runId)?.requirementVersion };
     const summary = toolSummary(name, args);
     const s = this.state.storage;
-    s.put('tool_operations', operation);
+    timing.measure('saveMs', () => s.put('tool_operations', operation));
     let dispatched = false;
     s.event({ id: id(), runId: context.runId, type: 'tool', data: { name: requestedName, callId, summary, status: 'running', source: 'app' }, createdAt: now() });
     this.state.changed();
+    const queuedAt = performance.now();
     try {
       const rawRequestApproval = context.requestApproval;
-      const assertAuthorized = () => {
+      const assertAuthorized = () => timing.measure('authorizationMs', () => {
         context.signal.throwIfAborted();
         const latestBot = this.state.storage.get<Bot>('bots', bot.id);
         if (!latestBot || latestBot.archived) throw new Error(`当前未授权工具：${name}`);
@@ -238,23 +250,25 @@ export class ToolRuntime {
           throw new Error(`当前未授权工具：${name}`);
         if (['call_mcp', 'search_web'].includes(name) && (typeof args.connectionId !== 'string' || !latestBot.toolConnectionIds?.includes(args.connectionId)
           || !this.state.storage.get<ToolConnection>('tool_connections', args.connectionId)?.enabled)) throw new Error('外部连接未授权');
-      };
+      });
       const execute = () => {
+        if (writesWorkspace) timing.record('workspaceQueueMs', performance.now() - queuedAt);
         if (this.questions.forRun(context.runId)) throw new Error('本轮正在等待用户回答');
         const executionContext: ToolExecutionContext = { ...context, callId,
+          recordTiming: (stage, durationMs) => timing.record(stage, durationMs),
           requestApproval: async (action, approveSummary, details) => {
-            const approved = await rawRequestApproval(action, approveSummary, details);
+            const approved = await timing.measureAsync('approvalWaitMs', () => rawRequestApproval(action, approveSummary, details));
             if (approved) assertAuthorized();
             return approved;
           },
           assertAuthorized,
           markDispatched: () => {
             assertAuthorized();
-            dispatched = true; s.put('tool_operations', { ...operation, status: 'dispatched' });
+            dispatched = true; timing.measure('saveMs', () => s.put('tool_operations', { ...operation, status: 'dispatched' }));
           } };
         executionContext.processes = this.processes.forContext(executionContext);
         Object.assign(executionContext, this.controls?.forContext(executionContext));
-        return this.registry.execute(name, args, executionContext);
+        return timing.measureAsync('executionMs', () => this.registry.execute(name, args, executionContext));
       };
       const mutate = async () => {
         await this.processes.waitForWorkspace(context.workspace.id, context.runId, context.signal);
@@ -265,21 +279,24 @@ export class ToolRuntime {
       const rawResult = writesWorkspace
         ? await this.withWriteLock(context.workspace.id, mutate, context.signal)
         : await execute();
-      const result = await storeToolMedia(rawResult, context, this.state.dataDirectory);
-      s.put('tool_operations', { ...operation, status: 'succeeded', result });
+      const result = await timing.measureAsync('processingMs', () => storeToolMedia(rawResult, context, this.state.dataDirectory));
+      timing.measure('saveMs', () => s.put('tool_operations', { ...operation, status: 'succeeded', result }));
       const command = name === 'run_command' && result && typeof result === 'object' && 'status' in result
         ? { commandStatus: result.status, exitCode: 'code' in result ? result.code : undefined } : {};
       s.event({ id: id(), runId: context.runId, type: 'tool', data: { name, callId, summary, status: 'completed', source: 'app', ...command }, createdAt: now() });
       const provider = s.get<Connection>('connections', currentBot.connectionId)?.provider;
-      const preview = await prepareWebToolResult(this.state, context, currentBot, name, args, result);
-      const modelResult = provider === 'chatgpt' || provider === 'custom' ? preview : await this.compactResult(preview, context, name);
-      s.put('tool_operations', { ...operation, status: 'succeeded', result, modelResult });
+      const modelResult = await timing.measureAsync('processingMs', async () => {
+        const preview = await prepareWebToolResult(this.state, context, currentBot, name, args, result);
+        return provider === 'chatgpt' || provider === 'custom' ? preview : this.compactResult(preview, context, name);
+      });
+      timing.measure('saveMs', () => s.put('tool_operations', { ...operation, status: 'succeeded', result, modelResult }));
+      timing.status = 'succeeded';
       this.state.changed(); return modelResult;
     } catch (error) {
       const unknown = dispatched && (context.signal.aborted || (name === 'call_mcp' && /unknown|结果未知|ECONNRESET|ETIMEDOUT|closed|timeout|timed out|断开/i.test(publicError(error))));
       const errorCode = name === 'read_artifact' && typeof args.artifactId === 'string'
         ? s.get<Artifact>('artifacts', args.artifactId) ? 'artifact_unauthorized' : 'artifact_missing' : undefined;
-      s.put('tool_operations', { ...operation, status: unknown ? 'unknown' : 'failed', error: publicError(error), errorCode });
+      timing.measure('saveMs', () => s.put('tool_operations', { ...operation, status: unknown ? 'unknown' : 'failed', error: publicError(error), errorCode }));
       s.event({ id: id(), runId: context.runId, type: 'tool', data: { name, callId, summary, status: 'failed', source: 'app', error: publicError(error) }, createdAt: now() });
       this.state.changed();
       if (context.signal.aborted) throw error;

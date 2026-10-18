@@ -3,6 +3,7 @@ import type { Run, RunEvent, RunEventPage, Task } from '../../../src/domain/type
 import { request, errorMessage } from './api.js';
 import { Badge, Button, ErrorNote, cn, timeLabel } from './components.js';
 import { taskRecordActions } from './conversation-records.js';
+import { RunPerformance } from './RunPerformance.js';
 
 const labels: Record<string, string> = { tool: '工具', approval: '审批', usage: '用量', context: '上下文', compaction: '整理', status: '状态' };
 const mergeEvents = (previous: RunEvent[], incoming: RunEvent[]) => [...new Map([...previous, ...incoming].map(event => [event.id, event])).values()]
@@ -65,6 +66,7 @@ export function RunRecords({ run, recent, task }: { run: Run; recent: RunEvent[]
         <summary className="cursor-pointer">模型用量与诊断详情</summary>
         <p className="mt-3 tabular-nums">输入 {usage?.inputTokens ?? '未知'} · 输出 {usage?.outputTokens ?? '未知'} tokens{usage?.source === 'estimated' && '（估计）'}</p>
         {!usage && run.confirmedUsage && <p className="mt-1 tabular-nums">已确认部分：输入 {run.confirmedUsage.inputTokens ?? '未知'} · 输出 {run.confirmedUsage.outputTokens ?? '未知'} tokens</p>}
+        <RunPerformance run={run} events={records} />
         <div className="mt-3 grid gap-2">{records.map(event => <details key={event.id} className="min-w-0">
           <summary className="cursor-pointer">{labels[event.type] ?? event.type} · <span className="tabular-nums">{timeLabel(event.createdAt)}</span></summary><EventData event={event} />
         </details>)}</div>

@@ -19,6 +19,7 @@ export interface ToolExecutionContext {
   callId?: string;
   resumeOperations?: Record<string, string>;
   assertAuthorized?(): void;
+  recordTiming?(stage: 'networkQueueMs', durationMs: number): void;
   markDispatched?(): void;
   runId: string; task: Task; botId: string; conversation: Conversation; workspace: Workspace;
   signal: AbortSignal; requestApproval(toolName: string, summary: string, args: Record<string, unknown>): Promise<boolean>;

@@ -26,7 +26,8 @@ describe('managed request recovery', () => {
     const started = Date.now();
     const result = await runManaged(createClient(server.url), context(events), 'responses', [80, 1]);
     const elapsed = Date.now() - started;
-    const status = events.filter(event => event.type === 'status' && !String(event.data.phase).startsWith('model-cache-')).map(event => event.data);
+    const status = events.filter(event => event.type === 'status' && event.data.phase !== 'performance'
+      && !String(event.data.phase).startsWith('model-cache-')).map(event => event.data);
     expect(status.map(event => event.phase)).toEqual(['model-request', 'model-error', 'model-retry', 'model-request', 'model-response']);
     expect(status.filter(event => event.phase === 'model-request').map(event => event.step)).toEqual([1, 2]);
     expect(status.map(event => event.requestId)).toEqual(['run:1', 'run:1', 'run:1', 'run:2', 'run:2']);

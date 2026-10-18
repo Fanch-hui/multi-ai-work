@@ -8,8 +8,11 @@ export class NetworkConcurrency {
 
   constructor(private readonly limit = 2) {}
 
-  async run<T>(key: string, context: Pick<ToolExecutionContext, 'signal' | 'assertAuthorized'>, action: () => Promise<T>): Promise<T> {
-    const queue = await this.acquire(key, context.signal);
+  async run<T>(key: string, context: Pick<ToolExecutionContext, 'signal' | 'assertAuthorized' | 'recordTiming'>, action: () => Promise<T>): Promise<T> {
+    const started = performance.now();
+    const queue = await this.acquire(key, context.signal).finally(() => {
+      context.recordTiming?.('networkQueueMs', performance.now() - started);
+    });
     try {
       context.signal.throwIfAborted();
       context.assertAuthorized?.();

@@ -58,10 +58,11 @@ function chunkActivity(chunk: ChatCompletionChunk): ModelActivityKind | undefine
     && (!Array.isArray(value) || value.length))) return 'working';
   return delta.role ? 'waiting' : undefined;
 }
-export async function chatTurn(client: OpenAI, context: RunContext, messages: ModelMessage[]): Promise<Turn> {
-  const request = new ModelRequest(context);
+export async function chatTurn(client: OpenAI, context: RunContext, messages: ModelMessage[], requestId?: string): Promise<Turn> {
+  const request = new ModelRequest(context, requestId);
   const accumulator = new ChatAccumulator(context.emit);
   let partialOutput = false;
+  let callsReady = false;
   try {
     const images = await resolveMessageImages({ ...context, signal: request.signal }, messages);
     request.signal.throwIfAborted();
@@ -77,6 +78,10 @@ export async function chatTurn(client: OpenAI, context: RunContext, messages: Mo
       accumulator.accept(chunk);
       if (accumulator.finished && !accumulator.completed) accumulator.finish();
       if (accumulator.completed) {
+        if (!callsReady) {
+          for (const call of accumulator.finish().message.toolCalls ?? []) request.toolReady(call.name, call.id);
+          callsReady = true;
+        }
         if (accumulator.hasUsage) break;
         request.complete();
       }
