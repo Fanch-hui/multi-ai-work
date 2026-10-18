@@ -2,6 +2,8 @@ import type { ModelMessage, RunContext } from '../domain/provider.js';
 import { estimateModelMessageTokens, estimateModelMessagesTokens, estimateTokens } from '../runtime/model-history.js';
 import { projectToolResult, toolResultBudgets } from '../runtime/tool-result-budget.js';
 import type { ContextReferences } from './context-references.js';
+import { artifactReadPages, projectArtifactReadBatch } from '../runtime/artifact-read-projection.js';
+import type { Protocol } from '../domain/types.js';
 
 export function prepareToolResultBudget(input: RunContext, references: ContextReferences | undefined,
   inputBudget?: number): NonNullable<RunContext['prepareToolResults']> {
@@ -21,9 +23,15 @@ export function prepareToolResultBudget(input: RunContext, references: ContextRe
       const message = results[index], original = estimateModelMessageTokens(message, protocol);
       const limit = Math.min(single, Math.floor(remaining / (results.length - index)));
       let next: ModelMessage | undefined;
-      if (message.role === 'tool' && original > limit && limit > 0) {
+      const call = calls.get(message.callId ?? '');
+      if (message.role === 'tool' && call?.name === 'read_artifact') {
         try {
-          const call = calls.get(message.callId ?? '');
+          const args = JSON.parse(call.arguments) as { reads?: { artifactId: string }[] };
+          if (Array.isArray(args.reads)) next = await prepareArtifactBatch(message, args.reads, references, limit, protocol);
+        } catch { input.signal.throwIfAborted(); }
+      }
+      if (!next && message.role === 'tool' && original > limit && limit > 0) {
+        try {
           const page = call?.name === 'read_artifact';
           const args = page ? JSON.parse(call.arguments) as { artifactId?: string; offset?: number } : undefined;
           const reference = page ? typeof args?.artifactId === 'string' ? await references.readableArtifact(args.artifactId) : undefined
@@ -40,11 +48,28 @@ export function prepareToolResultBudget(input: RunContext, references: ContextRe
           }
         } catch { input.signal.throwIfAborted(); }
       }
-      if (next) {
+      if (next && next !== message) {
         projected[batchStart + index] = next; changed = true;
       }
       remaining = Math.max(0, remaining - (next ? estimateModelMessageTokens(next, protocol) : original));
     }
     return changed ? projected : undefined;
   };
+}
+
+async function prepareArtifactBatch(message: ModelMessage, reads: { artifactId: string }[], references: ContextReferences,
+  limit: number, protocol?: Protocol): Promise<ModelMessage | undefined> {
+  const pages = artifactReadPages(message.content);
+  if (!pages) return;
+  const requested = new Set(reads.map(read => read.artifactId));
+  const ids = [...new Set(pages.flatMap(page => typeof page.artifactId === 'string' && requested.has(page.artifactId)
+    && !page.error && page.contentAvailable !== false ? [page.artifactId] : []))];
+  const sources = (await Promise.all(ids.map(id => references.readableArtifact(id)))).filter(source => source !== undefined);
+  if (!sources.length) return;
+  const result = projectArtifactReadBatch(message, new Set(sources.map(source => source.id)), limit, protocol) ?? message;
+  const contextArtifactIds = [...new Set([...message.contextArtifactIds ?? [], ...sources.map(source => source.id)])];
+  const projected = result === message && JSON.stringify(contextArtifactIds) === JSON.stringify(message.contextArtifactIds)
+    ? message : { ...result, contextArtifactIds };
+  references.registerProjection(projected, sources);
+  return projected;
 }

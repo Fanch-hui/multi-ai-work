@@ -36,22 +36,29 @@ describe('model image protocol', () => {
       });
       const context = await testContext(server, protocol);
       context.images = [image];
+      const page = { ...image, artifactId: 'image-2' };
+      const pageUrl = 'data:image/png;base64,cGFnZTI=';
+      context.executeTool = async () => ({ content: [{ type: 'text', text: 'Rendered page' },
+        { type: 'image', image }, { type: 'image', image: page }] });
+      context.resolveImage = async input => ({ mimeType: image.mimeType, data: input.artifactId === page.artifactId ? 'cGFnZTI=' : data });
       const result = await new CustomApiAdapter().run(context);
       expect(result.text).toBe('Seen'); expect(requests).toHaveLength(2);
       if (protocol === 'responses') {
         expect(requests[0].input.at(-1)).toMatchObject({ role: 'user', content: [{ type: 'input_image', image_url: imageUrl, detail: 'auto' }] });
         expect(requests[1].input.at(-1)).toEqual({ type: 'function_call_output', call_id: 'read', output: [
           { type: 'input_text', text: 'Rendered page' }, { type: 'input_image', image_url: imageUrl, detail: 'auto' },
+          { type: 'input_image', image_url: pageUrl, detail: 'auto' },
         ] });
       } else {
         expect(requests[0].messages.at(-1)).toEqual({ role: 'user', content: [{ type: 'image_url', image_url: { url: imageUrl } }] });
         expect(requests[1].messages.at(-2)).toEqual({ role: 'tool', tool_call_id: 'read', content: 'Rendered page' });
         expect(requests[1].messages.at(-1)).toMatchObject({ role: 'user', content: [
           { type: 'text', text: '以下图片来自前述工具返回。' }, { type: 'image_url', image_url: { url: imageUrl } },
+          { type: 'image_url', image_url: { url: pageUrl } },
         ] });
       }
       expect(JSON.stringify(result.messages)).not.toContain(data);
-      expect(result.messages?.find(message => message.role === 'tool')?.images).toEqual([image]);
+      expect(result.messages?.find(message => message.role === 'tool')?.images).toEqual([image, page]);
     });
   }
 

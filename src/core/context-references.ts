@@ -6,7 +6,7 @@ import type { Artifact, Bot, Conversation, Run, Task } from '../domain/types.js'
 import type { State } from './state.js';
 import { scopedTask } from './task-access.js';
 import { accessibleArtifacts } from './tool-access.js';
-import { contextProjectionId, registerContextProjection } from './context-reference-projection.js';
+import { contextProjectionIds, registerContextProjection } from './context-reference-projection.js';
 import { formatContextReferences, needsReferenceIndex, referenceIndexSource, saveReferenceIndex } from './context-reference-index.js';
 export { formatContextReferences } from './context-reference-index.js';
 
@@ -76,11 +76,14 @@ export class ContextReferences {
   async preserveToolOutput(message: ModelMessage): Promise<ContextReference | undefined> {
     this.scope.signal.throwIfAborted();
     if (message.role !== 'tool' || !this.allowed('read_artifact')) return;
-    const projection = contextProjectionId(this.state, this.scope.task.id, this.scope.runId, message);
-    if (projection) {
-      const reference = await this.readableArtifact(projection);
-      if (reference) this.registerProjection(message, reference);
-      return reference;
+    const projections = contextProjectionIds(this.state, this.scope.task.id, this.scope.runId, message);
+    if (projections.length) {
+      const references = (await Promise.all(projections.map(id => this.readableArtifact(id)))).filter(ref => ref !== undefined);
+      if (references.length) {
+        message.contextArtifactIds = [...new Set([...references.map(ref => ref.id), ...message.contextArtifactIds ?? []])];
+        this.registerProjection(message, references);
+      }
+      return references[0];
     }
     const size = Buffer.byteLength(message.content);
     if (!size || size > maxReadableBytes) return;
@@ -122,11 +125,12 @@ export class ContextReferences {
   }
 
   isProjection(message: ModelMessage): boolean {
-    return !!contextProjectionId(this.state, this.scope.task.id, this.scope.runId, message);
+    return contextProjectionIds(this.state, this.scope.task.id, this.scope.runId, message).length > 0;
   }
 
-  registerProjection(message: ModelMessage, reference: ContextReference): void {
-    registerContextProjection(this.state, this.scope.task.id, message.content, reference.id);
+  registerProjection(message: ModelMessage, reference: ContextReference | readonly ContextReference[]): void {
+    const references = Array.isArray(reference) ? reference : [reference as ContextReference];
+    registerContextProjection(this.state, this.scope.task.id, message.content, references.map(ref => ref.id));
   }
 
   private readable(artifact: Artifact): Promise<boolean> {

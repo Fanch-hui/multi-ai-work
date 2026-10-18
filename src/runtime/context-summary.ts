@@ -1,5 +1,6 @@
 import type { ModelMessage } from '../domain/provider.js';
 import { balancedHistoryUnits, estimateModelMessageTokens, estimateTokens, summaryMessageProjection, toolsPaired, type ModelHistoryEntry } from './model-history.js';
+import { artifactReadPages, projectArtifactReadBatch } from './artifact-read-projection.js';
 
 type ToolCall = NonNullable<ModelMessage['toolCalls']>[number];
 
@@ -42,6 +43,10 @@ export function projectSummaryToolMessage(message: ModelMessage, budget: number,
   const rawContent = projected.content;
   const toolBudget = Math.max(160, Math.min(800, Math.floor(budget * 0.4)));
   const parsed = parseObject(rawContent);
+  if (artifactReadPages(rawContent)) {
+    const batch = projectArtifactReadBatch({ ...message, images: undefined }, new Set(message.contextArtifactIds), toolBudget);
+    return batch ? { ...batch, images: message.images } : message;
+  }
   const alreadyProjected = Boolean(parsed && parsed.truncated === true
     && (typeof parsed.preview === 'string' || typeof parsed.previewOmission === 'object'));
   if (alreadyProjected && estimateTokens(rawContent) <= toolBudget) return message;

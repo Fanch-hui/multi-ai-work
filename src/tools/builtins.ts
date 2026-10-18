@@ -2,7 +2,6 @@ import { z } from 'zod';
 import { unlink, readFile, stat, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import type { ToolExecutionContext } from '../domain/tools.js';
-import { readDocument } from './documents.js';
 import { createArtifact } from './artifacts.js';
 import { fetchWeb } from './web.js';
 import { isSearchConnection, search, searchConnection } from './search.js';
@@ -15,7 +14,7 @@ import { filePath } from './file-policy.js';
 import type { McpConnections } from './mcp.js';
 import { createTeamTools } from './team.js';
 import { createMemoryTools } from './memory.js';
-import { imageMimeTypes, normalizeArtifactImage } from './images.js';
+import { createArtifactReadTool } from './artifact-read.js';
 import { createOfficeTools } from './office.js';
 import { createSecurityScanTools } from './security-scan.js';
 import { createTaskPlanTools } from './task-plan.js';
@@ -95,30 +94,7 @@ export function createBuiltins(mcp: McpConnections): Record<string, Builtin> {
         topic: args.topic, summary: args.summary, tags: args.tags,
       })
     },
-    read_artifact: {
-      description: '按成果 ID 读取获准资料：图片返回模型可查看的图像内容，文档按 offset / limit 字符位置分段读取。',
-      schema: z.object({ artifactId: id, offset: z.number().int().min(0).default(0), limit: z.number().int().min(1).max(24000).default(12000) }),
-      execute: async (args, context) => {
-        const artifact = context.findArtifact(args.artifactId);
-        if (!artifact) throw new Error('成果不存在或未授权');
-        if ((artifact.contentSource ? artifact.size : (await stat(artifact.path)).size) > 25 * 1024 * 1024) throw new Error('成果超过 25 MiB 读取限制');
-        if (imageMimeTypes.has(artifact.mimeType)) {
-          const image = await normalizeArtifactImage(artifact);
-          return { content: [{ type: 'text', text: `图片 ${artifact.name} (${artifact.id})` },
-            { type: 'image', image: { artifactId: artifact.id, mimeType: image.mimeType, width: image.width, height: image.height } }] };
-        }
-        if (artifact.mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation')
-          return { artifactId: artifact.id, name: artifact.name, path: artifact.path, format: 'pptx',
-            contentAvailable: false, instruction: '通过 Office 技能与随包 python-pptx 读取、修改此文件；源成果按只读资料处理，修改另存到工作目录并登记。' };
-        const bytes = ['text/markdown', 'text/plain', 'application/json'].includes(artifact.mimeType)
-          ? context.readArtifact ? Buffer.from(await context.readArtifact(artifact.id)) : await readFile(artifact.path) : undefined;
-        if (bytes && bytes.length > 25 * 1024 * 1024) throw new Error('成果超过 25 MiB 读取限制');
-        const document = bytes ? bytes.toString('utf8') : JSON.stringify(await readDocument(artifact.path));
-        return { artifactId: artifact.id, name: artifact.name, path: artifact.path, requirementVersion: artifact.requirementVersion,
-          superseded: artifact.superseded, content: document.slice(args.offset, args.offset + args.limit),
-          offset: args.offset, nextOffset: args.offset + args.limit < document.length ? args.offset + args.limit : null, totalLength: document.length };
-      }
-    },
+    read_artifact: createArtifactReadTool(),
     write_artifact: {
       description: '生成并登记最终交付用户的文件（Markdown、DOCX、XLSX、PDF）。过程资料将 purpose 设为 intermediate；默认 deliverable 进入成果库。覆盖前须读取当前文件版本，按成员执行权限确认操作。XLSX 使用 sheets，其他格式使用 content。',
       schema: z.object({ path: text, format: z.enum(['markdown', 'docx', 'xlsx', 'pdf']), purpose: z.enum(['deliverable', 'intermediate']).default('deliverable'), title: z.string().max(500).optional(),

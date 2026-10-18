@@ -10,6 +10,7 @@ import { taskPlanPrompt } from './task-plan-prompt.js';
 import { taskRequirement } from './task-requirements.js';
 import { memoryGuidance } from './memory-policy.js';
 import { runtimeContextMessage } from './run-runtime-context.js';
+import { taskOperationReceipts } from './task-operation-receipts.js';
 
 function stableMemorySort(entries: readonly MemoryEntry[]): MemoryEntry[] {
   return [...entries].sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) || a.id.localeCompare(b.id));
@@ -101,7 +102,7 @@ export function runPrompt(state: State, memory: MemoryService, task: Task, bot: 
     '最终回复默认发布到当前对话。post_message 用于本轮必须立即送达的发言，工具返回即为已发布；本轮使用它后，最终回复作为任务结果保存。',
     '库只收录最终交付物。草稿、工具完整结果、预览页和过程数据使用 intermediate 用途；仅将最后要交付的文件登记为 deliverable。',
     bot.id === state.settings().mainBotId ? '群内共享文件用 post_message 携带 artifactIds；在来源主对话可指定任务群 conversationId。要交给成员处理，用 delegate_task 传 artifactIds，执行中的成员用 send_task_input 传新要求和文件接入原任务；诊断先只读 get_task，用户仅询问原因时不恢复制作。需要停止成员模型任务用 stop_task，并核对实际停止状态。交付前用 get_task 检查当前需求版本的成果清单；部分成员失败时说明缺项并继续主管自己的工作。' : '',
-    bot.toolNames.includes('read_artifact') ? '文件资料以成果 ID 为准，可用 read_artifact 查阅。' : '', mode, arrangement.instructions,
+    bot.toolNames.includes('read_artifact') ? '文件资料以成果 ID 为准，可用 read_artifact 查阅；已确定需要的多份独立资料或预览页，用 reads 一次读取最多四项，各项保留自己的分页位置。' : '', mode, arrangement.instructions,
   ];
   const selectOptions = memorySelectOptions(state, task, bot, room, delta);
   const skillKnowledge = tools.skills.map(skill => `可用技能 ${skill.name} (${skill.id})：${skill.description ?? ''}；需要时用 read_skill 加载。`);
@@ -120,11 +121,7 @@ export function runPrompt(state: State, memory: MemoryService, task: Task, bot: 
     `成员 ID：${[...room.memberIds].sort().join('；')}`, ...compatibilityKnowledge].filter(Boolean).join('\n\n');
   const results = s.metadata(`results:${task.id}`);
   const requirement = taskRequirement(s, task);
-  const receipts = task.runIds
-    .flatMap(runId => s.byField<{ runId: string; name: string; status: string; modelResult?: unknown; result?: unknown }>('tool_operations', 'runId', runId))
-    .filter(operation => operation.status === 'succeeded'
-      && ['create_task_group', 'delegate_task', 'configure_bot', 'write_artifact', 'delete_file', 'run_command', 'call_mcp'].includes(operation.name))
-    .map(operation => ({ tool: operation.name, result: operation.modelResult ?? operation.result }));
+  const receipts = taskOperationReceipts(state, task, bot, room);
   const questions = s.byField<UserQuestion>('questions', 'taskId', task.id).filter(item => item.status === 'answered');
   const prompt = [`当前 App 会话 ID：${room.id}`, `当前任务 ID：${task.id}`, `当前任务：${task.goal}`, task.expectedOutput ? `交付要求：${task.expectedOutput}` : '',
     task.inputArtifactIds?.length ? `本任务输入资料 ID：${task.inputArtifactIds.join('、')}；可用 read_artifact 查阅，委派时显式传递相关 artifactIds。` : '',
@@ -136,7 +133,7 @@ export function runPrompt(state: State, memory: MemoryService, task: Task, bot: 
     requirement.updates.length ? `需求变更：\n${requirement.updates.map(update => `[版本 ${update.version}，消息 ${update.messageId}] ${update.content}`).join('\n')}` : '',
     delta.length ? `尚未接收的可见消息：\n${delta.map(message => `[${message.id}] ${message.authorType === 'user' ? '用户' : message.authorBotId ?? '系统'}：${message.content}${message.artifactIds.length ? `\n附件 ID：${message.artifactIds.join('、')}` : ''}`).join('\n')}` : '',
     results ? `成员实际结果（工作数据）：\n${JSON.stringify(results)}\n${isGroup ? '请直接回应成员，继续讨论或自然收束，不发任务汇报。' : '请核查并向用户交付，缺失结果如实说明。'}` : '',
-    receipts.length ? `本任务已确认执行的操作，复用结果避免重复提交：\n${JSON.stringify(receipts).slice(0, 16000)}` : '',
+    receipts.length ? `本任务已确认执行的操作，复用结果避免重复提交；status 表示工具调用已确认，具体业务状态以 result 为准，全文按 fullResult 入口读取：\n${JSON.stringify(receipts)}` : '',
   ].filter(Boolean).join('\n\n');
   const instructions = managed ? [bot.instructions, `成员 ID：${bot.id}；角色：${bot.role}；会话 ID：${room.id}。`, ...policy,
     bot.memoryMode !== 'off' ? memoryGuidance : '', ...skillKnowledge].filter(Boolean).join('\n\n') : nativeInstructions;

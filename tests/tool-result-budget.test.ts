@@ -11,6 +11,7 @@ import { estimateModelMessageTokens, estimateModelMessagesTokens } from '../src/
 import { projectToolResult, toolResultBudgets } from '../src/runtime/tool-result-budget.js';
 import { setup } from './core-harness.js';
 import { projectSummaryToolMessage } from '../src/runtime/context-summary.js';
+import { toolResultMessage } from '../src/runtime/tool-result-message.js';
 
 async function fixture(tools = ['read_file', 'read_artifact'], budget = 20000) {
   const { core, root, bot, connection } = await setup(async () => ({ text: '完成' }));
@@ -38,6 +39,49 @@ function batch(contents: string[]): ModelMessage[] {
 }
 
 describe('工具结果 token 预算', () => {
+  it('批量成果分别保留原文和分页坐标，重复投影与摘要不生成成果链', async () => {
+    const { core, context, references } = await fixture();
+    const first = await references.preserveToolOutput({ role: 'tool', content: '甲'.repeat(18000) });
+    const second = await references.preserveToolOutput({ role: 'tool', content: '乙'.repeat(22000) });
+    const args = { reads: [{ artifactId: first!.id, offset: 1000, limit: 10000 },
+      { artifactId: 'missing' }, { artifactId: second!.id, offset: 2000, limit: 10000 }] };
+    const raw = await context.executeTool('read_artifact', args, 'many');
+    const messages: ModelMessage[] = [{ role: 'assistant', content: '', toolCalls: [{ id: 'many', name: 'read_artifact',
+      arguments: JSON.stringify(args) }] }, toolResultMessage('many', raw)];
+    const next = await context.prepareToolResults!(messages, 1);
+    expect(estimateModelMessageTokens(next![1])).toBeLessThanOrEqual(toolResultBudgets(20000).single);
+    const result = JSON.parse(next![1].content);
+    expect(result.reads[0]).toMatchObject({ artifactId: first!.id, offset: 1000, nextOffset: 9000, totalLength: 18000 });
+    expect(result.reads[1]).toMatchObject({ artifactId: 'missing', error: expect.any(String) });
+    expect(result.reads[2]).toMatchObject({ artifactId: second!.id, offset: 2000, totalLength: 22000 });
+    for (const index of [0, 2]) {
+      const page = result.reads[index];
+      expect(page.fullResult.arguments.artifactId).toBe(page.artifactId);
+      expect(page.previewOmission.offset).toBeGreaterThan(page.offset);
+      const back = await context.executeTool('read_artifact', page.fullResult.arguments, `back-${index}`) as { content: string };
+      expect(back.content.startsWith(index === 0 ? '甲' : '乙')).toBe(true);
+    }
+    const preserved = await references.preserveReferences([next![1]]);
+    expect(new Set(preserved.artifactIds)).toEqual(new Set([first!.id, second!.id]));
+    const summary = projectSummaryToolMessage(next![1], 20000);
+    expect(JSON.parse(summary.content).reads.map((page: { artifactId: string }) => page.artifactId)).toEqual([first!.id, 'missing', second!.id]);
+    expect(core.state.storage.all('artifacts')).toHaveLength(2);
+    const smaller = await prepareToolResultBudget(context, references, 10000)(next!, 1);
+    expect(smaller![1].contextArtifactIds).toEqual(next![1].contextArtifactIds);
+    expect(core.state.storage.all('artifacts')).toHaveLength(2);
+  });
+
+  it('批量读取原始记录在后续压缩中仍定位每份成果', async () => {
+    const { core, context, references } = await fixture();
+    const refs = await Promise.all(['甲', '乙'].map(content => references.preserveToolOutput({ role: 'tool', content: content.repeat(5000) })));
+    const args = { reads: refs.map(ref => ({ artifactId: ref!.id, limit: 1200 })) };
+    const raw = await context.executeTool('read_artifact', args, 'raw-batch');
+    const message = toolResultMessage('raw-batch', raw);
+    const preserved = await references.preserveReferences([message]);
+    expect(new Set(preserved.artifactIds)).toEqual(new Set(refs.map(ref => ref!.id)));
+    expect(core.state.storage.all('artifacts')).toHaveLength(2);
+  });
+
   it('再次压缩预览复用完整资料，摘要不将预览位置映射到原文', async () => {
     const { core, context, references } = await fixture();
     const messages = batch(['头部' + '完整资料'.repeat(10000) + '尾部']);
