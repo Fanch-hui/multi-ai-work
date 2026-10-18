@@ -1,7 +1,9 @@
-import { app, utilityProcess, dialog, shell, safeStorage, nativeImage, type BrowserWindow, type UtilityProcess } from 'electron';
+import { app, utilityProcess, dialog, shell, safeStorage, nativeImage, net, type BrowserWindow, type UtilityProcess } from 'electron';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { stat } from 'node:fs/promises';
+import type { ProviderSocket } from '../../src/providers/network.js';
+import { createProviderSocketHost } from './provider-sockets.js';
 
 export class CoreHost {
   private child?: UtilityProcess;
@@ -17,11 +19,14 @@ export class CoreHost {
           : join(app.getAppPath(), 'workspace-runtime', process.platform === 'darwin' ? 'mac-arm64' : 'win-x64') },
       stdio: 'pipe', serviceName: 'multi-AI work Core' });
     this.child = child;
+    const sockets = createProviderSocketHost((url, headers) => new net.WebSocket(url, { headers, useSessionCookies: false }) as unknown as ProviderSocket,
+      value => child.postMessage(value));
     child.stdout?.resume();
     if (process.argv.includes('--smoke-core')) child.stderr?.pipe(process.stderr);
     else child.stderr?.resume();
     await new Promise<void>((resolve, reject) => {
       child.on('message', input => {
+        if (sockets.receive(input)) return;
         if (input.type === 'ready') resolve();
         if (input.type === 'changed') this.onChange?.();
         if (input.type === 'fatal') reject(new Error(input.error));
@@ -33,6 +38,7 @@ export class CoreHost {
         }
       });
       child.on('exit', code => {
+        sockets.close();
         if (this.child === child) this.child = undefined;
         reject(new Error(`Core 已停止 (${code})`));
         for (const handler of this.pending.values()) handler.reject(new Error('Core 已断开，请重新启动应用'));

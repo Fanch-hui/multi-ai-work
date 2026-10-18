@@ -1,3 +1,15 @@
+import NodeWebSocket from 'ws';
+
+export type ProviderSocket = Pick<WebSocket, 'readyState' | 'send' | 'close' | 'addEventListener' | 'removeEventListener'>;
+type SocketFactory = (url: string, headers: Record<string, string>) => ProviderSocket;
+let socketFactory: SocketFactory = (url, headers) => {
+  const socket = new NodeWebSocket(url, { headers, followRedirects: false });
+  socket.on('error', () => {});
+  return socket as unknown as ProviderSocket;
+};
+export function configureProviderWebSocket(factory: SocketFactory): void { socketFactory = factory; }
+export function providerWebSocket(url: string, headers: Record<string, string>): ProviderSocket { return socketFactory(url, headers); }
+
 let transport: typeof fetch = (input, init) => fetch(input, init);
 
 export function configureProviderFetch(fetcher: typeof fetch): void {

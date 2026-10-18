@@ -51,6 +51,7 @@ export async function modelCatalog(context: ProbeContext, token: string | undefi
 }
 export function providerError(error: unknown): Error {
   if (error instanceof InactiveModelStreamError || error instanceof InterruptedModelStreamError) return error;
+  if (error instanceof ProviderAuthorizationError) return error.failure;
   if (error instanceof OpenAI.APIConnectionError && error.cause instanceof ProviderAuthorizationError) return error.cause.failure;
   if (error instanceof OpenAI.APIConnectionError) return providerNetworkError(error);
   const { status, code } = modelErrorDetails(error);

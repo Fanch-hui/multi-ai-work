@@ -9,9 +9,10 @@ import { markPartialOutput } from './retry.js';
 import { resolveMessageImages } from '../images.js';
 import { ModelRequest } from './request.js';
 import { InterruptedModelStreamError } from './request-errors.js';
+import type { createResponsesTransport } from './responses-transport.js';
 import type { ResponsesCacheDiagnostics } from './cache-diagnostics.js';
 
-export interface Turn { message: ModelMessage; usage?: Usage; }
+export interface Turn { message: ModelMessage; usage?: Usage; persisted?: boolean; }
 
 function responseActivity(event: ResponseStreamEvent): ModelActivityKind {
   if (event.type === 'response.created' || event.type === 'response.in_progress' || event.type === 'response.queued') return 'waiting';
@@ -106,8 +107,10 @@ export class ResponsesAccumulator {
   }
 }
 export async function responsesTurn(client: OpenAI, context: RunContext, messages: ModelMessage[],
-  diagnostics?: ResponsesCacheDiagnostics, requestId = context.runId): Promise<Turn> {
-  const request = new ModelRequest(context);
+  diagnostics?: ResponsesCacheDiagnostics, requestId = context.runId,
+  onItem?: (index: number, item: ResponseOutputItem) => Promise<void>,
+  transport?: ReturnType<typeof createResponsesTransport>): Promise<Turn> {
+  const request = new ModelRequest(context, requestId);
   let partialOutput = false;
   try {
     const images = await resolveMessageImages({ ...context, signal: request.signal }, messages);
@@ -119,7 +122,9 @@ export async function responsesTurn(client: OpenAI, context: RunContext, message
       tools: context.tools.map(tool => ({ type: 'function', name: tool.name, description: tool.description, parameters: tool.inputSchema, strict: false })),
     };
     const trace = diagnostics?.begin(context, requestId, body);
-    const stream = await client.responses.create({ ...body, ...trace?.options }, { signal: request.signal });
+    const payload = { ...body, ...trace?.options };
+    const stream = transport ? await transport.stream(payload, request.signal)
+      : await client.responses.create(payload, { signal: request.signal });
     const accumulator = new ResponsesAccumulator(context.emit);
     let completed: Response | undefined;
     for await (const event of stream) {
@@ -128,10 +133,15 @@ export async function responsesTurn(client: OpenAI, context: RunContext, message
         || ('response' in event && event.response.output.length > 0)) partialOutput = true;
       request.activity(event.type, partialOutput, responseActivity(event));
       accumulator.accept(event);
+      if (event.type === 'response.output_item.done') {
+        if (event.item.type === 'function_call') request.toolReady(event.item.name, event.item.call_id);
+        await onItem?.(event.output_index, event.item);
+      }
       if (event.type === 'response.completed') { completed = event.response; break; }
     }
     request.signal.throwIfAborted();
     const turn = accumulator.finish();
+    for (const call of turn.message.toolCalls ?? []) request.toolReady(call.name, call.id);
     if (completed) trace?.complete(completed);
     return turn;
   } catch (error) { throw markPartialOutput(request.error(error), partialOutput); }

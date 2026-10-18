@@ -2,6 +2,7 @@ import type { RunContext } from '../../domain/provider.js';
 import type { Usage } from '../../domain/types.js';
 import { SupplementalInputError } from './request.js';
 import { isRecoverableStreamError } from './request-errors.js';
+import { ConfirmedToolStreamError } from './early-tools.js';
 import { networkErrorCode } from '../network.js';
 import { ModelRecoveryPendingError, type ModelRecovery } from '../../domain/recovery.js';
 
@@ -72,8 +73,9 @@ export async function requestWithRetry<T extends { usage?: Usage }>(context: Run
         context.emit({ type: 'status', data: { phase: 'model-input', step, requestId, durationMs } });
         throw error;
       }
-      context.emit({ type: 'status', data: { phase: 'model-error', step, requestId, durationMs, ...modelErrorDetails(error) } });
+      context.emit({ type: 'status', data: { phase: 'model-error', step, requestId, durationMs, ...modelErrorDetails(error instanceof ConfirmedToolStreamError ? error.streamError : error) } });
       context.signal.throwIfAborted();
+      if (error instanceof ConfirmedToolStreamError) throw error;
       if (attempt >= Math.min(delays.length, 5) || !(isTransientModelError(error) || isRecoverableStreamError(error))) throw error;
       const delayMs = delays[attempt];
       const details = modelErrorDetails(error);

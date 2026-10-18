@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import type { CoreService } from './service.js';
 import { startHttp } from './http.js';
 import { publicError } from './errors.js';
-import { configureProviderFetch } from '../providers/network.js';
+import { configureProviderFetch, configureProviderWebSocket } from '../providers/network.js';
+import { createProviderSocketProxy } from '../providers/socket-proxy.js';
 import { configureMarketFetch } from './market/network.js';
 import { createElectronMarketFetch } from './market/electron-transport.js';
 import { subscribeBatchedChanges } from './state-notifications.js';
@@ -13,6 +14,7 @@ type ParentPort = { postMessage(value: unknown): void; on(name: 'message', handl
 const port = (process as NodeJS.Process & { parentPort?: ParentPort }).parentPort;
 const pending = new Map<string, { resolve(value: unknown): void; reject(error: Error): void }>();
 const send = (value: unknown) => port ? port.postMessage(value) : process.send?.(value);
+const providerSockets = port ? createProviderSocketProxy(send) : undefined;
 function host(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
   const id = randomUUID();
   return new Promise((resolve, reject) => { pending.set(id, { resolve, reject }); send({ type: 'host', id, method, params }); });
@@ -20,6 +22,7 @@ function host(method: string, params: Record<string, unknown> = {}): Promise<unk
 const web = process.argv.includes('--web');
 let core: CoreService | undefined;
 async function message(input: Record<string, unknown>) {
+  if (providerSockets?.receive(input)) return;
   if (input.type === 'host-result') {
     const handler = pending.get(String(input.id)); pending.delete(String(input.id));
     if (input.error) handler?.reject(new Error(String(input.error))); else handler?.resolve(input.result);
@@ -42,7 +45,7 @@ const webController = new AbortController();
 async function close() {
   if (closed) return; closed = true;
   webController.abort(); unsubscribeChanges?.();
-  await core?.close(); await http?.close();
+  await core?.close(); providerSockets?.close(); await http?.close();
 }
 process.on('SIGTERM', () => { void close().then(() => process.exit(0)); });
 process.on('SIGINT', () => { void close().then(() => process.exit(0)); });
@@ -59,6 +62,7 @@ try {
   if (port) {
     const { net } = await import('electron');
     configureProviderFetch((input, init) => net.fetch(new Request(input, init)));
+    configureProviderWebSocket(providerSockets!.create);
     configureMarketFetch(createElectronMarketFetch(net));
   }
   await core.start(); http = await startHttp(core, web);

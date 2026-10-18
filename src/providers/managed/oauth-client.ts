@@ -3,19 +3,20 @@ import { providerFetch } from '../network.js';
 import { createClient, endpoint, ProviderAuthorizationError } from './client.js';
 import { accountScope, getOAuthAccessToken } from './oauth-tokens.js';
 
-export function createOAuthClient(context: RunContext) {
-  const authorize = async (rejectedAccessToken?: string) => {
-    try {
-      const record = await getOAuthAccessToken(context.connection.secretRef, context.getSecret,
-        context.saveSecret, context.signal, rejectedAccessToken);
-      if (context.binding.accountScope && context.binding.accountScope !== accountScope(record)) {
-        throw new Error('会话绑定的 ChatGPT 账号已变化');
-      }
-      return record.access_token;
-    } catch (error) {
-      throw new ProviderAuthorizationError(error instanceof Error ? error : new Error('ChatGPT 授权失败'));
+export async function authorizeOAuth(context: RunContext, rejectedAccessToken?: string, signal = context.signal) {
+  try {
+    const record = await getOAuthAccessToken(context.connection.secretRef, context.getSecret,
+      context.saveSecret, signal, rejectedAccessToken);
+    if (context.binding.accountScope && context.binding.accountScope !== accountScope(record)) {
+      throw new Error('会话绑定的 ChatGPT 账号已变化');
     }
-  };
+    return record.access_token;
+  } catch (error) {
+    throw new ProviderAuthorizationError(error instanceof Error ? error : new Error('ChatGPT 授权失败'));
+  }
+}
+export function createOAuthClient(context: RunContext) {
+  const authorize = (rejectedAccessToken?: string) => authorizeOAuth(context, rejectedAccessToken);
   return createClient(endpoint(context.connection), undefined, async (input, init) => {
     const headers = new Headers(init?.headers);
     const accessToken = await authorize();

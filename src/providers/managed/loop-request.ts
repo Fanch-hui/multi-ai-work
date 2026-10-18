@@ -4,14 +4,17 @@ import type { Protocol } from '../../domain/types.js';
 import { isContextOverflow, isSmallerProjection } from '../../runtime/context-overflow.js';
 import { chatTurn } from './chat.js';
 import type { ManagedRunState } from './progress.js';
-import { responsesTurn } from './responses.js';
-import { requestWithRetry } from './retry.js';
+import { ConfirmedToolStreamError, EarlyResponseTools } from './early-tools.js';
+import { responsesTurn, type Turn } from './responses.js';
+import { isRecoverableStreamError } from './request-errors.js';
+import { isTransientModelError, requestWithRetry } from './retry.js';
 import { SupplementalInputError } from './request.js';
+import type { createResponsesTransport } from './responses-transport.js';
 import type { ResponsesCacheDiagnostics } from './cache-diagnostics.js';
 
 export async function requestManagedTurn(client: OpenAI, context: RunContext, protocol: Protocol, state: ManagedRunState,
   requestOptions: { retryDelays?: readonly number[]; nextStep(): number; recordDuration(durationMs: number): void; recovered: boolean;
-    cacheDiagnostics?: ResponsesCacheDiagnostics }) {
+    cacheDiagnostics?: ResponsesCacheDiagnostics; transport?: ReturnType<typeof createResponsesTransport> }) {
   const compact = async (force: boolean) => {
     context.signal.throwIfAborted();
     const projection = await context.compactContext?.(state.messages, { force, currentStart: state.currentStart });
@@ -24,9 +27,18 @@ export async function requestManagedTurn(client: OpenAI, context: RunContext, pr
   };
   const request = () => {
     state.takeUserInput();
-    return requestWithRetry(context, (_, requestId) => protocol === 'responses'
-        ? responsesTurn(client, context, state.messages, requestOptions.cacheDiagnostics, requestId)
-        : chatTurn(client, context, state.messages),
+    let early: EarlyResponseTools | undefined;
+    return requestWithRetry(context, async (_, requestId) => {
+      if (protocol !== 'responses') return chatTurn(client, context, state.messages, requestId);
+      early = new EarlyResponseTools(context, state);
+      try { return await responsesTurn(client, context, state.messages, requestOptions.cacheDiagnostics, requestId,
+        (index, item) => early!.accept(index, item), requestOptions.transport); }
+      catch (error) {
+        early.stop();
+        if (early.assistantIndex !== undefined) throw new ConfirmedToolStreamError(error);
+        throw error;
+      }
+    },
     requestOptions.nextStep, requestOptions.recordDuration, requestOptions.retryDelays, async recovery => {
       context.emit({ type: 'text', data: { replace: state.text } });
       state.attempt = recovery.attempt;
@@ -37,6 +49,20 @@ export async function requestManagedTurn(client: OpenAI, context: RunContext, pr
       await state.save('request');
       context.signal.throwIfAborted();
       if (context.userInput?.hasPending() && !state.waitingForInput()) throw new SupplementalInputError();
+    }).then(async turn => {
+      state.earlyFailures = 0;
+      turn.persisted = await early?.finish(turn.message);
+      return turn;
+    }).catch(async error => {
+      const recoverable = error instanceof ConfirmedToolStreamError
+        && (isTransientModelError(error.streamError) || isRecoverableStreamError(error.streamError));
+      if (recoverable) state.earlyFailures++;
+      const persisted = await early?.finish();
+      if (!(error instanceof ConfirmedToolStreamError) || !persisted) throw error;
+      context.emit({ type: 'text', data: { replace: state.text } });
+      context.signal.throwIfAborted();
+      if (!recoverable || state.earlyFailures > 5) throw error.streamError;
+      return { message: state.messages[early!.assistantIndex!], persisted: true } as Turn;
     });
   };
   try { const turn = await request(); requestOptions.recovered = false; return turn; }

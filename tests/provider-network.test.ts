@@ -1,14 +1,15 @@
 import { createServer, type Server } from 'node:http';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import OpenAI from 'openai';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthenticationRequiredError, type RunContext } from '../src/domain/provider.js';
-import { configureProviderFetch, providerFetch } from '../src/providers/network.js';
+import { configureProviderFetch, configureProviderWebSocket, providerFetch } from '../src/providers/network.js';
 import { ChatGptAdapter, CustomApiAdapter } from '../src/providers/managed/index.js';
 import { providerError } from '../src/providers/managed/client.js';
 import { OAUTH_ISSUER, revokeTokens, type OAuthTokens } from '../src/providers/managed/oauth-tokens.js';
 
 let server: Server | undefined;
+beforeEach(() => configureProviderWebSocket(() => { throw new Error('HTTP transport fixture'); }));
 afterEach(async () => {
   configureProviderFetch((input, init) => fetch(input, init));
   vi.restoreAllMocks();

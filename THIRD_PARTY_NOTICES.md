@@ -35,6 +35,7 @@ Copyright 2026 Codex Bridge contributors.
 - `@qodercn-ai/qodercn-agent-sdk`: Qoder SDK's distributed `LICENSE` applies; this package is consumed as a runtime dependency.
 - `@vscode/ripgrep`: MIT-licensed package and platform binaries; ripgrep is distributed under MIT or the Unlicense. The dependency packages include their license notices.
 - `ignore` and `cheerio`: MIT-licensed runtime dependencies; their distributed licenses apply.
+- `ws`: MIT-licensed WebSocket transport for Node.js; its distributed license applies.
 
 Runtime package versions are pinned by the project dependency lockfile.
 
