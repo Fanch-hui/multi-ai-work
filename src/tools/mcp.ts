@@ -2,19 +2,15 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { ToolListChangedNotificationSchema } from '@modelcontextprotocol/sdk/types.js';
-import { createHash } from 'node:crypto';
-import { mkdir, readFile, writeFile, rename } from 'node:fs/promises';
-import path from 'node:path';
 import Ajv from 'ajv';
 import type { ToolConnection } from '../domain/types.js';
 import type { ToolExecutionContext } from '../domain/tools.js';
 import type { ToolDefinition } from '../domain/provider.js';
-import { workspacePath } from './paths.js';
+import { BridgeMutations } from './mcp-bridge.js';
 import { remoteToolAlias, type McpCatalogDiagnostic, type McpToolTarget } from './mcp-catalog.js';
 
 type RemoteTool = Awaited<ReturnType<Client['listTools']>>['tools'][number];
 type Session = { client: Client; tools: RemoteTool[]; signature: string; closed: boolean; revision: number; loadedRevision: number; stderr: string; secret?: string; refresh?: Promise<void> };
-interface BridgeReceipt { requestId: string; tool: string; state: 'pending' | 'completed' | 'unknown'; remoteTaskIds?: string[]; result?: unknown; updatedAt: string; }
 const MAX_STDERR_CHARS = 4096;
 const schemaValidator = new Ajv({ strict: false, allErrors: true });
 
@@ -22,7 +18,7 @@ export class McpConnections {
   private sessions = new Map<string, Promise<Session>>();
   private activeSessions = new Map<string, Session>();
   private queues = new Map<string, Promise<void>>();
-  private mutations = new Map<string, Promise<unknown>>();
+  private bridge = new BridgeMutations();
   private aliases = new Map<string, McpToolTarget>();
   private catalogErrors = new Map<string, McpCatalogDiagnostic>();
   private closing?: Promise<void>;
@@ -210,39 +206,15 @@ export class McpConnections {
     if (!validate(args)) throw new Error(`MCP 参数无效：${schemaValidator.errorsText(validate.errors)}`);
   }
 
-  private async bridgeCall(session: Session, connection: ToolConnection, tool: RemoteTool, args: Record<string, unknown>, context: ToolExecutionContext): Promise<unknown> {
-    const callId = (context as ToolExecutionContext & { callId?: string }).callId;
-    const explicitId = typeof args.client_request_id === 'string' && args.client_request_id.trim() ? args.client_request_id.trim() : undefined;
-    const requestId = explicitId ?? createHash('sha256').update(JSON.stringify([context.task.id, connection.id, tool.name, callId ?? args])).digest('hex');
-    const active = this.mutations.get(requestId);
-    if (active) return active;
-    const operation = this.submitBridge(session, tool, args, context, requestId);
-    this.mutations.set(requestId, operation);
-    try { return await operation; } finally { this.mutations.delete(requestId); }
-  }
-
-  private async submitBridge(session: Session, tool: RemoteTool, args: Record<string, unknown>, context: ToolExecutionContext, requestId: string): Promise<unknown> {
-    const directory = await workspacePath('.ai-team/bridge', context, true);
-    await mkdir(directory, { recursive: true, mode: 0o700 });
-    const receiptPath = path.join(directory, `${requestId}.json`);
-    let previous: BridgeReceipt | undefined;
-    try { previous = JSON.parse(await readFile(receiptPath, 'utf8')) as BridgeReceipt; } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-    }
-    if (previous?.state === 'completed') return { clientRequestId: requestId, remoteTaskIds: previous.remoteTaskIds, result: previous.result, reused: true };
-    if (previous) throw new Error(`Bridge 请求 ${requestId} 结果未知，请使用远端查询工具对账，禁止重复提交`);
+  private bridgeCall(session: Session, connection: ToolConnection, tool: RemoteTool, args: Record<string, unknown>, context: ToolExecutionContext): Promise<unknown> {
     const properties = tool.inputSchema.properties as Record<string, unknown> | undefined;
-    const remoteArgs = properties?.client_request_id ? { ...args, client_request_id: requestId } : args;
-    this.validate(tool, remoteArgs);
-    const receipt: BridgeReceipt = { requestId, tool: tool.name, state: 'pending', updatedAt: new Date().toISOString() };
-    await saveReceipt(receiptPath, receipt);
-    context.signal.throwIfAborted(); context.markDispatched?.();
-    try {
-      const result = await session.client.callTool({ name: tool.name, arguments: remoteArgs }, undefined, { signal: context.signal, timeout: 60_000 });
-      receipt.state = 'completed'; receipt.remoteTaskIds = extractTaskIds(result); receipt.result = result;
-      await saveReceipt(receiptPath, receipt);
-      return { clientRequestId: requestId, remoteTaskIds: receipt.remoteTaskIds, result };
-    } catch (error) { receipt.state = 'unknown'; await saveReceipt(receiptPath, receipt); throw attachStderr(error, session); }
+    return this.bridge.call({ connectionId: connection.id, toolName: tool.name, args, context,
+      acceptsRequestId: !!properties?.client_request_id, validate: remoteArgs => this.validate(tool, remoteArgs),
+      invoke: async remoteArgs => {
+        try { return await session.client.callTool({ name: tool.name, arguments: remoteArgs }, undefined, { signal: context.signal, timeout: 60_000 }); }
+        catch (error) { throw attachStderr(error, session); }
+      }
+    });
   }
 
   private clearCatalog(connectionId: string): void {
@@ -276,7 +248,6 @@ export class McpConnections {
     return this.closing;
   }
 }
-
 function sanitizeStderr(stderr: string, secret?: string): string {
   let text = stderr.trim();
   if (!text) return '';
@@ -295,21 +266,3 @@ function attachStderr(error: unknown, session: Session): unknown {
   return new Error(`${base} (stderr: ${tail})`, error instanceof Error ? { cause: error } : undefined);
 }
 
-async function saveReceipt(target: string, receipt: BridgeReceipt): Promise<void> {
-  const temporary = `${target}.tmp`;
-  await writeFile(temporary, JSON.stringify({ ...receipt, updatedAt: new Date().toISOString() }), { mode: 0o600 });
-  await rename(temporary, target);
-}
-
-function extractTaskIds(value: unknown): string[] {
-  const result = new Set<string>();
-  const visit = (item: unknown): void => {
-    if (typeof item === 'string') { try { visit(JSON.parse(item)); } catch { /* Plain result text. */ } return; }
-    if (!item || typeof item !== 'object') return;
-    for (const [key, entry] of Object.entries(item)) {
-      if (/^(task_?id|remoteTaskId)$/i.test(key) && typeof entry === 'string') result.add(entry);
-      else visit(entry);
-    }
-  };
-  visit(value); return [...result];
-}
