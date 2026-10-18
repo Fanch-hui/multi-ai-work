@@ -20,6 +20,7 @@ export function createOAuthClient(context: RunContext) {
     const headers = new Headers(init?.headers);
     const accessToken = await authorize();
     headers.set('authorization', `Bearer ${accessToken}`);
+    headers.set('session-id', context.binding.id);
     const request = () => providerFetch(input, { ...init, headers });
     const response = await request();
     if (response.status !== 401) return response;
