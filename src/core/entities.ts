@@ -14,6 +14,7 @@ import { assertSkillAssignment, importSkillPackage } from './skills.js';
 import { isChiefProvider } from '../domain/chief-provider.js';
 import { protectPresetEdit, validateBotSkills } from './market/bot-policy.js';
 import { defaultContextWindow } from '../domain/context-settings.js';
+import { httpSearchConfiguration } from '../domain/tool-connection.js';
 
 const name = z.string().trim().min(1).max(120);
 const connectionSchema = z.object({ id: z.string().optional(), name, provider: z.enum(['antigravity', 'chatgpt', 'qoder', 'custom']),
@@ -32,7 +33,8 @@ const botSchema = z.object({ id: z.string().optional(), name, role: z.string().m
   skillIds: z.array(z.string()).default([]), toolConnectionIds: z.array(z.string()).default([]), memoryMode: z.enum(['off', 'manual', 'propose']).default('propose') });
 const toolSchema = z.object({ id: z.string().optional(), name, kind: z.enum(['mcp', 'bridge', 'search']), transport: z.enum(['stdio', 'http']).optional(),
   url: z.string().optional(), command: z.string().optional(), args: z.array(z.string()).optional(), secret: z.string().optional(), enabled: z.boolean().default(true),
-  searchBackend: z.enum(['http', 'tavily', 'deepseek']).optional() });
+  searchBackend: z.enum(['http', 'tavily', 'deepseek']).optional(),
+  searchMethod: z.enum(['GET', 'POST']).optional(), searchQueryField: z.string().trim().min(1).max(120).optional() });
 
 export class EntityService {
   constructor(private state: State, private vault: Vault) {}
@@ -123,6 +125,10 @@ export class EntityService {
     const parsed = toolSchema.parse(input);
     const toolId = parsed.id ?? id(), old = this.state.storage.get<ToolConnection>('tool_connections', toolId);
     const { secret, ...fields } = parsed;
+    if (fields.kind === 'search') {
+      const { method, queryField } = httpSearchConfiguration(fields);
+      fields.searchBackend = 'http'; fields.searchMethod = method; fields.searchQueryField = queryField;
+    }
     if (fields.transport === 'stdio' && (!fields.command || !isAbsolute(fields.command))) throw new Error('stdio MCP 请选择可执行文件的绝对路径');
     if (fields.url) {
       const url = new URL(fields.url);

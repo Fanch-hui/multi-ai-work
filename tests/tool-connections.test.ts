@@ -77,13 +77,27 @@ describe('tool connection changes during discovery', () => {
     expect(await tools.save({ ...connection, enabled: false })).toMatchObject({ id: connection.id, enabled: false });
   });
 
-  it('persists an explicit DeepSeek backend while keeping legacy HTTP configurations unchanged', async () => {
+  it('persists HTTP request options and normalizes existing search configurations', async () => {
     const { state, tools } = await setup(async () => ['search_web']);
     const fields = { id: 'search', name: 'Search', kind: 'search', transport: 'http', url: 'https://api.deepseek.com/v1/tools/search' };
     expect(await tools.save(fields)).toMatchObject({ id: fields.id, status: 'ready' });
-    expect(state.storage.get<ToolConnection>('tool_connections', fields.id)?.searchBackend).toBeUndefined();
-    expect(await tools.save({ ...fields, searchBackend: 'deepseek' })).toMatchObject({ searchBackend: 'deepseek', status: 'ready' });
-    expect(state.storage.get<ToolConnection>('tool_connections', fields.id)?.searchBackend).toBe('deepseek');
+    expect(state.storage.get<ToolConnection>('tool_connections', fields.id)).toMatchObject({ searchBackend: 'http', searchMethod: 'GET', searchQueryField: 'q' });
+    expect(await tools.save({ ...fields, searchBackend: 'deepseek' })).toMatchObject({ searchBackend: 'http', searchMethod: 'POST', searchQueryField: 'query', status: 'ready' });
+    expect(await tools.save({ ...fields, searchMethod: 'POST', searchQueryField: ' keyword ' }))
+      .toMatchObject({ searchBackend: 'http', searchMethod: 'POST', searchQueryField: 'keyword', status: 'ready' });
+    await expect(tools.save({ ...fields, searchQueryField: ' ' })).rejects.toThrow();
+    await expect(tools.save({ ...fields, searchMethod: 'DELETE' })).rejects.toThrow();
+  });
+
+  it('does not overwrite request options changed during discovery', async () => {
+    const gate = deferred<string[]>();
+    const { state, tools, connection } = await setup(() => gate.promise);
+    const initial = { ...connection, kind: 'search' as const, transport: 'http' as const, searchMethod: 'GET' as const };
+    state.storage.put('tool_connections', initial);
+    const pending = tools.probe(initial.id);
+    state.storage.put('tool_connections', { ...initial, searchMethod: 'POST', searchQueryField: 'keyword' });
+    gate.resolve(['old-tool']); await pending;
+    expect(state.storage.get('tool_connections', initial.id)).toMatchObject({ searchMethod: 'POST', searchQueryField: 'keyword', status: 'untested', toolNames: [] });
   });
 
   it('does not access closed storage when discovery completes after shutdown', async () => {

@@ -33,7 +33,7 @@ describe('HTTP search protocols', () => {
       reply.writeHead(status, { 'Content-Type': 'application/json', ...(location ? { Location: location } : {}) });
       reply.end(JSON.stringify(response));
     });
-    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+    await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
     const address = server.address() as { port: number };
     const get = http.get.bind(http), request = http.request.bind(http);
     // Keep the real HTTP transport while routing the validated public endpoint to the test server.
@@ -50,11 +50,14 @@ describe('HTTP search protocols', () => {
     await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
   });
 
-  it('uses authenticated POST JSON for both DeepSeek detection and actual tool execution', async () => {
-    const item = { ...connection, searchBackend: 'deepseek' as const };
+  it.each([
+    { searchBackend: 'http' as const, searchMethod: 'POST' as const },
+    { searchBackend: 'deepseek' as const },
+  ])('uses POST JSON for detection and execution, including existing POST configurations (%j)', async configuration => {
+    const item = { ...connection, ...configuration };
     expect(await registry.probeConnection(item, async () => 'test-key')).toEqual(['search_web']);
     const output = await registry.execute('search_web', { query: '中文资料' }, context(item));
-    expect(output).toMatchObject({ backend: 'deepseek', connectionId: item.id, service: item.name,
+    expect(output).toMatchObject({ backend: 'http', connectionId: item.id, service: item.name,
       results: result, sources: [{ title: 'Source', url: 'https://example.com/source' }] });
     expect(received).toHaveLength(2);
     for (const request of received) {
@@ -78,26 +81,36 @@ describe('HTTP search protocols', () => {
     expect(received[1].body).toBe('');
   });
 
-  it('validates the DeepSeek credential and query before sending, counting Unicode characters', async () => {
-    const item = { ...connection, searchBackend: 'deepseek' as const };
-    await expect(registry.execute('search_web', { query: '资料' }, { ...context(item), getSecret: async () => undefined })).rejects.toThrow('API Key');
-    for (const query of ['   ', '字'.repeat(129)])
-      await expect(registry.execute('search_web', { query }, context(item))).rejects.toThrow('128');
-    expect(received).toHaveLength(0);
-    await registry.execute('search_web', { query: '😀'.repeat(128) }, context(item));
-    expect(received).toHaveLength(1);
+  it.each(['GET', 'POST'] as const)('uses a configurable keyword field with %s and optional credentials', async searchMethod => {
+    const item = { ...connection, url: 'https://example.com/search?lang=zh', searchMethod, searchQueryField: 'keyword' };
+    const ctx = { ...context(item), getSecret: async () => undefined };
+    await registry.probeConnection(item, ctx.getSecret);
+    await registry.execute('search_web', { query: '中文资料' }, ctx);
+    expect(received.map(request => request.method)).toEqual([searchMethod, searchMethod]);
+    const request = received[1], url = new URL(request.path!, 'https://example.com');
+    expect(url.searchParams.get('lang')).toBe('zh');
+    expect(request.headers.authorization).toBeUndefined();
+    if (searchMethod === 'GET') {
+      expect(url.searchParams.get('keyword')).toBe('中文资料');
+      expect(url.searchParams.has('q')).toBe(false);
+      expect(request.body).toBe('');
+    } else {
+      expect(url.searchParams.has('keyword')).toBe(false);
+      expect(JSON.parse(request.body)).toEqual({ keyword: '中文资料' });
+    }
   });
 
-  it('accepts empty results and rejects a malformed DeepSeek success response during detection', async () => {
-    const item = { ...connection, searchBackend: 'deepseek' as const };
+  it('preserves generic response formats and accepts empty results', async () => {
+    const item = { ...connection, searchMethod: 'POST' as const };
     response = { results: [] };
     expect(await registry.probeConnection(item, async () => 'test-key')).toEqual(['search_web']);
-    response = { message: 'not a search endpoint' };
-    await expect(registry.probeConnection(item, async () => 'test-key')).rejects.toThrow('results');
+    response = { data: [{ title: 'Source', link: 'https://example.com/source' }] };
+    expect(await registry.execute('search_web', { query: '资料' }, context(item))).toMatchObject({ results: response,
+      sources: [{ title: 'Source', url: 'https://example.com/source' }] });
   });
 
   it('reports HTTP failures and requires a final POST endpoint instead of forwarding credentials on redirects', async () => {
-    const item = { ...connection, searchBackend: 'deepseek' as const };
+    const item = { ...connection, searchMethod: 'POST' as const };
     status = 401;
     await expect(registry.probeConnection(item, async () => 'test-key')).rejects.toThrow('HTTP 401');
     status = 307; location = 'https://other.example/search';

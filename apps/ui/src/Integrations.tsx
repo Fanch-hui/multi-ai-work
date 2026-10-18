@@ -3,6 +3,7 @@ import { ToolEditor } from "./ToolEditor.js";
 import { useState, type FormEvent } from "react";
 import { Plus, Plug, Trash2, Pencil, Play, FileCode2, FolderOpen } from "lucide-react";
 import type { Snapshot, ToolConnection } from "../../../src/domain/types.js";
+import { httpSearchConfiguration } from "../../../src/domain/tool-connection.js";
 import type { Mutate } from "./store.js";
 import { choosePath, errorMessage } from "./api.js";
 import { Badge, Button, Confirm, Empty, ErrorNote, Field, Modal, inputClass } from "./components.js";
@@ -90,7 +91,7 @@ export function Integrations({ data, mutate }: { data: Snapshot; mutate: Mutate 
                       <h3 className="font-semibold">{item.name}</h3>
                       <p className="mt-1 text-xs text-slate-500">
                         {item.kind === "search" ? "搜索" : "MCP"} ·{" "}
-                        {item.transport === "http" ? "HTTP" : "stdio"} · {item.enabled ? "已启用" : "未启用"}
+                        {item.kind === "search" ? `HTTP ${httpSearchConfiguration(item).method}` : item.transport === "http" ? "HTTP" : "stdio"} · {item.enabled ? "已启用" : "未启用"}
                       </p>
                     </div>
                   </div>
@@ -113,7 +114,7 @@ export function Integrations({ data, mutate }: { data: Snapshot; mutate: Mutate 
                   </details>
                 )}
                 {(item.kind === "search" || item.searchBackend === "tavily" || item.toolNames.includes("tavily-search")) &&
-                  <p className="mt-3 text-xs text-blue-700">{data.settings.defaultSearchConnectionId === item.id ? "默认搜索服务" : "可用于网页搜索"} · {item.kind === "search" ? item.searchBackend === "deepseek" ? "DeepSeek 搜索" : "HTTP 搜索" : "Tavily MCP"}</p>}
+                  <p className="mt-3 text-xs text-blue-700">{data.settings.defaultSearchConnectionId === item.id ? "默认搜索服务" : "可用于网页搜索"} · {item.kind === "search" ? `HTTP ${httpSearchConfiguration(item).method}` : "Tavily MCP"}</p>}
                 <div className="mt-4 flex gap-2">
                   <Button disabled={!!busy} onClick={() => void probe(item.id)}>
                     <Play size={14} />
