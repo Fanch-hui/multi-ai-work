@@ -1,6 +1,7 @@
 import { access, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import sharp from 'sharp';
 import type { ModelMessage } from '../src/domain/provider.js';
 import type { Artifact, Run, Task } from '../src/domain/types.js';
 import { ContextReferences } from '../src/core/context-references.js';
@@ -22,6 +23,18 @@ async function fixture(tools = ['read_artifact', 'get_task'], inlineToolLimit?: 
 }
 
 describe('压缩资料引用', () => {
+  it('历史图片转为引用后继续保留可读入口，并遵循当前工具权限', async () => {
+    const { core, references, root, room, member } = await fixture(['read_artifact']);
+    const path = join(root, 'page.png');
+    await writeFile(path, await sharp({ create: { width: 8, height: 6, channels: 3, background: 'white' } }).png().toBuffer());
+    const artifact = await importAttachment(core.state, room.id, path);
+    const message: ModelMessage = { role: 'tool', callId: 'old', content: '历史页面',
+      imageReferences: [{ artifactId: artifact.id, mimeType: 'image/png' }] };
+    expect((await references.preserveReferences([message])).artifactIds).toEqual([artifact.id]);
+    core.state.storage.put('bots', { ...member, toolNames: [] });
+    expect(await references.preserveReferences([message])).toEqual({ text: '', artifactIds: [] });
+  });
+
   it('完整工具记录作为唯一正文来源，预览和分页继续复用原成果', async () => {
     const { core, references, task, member, room } = await fixture(['read_file', 'read_artifact']);
     const path = join(core.state.snapshot().workspaces[0].path, 'raw.txt'); await writeFile(path, '原文'.repeat(12000));

@@ -26,7 +26,8 @@ async function fixture() {
   const acknowledged: string[][] = [];
   const input = { userInput: { acknowledge: (ids: string[]) => { acknowledged.push(ids); } } } as RunContext;
   const calls = ['one', 'two', 'three'].map(id => ({ id, name: 'read_file', arguments: '{}' }));
-  const progress: ManagedProgress = { messages: [{ role: 'user', content: 'source', sourceMessageId: 'input' },
+  const progress: ManagedProgress = { messages: [{ role: 'user', content: 'source', sourceMessageId: 'input',
+    imageReferences: [{ artifactId: 'historical-image', mimeType: 'image/png' }], contextArtifactIds: ['historical-image'] },
     { role: 'assistant', content: 'working', toolCalls: calls, providerItems: [{ encrypted_content: 'opaque-state' }],
       chatReplay: { version: 1, bindingId: binding.id, generation: binding.generation, reasoningField: 'reasoning_content',
         reasoningText: 'tool planning', reasoningDetails: [{ type: 'reasoning.encrypted', data: 'opaque-chat-state' }] } }],
@@ -56,6 +57,7 @@ describe('incremental managed checkpoints', () => {
       pendingInputIds: ['input'], compaction: f.progress.compaction });
     expect(saved.progress.messages[1].providerItems).toEqual(f.progress.messages[1].providerItems);
     expect(saved.progress.messages[1].chatReplay).toEqual(f.progress.messages[1].chatReplay);
+    expect(saved.progress.messages[0]).toEqual(f.progress.messages[0]);
     expect(progressForRun(f.resource.storage, 'run')?.progress).toEqual(saved.progress);
   });
 

@@ -2,6 +2,7 @@ import type { ModelMessage } from '../../domain/provider.js';
 import type { ResponseInput } from 'openai/resources/responses/responses';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions/completions';
 import { imageUrl } from '../images.js';
+import { modelMessageContent } from '../../runtime/image-references.js';
 import { chatReplayFields, type ChatReplayOptions } from './chat-replay.js';
 
 function serializeToolArguments(raw: unknown): string {
@@ -12,12 +13,13 @@ function serializeToolArguments(raw: unknown): string {
 export function responsesInput(messages: ModelMessage[], images = new Map<string, string>()): ResponseInput {
   return messages.flatMap(message => {
     if (message.providerItems?.length) return message.providerItems;
+    const text = modelMessageContent(message);
     const content = message.images?.length ? [
-      ...(message.content ? [{ type: 'input_text', text: message.content }] : []),
+      ...(text ? [{ type: 'input_text', text }] : []),
       ...message.images.map(image => ({ type: 'input_image', image_url: imageUrl(image, images), detail: 'auto' })),
-    ] : message.content;
+    ] : text;
     if (message.role === 'tool') return [{ type: 'function_call_output', call_id: message.callId, output: content }];
-    const items: unknown[] = message.content || message.images?.length ? [{ role: message.role, content }] : [];
+    const items: unknown[] = text || message.images?.length ? [{ role: message.role, content }] : [];
     for (const call of message.toolCalls ?? []) items.push({ type: 'function_call', call_id: call.id, name: call.name, arguments: serializeToolArguments(call.arguments) });
     return items;
   }) as ResponseInput;
@@ -33,15 +35,16 @@ export function chatInput(messages: ModelMessage[], instructions: string, images
     toolImages = [];
   };
   for (const message of messages) {
+    const text = modelMessageContent(message);
     if (message.role !== 'tool') flushImages();
     if (message.role === 'tool') {
-      result.push({ role: 'tool', tool_call_id: message.callId!, content: message.content });
+      result.push({ role: 'tool', tool_call_id: message.callId!, content: text });
       toolImages.push(...message.images ?? []);
     } else if (message.role === 'user') result.push({ role: 'user', content: message.images?.length ? [
-      ...(message.content ? [{ type: 'text' as const, text: message.content }] : []),
+      ...(text ? [{ type: 'text' as const, text }] : []),
       ...message.images.map(image => ({ type: 'image_url' as const, image_url: { url: imageUrl(image, images) } })),
-    ] : message.content });
-    else result.push({ role: 'assistant', content: message.content || null,
+    ] : text });
+    else result.push({ role: 'assistant', content: text || null,
       ...chatReplayFields(message, replay),
       ...(message.toolCalls?.length ? { tool_calls: message.toolCalls.map(call => ({ id: call.id, type: 'function', function: { name: call.name, arguments: serializeToolArguments(call.arguments) } })) } : {}) });
   }

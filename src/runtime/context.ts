@@ -141,7 +141,8 @@ export class ContextManager {
           record.throughSequence = selected.prefix.at(-1)!.sequence;
         }
       }
-      const imageIds = [...new Set(selected.prefix.flatMap(entry => entry.message.images?.map(image => image.artifactId) ?? []))];
+      const imageIds = [...new Set(selected.prefix.flatMap(entry =>
+        [...(entry.message.images ?? []), ...(entry.message.imageReferences ?? [])].map(image => image.artifactId)))];
       const referenceText = references?.text ?? (imageIds.length ? `历史图片资料 ID：${imageIds.join('、')}` : '');
       const content = referenceText ? `${summary}\n${referenceText}` : summary;
       input.signal.throwIfAborted();

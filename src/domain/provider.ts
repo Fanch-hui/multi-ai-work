@@ -20,6 +20,7 @@ export interface ChatReplay {
   reasoningDetails?: ChatReasoningDetail[];
 }
 export interface ModelMessage { role: 'user' | 'assistant' | 'tool'; content: string; images?: ModelImage[]; callId?: string; toolCalls?: { id: string; name: string; arguments: string }[]; providerItems?: unknown[];
+  imageReferences?: ModelImage[];
   chatReplay?: ChatReplay;
   sourceMessageId?: string; sourceSequence?: number; contextSummary?: boolean; contextArtifactIds?: string[]; appContext?: { source: 'app.runtime' | 'app.repeat-tool-reminder'; version: string }; }
 export interface ManagedProgress {
@@ -70,6 +71,7 @@ export interface RunContext {
   recoverContext?(messages: ModelMessage[]): Promise<ModelMessage[] | undefined>;
   compactContext?(messages: ModelMessage[], options: { force: boolean; currentStart: number }): Promise<{ messages: ModelMessage[]; currentStart: number } | undefined>;
   prepareToolResults?(messages: ModelMessage[], batchStart: number): Promise<ModelMessage[] | undefined>;
+  prepareImageInputs?(messages: ModelMessage[], options: { currentStart: number }): Promise<ModelMessage[] | undefined>;
   progress?: ManagedProgress;
   saveProgress?(progress: ManagedProgress, change?: ManagedProgressChange): Promise<void>;
   deferRecovery?: boolean;

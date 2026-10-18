@@ -48,7 +48,7 @@ export class ContextReferences {
       for (const id of task?.artifactIds ?? []) ids.add(id);
       for (const message of messages) {
         for (const id of message.contextArtifactIds ?? []) ids.add(id);
-        for (const image of message.images ?? []) ids.add(image.artifactId);
+        for (const image of [...(message.images ?? []), ...(message.imageReferences ?? [])]) ids.add(image.artifactId);
       }
       const sources = new Set(messages.flatMap(message => message.sourceMessageId ? [message.sourceMessageId] : []));
       for (const message of s.messages(this.scope.room.id)) {
@@ -69,7 +69,8 @@ export class ContextReferences {
         if (task) refs.push({ kind: 'task', id: task.id, name: task.goal });
       }
     }
-    const important = new Set(messages.flatMap(message => [...message.contextArtifactIds ?? [], ...(message.images ?? []).map(image => image.artifactId)]));
+    const important = new Set(messages.flatMap(message => [...message.contextArtifactIds ?? [],
+      ...[...(message.images ?? []), ...(message.imageReferences ?? [])].map(image => image.artifactId)]));
     return refs.sort((a, b) => Number(important.has(b.id)) - Number(important.has(a.id)));
   }
 

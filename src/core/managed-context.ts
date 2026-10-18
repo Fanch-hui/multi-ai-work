@@ -12,6 +12,7 @@ import { estimateTokens, estimateModelMessagesTokens } from '../runtime/model-hi
 import { ContextReferences } from './context-references.js';
 import { needsRuntimeContext, prepareRuntimeContext, retainRuntimeContext } from './run-runtime-context.js';
 import { prepareToolResultBudget } from './tool-result-budget.js';
+import { prepareImageInputBudget } from './image-input-budget.js';
 
 export { addUsage } from '../domain/usage.js';
 
@@ -36,6 +37,7 @@ export async function prepareManagedContext(input: RunContext, archive: Message[
   const references = task && room ? new ContextReferences(state, { runId: input.runId, task, room, bot: input.bot,
     toolNames: input.tools.map(tool => tool.name), signal: input.signal, inlineToolLimit: budget ? Math.min(32000, Math.floor(budget * 0.5)) : 32000 }) : undefined;
   input.prepareToolResults = prepareToolResultBudget(input, references, budget);
+  input.prepareImageInputs = prepareImageInputBudget(input);
   const preserveReferences = references?.preserveReferences.bind(references);
   const { summarize, usage } = summaryRunner(input, adapter);
   const signature = contextCompatibilityHash({ ...input, protocol: input.connection.protocol });
@@ -102,7 +104,7 @@ function summaryRunner(input: RunContext, adapter: ProviderAdapter) {
     const runId = `${input.runId}:summary:${id()}`;
     const summary = await adapter.run({ ...input, runId, prompt, messages: [], images: [], tools: [],
       instructions: '将提供的历史整理为摘要，只输出摘要，不执行操作。', signal, recoverContext: undefined, compactContext: undefined,
-      userInput: undefined, progress: undefined, saveProgress: undefined, runtimeContext: undefined, prepareToolResults: undefined, deferRecovery: false,
+      userInput: undefined, progress: undefined, saveProgress: undefined, runtimeContext: undefined, prepareToolResults: undefined, prepareImageInputs: undefined, deferRecovery: false,
       emit: event => {
         if (event.type === 'usage') input.emit({ ...event, data: { ...event.data, phase: 'compaction' } });
         if (event.type === 'status' && String(event.data.phase).startsWith('model-')) input.emit({ ...event,

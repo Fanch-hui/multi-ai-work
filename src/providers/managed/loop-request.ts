@@ -46,6 +46,9 @@ export async function requestManagedTurn(client: OpenAI, context: RunContext, pr
       await state.save('ready', recovery);
     }, state.attempt, async attempt => {
       state.attempt = attempt;
+      const images = await context.prepareImageInputs?.(state.messages, { currentStart: state.currentStart });
+      context.signal.throwIfAborted();
+      if (images) await state.applyProjection(images, state.currentStart);
       await compact(false);
       await state.save('request');
       context.signal.throwIfAborted();

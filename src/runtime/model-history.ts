@@ -1,5 +1,6 @@
 import type { ModelImage, ModelMessage } from '../domain/provider.js';
 import type { Message, Protocol } from '../domain/types.js';
+import { modelMessageContent } from './image-references.js';
 
 export interface ModelHistoryEntry {
   sequence: number;
@@ -37,7 +38,7 @@ function messageProjection(message: ModelMessage, protocol: Protocol): unknown {
   const reasoning = replay?.reasoningDetails?.length ? { reasoning_details: replay.reasoningDetails }
     : replay?.reasoningField && replay.reasoningText ? { [replay.reasoningField]: replay.reasoningText } : {};
   return {
-    role: message.role, content: message.content,
+    role: message.role, content: modelMessageContent(message),
     ...reasoning,
     ...(message.callId ? { callId: message.callId } : {}),
     ...(message.toolCalls?.length ? { toolCalls: message.toolCalls } : {}),
@@ -97,14 +98,15 @@ function providerText(items: unknown[]): string {
 
 /** Readable history for summarization; replay continues to use the original protocol records. */
 export function summaryMessageProjection(message: ModelMessage): unknown {
-  const content = message.content || providerText(message.providerItems ?? []);
+  const content = modelMessageContent(message, message.content || providerText(message.providerItems ?? []));
+  const imageArtifactIds = [...(message.images ?? []), ...(message.imageReferences ?? [])].map(image => image.artifactId);
   return {
     role: message.role, content,
     ...(message.appContext ? { source: message.appContext.source, version: message.appContext.version } : {}),
     ...(message.callId ? { callId: message.callId } : {}),
     ...(message.toolCalls?.length ? { toolCalls: message.toolCalls } : {}),
     ...(message.contextArtifactIds?.length ? { contextArtifactIds: message.contextArtifactIds } : {}),
-    ...(message.images?.length ? { imageArtifactIds: message.images.map(image => image.artifactId) } : {}),
+    ...(imageArtifactIds.length ? { imageArtifactIds } : {}),
   };
 }
 
