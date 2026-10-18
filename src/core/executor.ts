@@ -246,9 +246,10 @@ export class Executor {
     const manualCompaction = task.kind === 'context-compaction';
     const archive = task.kind && !manualCompaction ? [] : s.messages(room.id).filter(message => message.status === 'committed'
       && (manualCompaction || (saved ? message.sequence <= saved.cutoff : message.sequence < draft.sequence)));
-    // Match the next conversation request without granting tools to the summary request.
+    // Checkpoint compatibility uses the conversation catalog and its initialized connection services.
     const catalogContext = manualCompaction
-      ? this.tools.context(run, { ...task, kind: undefined }, bot, room, toolContext.workspace, signal) : toolContext;
+      ? { ...this.tools.context(run, { ...task, kind: undefined }, bot, room, toolContext.workspace, signal),
+        getSecret: toolContext.getSecret } : toolContext;
     await this.tools.prepare(catalogContext, bot);
     const managed = connection.provider === 'chatgpt' || connection.provider === 'custom';
     const hasHistory = s.metadata<ModelHistoryEntry[]>(`history:${binding.id}`) !== undefined;
