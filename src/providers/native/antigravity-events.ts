@@ -30,6 +30,7 @@ function usageValue(value: unknown): AntigravityUsage | undefined {
 export class AntigravityEvents {
   initialization?: AntigravityInitialization;
   text = '';
+  private turnSequence = 0;
   private stepUsage = new Map<number, AntigravityUsage>();
   private activity: ModelActivity;
   constructor(private options: { expectedSessionId?: string; previousUsage?: AntigravityUsage;
@@ -37,6 +38,7 @@ export class AntigravityEvents {
 
   nextTurn(previousUsage?: AntigravityUsage): void {
     this.text = '';
+    this.turnSequence++;
     this.stepUsage.clear();
     this.activity.reset();
     this.options.previousUsage = previousUsage;
@@ -79,7 +81,7 @@ export class AntigravityEvents {
       throw new Error('Antigravity 返回了无效步骤序号');
     if (step.state === 'ACTIVE') this.activity.report(step.step_type === 'tool' ? 'tool'
       : step.step_type === 'agent_response' && step.text_delta ? 'responding' : 'working', `step_update:${step.step_type}`);
-    if (step.step_type === 'agent_response' && typeof step.text_delta === 'string') this.append(step.text_delta);
+    if (step.step_type === 'agent_response' && typeof step.text_delta === 'string') this.append(step.text_delta, `${this.turnSequence}:${step.step_index}`);
     if (step.state === 'DONE') {
       const usage = usageValue(step.usage);
       if (usage) this.stepUsage.set(step.step_index, usage);
@@ -131,8 +133,8 @@ export class AntigravityEvents {
       cachedInputTokens: value.cache_read_tokens, source: 'reported' };
   }
 
-  private append(delta: string): void {
+  private append(delta: string, messageKey = `${this.turnSequence}:result`): void {
     this.text += delta;
-    this.options.emit?.({ type: 'text', data: { delta } });
+    this.options.emit?.({ type: 'text', data: { delta, messageKey: `agy:${messageKey}` } });
   }
 }

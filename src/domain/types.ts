@@ -74,7 +74,7 @@ export interface Task {
   goal: string; expectedOutput: string; status: TaskStatus; runIds: string[]; artifactIds: string[];
   inputArtifactIds?: string[];
   result?: string; error?: string; reconciliationRequired?: boolean; coordinationPaused?: boolean;
-  requestId: string; depth: number; createdAt: string; updatedAt: string; kind?: 'memory-review' | 'question-decision';
+  requestId: string; depth: number; createdAt: string; updatedAt: string; kind?: 'memory-review' | 'question-decision' | 'context-compaction';
   questionId?: string; queueReason?: TaskQueueReason;
   planId?: string; planStepId?: string;
   sourceMessageId?: string;

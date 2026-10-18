@@ -53,7 +53,7 @@ describe('managed protocol completion and retained answers', () => {
     const result = await runManaged(createClient(server.url), context(events), 'responses');
     expect(result.text).toBe(answer);
     expect(result.messages?.at(-1)?.content).toBe(answer);
-    expect(events.filter(event => event.type === 'text')).toEqual([{ type: 'text', data: { delta: answer } }]);
+    expect(events.filter(event => event.type === 'text')).toEqual([{ type: 'text', data: { delta: answer, messageKey: 'run:1:message1' } }]);
     expect(result.usage).toEqual({ inputTokens: 1114, outputTokens: 15, source: 'reported' });
   });
 

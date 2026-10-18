@@ -205,7 +205,10 @@ export class TaskService {
     }
     const message = s.transaction(() => {
       const draft = s.messages(target.id).find(message => message.runId === runId && message.authorBotId === botId && message.status === 'draft');
-      if (draft) s.deleteMessage(draft.id);
+      if (draft) {
+        if (draft.content.trim() || draft.artifactIds.length) s.updateMessage({ ...draft, status: 'committed' });
+        else s.deleteMessage(draft.id);
+      }
       // Publication follows the current cursor so readers cannot skip a previously empty draft.
       return s.appendMessage({ id: id(), conversationId: target.id, authorType: 'bot', authorBotId: botId,
         runId, content, artifactIds, status: 'committed', createdAt: now() });

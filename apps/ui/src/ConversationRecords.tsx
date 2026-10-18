@@ -74,7 +74,7 @@ function TaskRecord({ task, data, onSelect }: { task: Task; data: Snapshot; onSe
       <div className="min-w-0 flex-1">
         <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
           <Badge status={task.status}>{taskRecordStatus(task, processes)}</Badge>
-          {task.kind && <span className="text-slate-500">{task.kind === 'memory-review' ? '记忆整理' : '主管代答'}</span>}
+          {task.kind && <span className="text-slate-500">{task.kind === 'memory-review' ? '记忆整理' : task.kind === 'context-compaction' ? '上下文压缩' : '主管代答'}</span>}
           {room?.purpose === 'task' && <span className="min-w-0 max-w-48 truncate text-slate-400">{room.name}</span>}
           <span className="ml-auto tabular-nums text-slate-400">{timeLabel(task.updatedAt)}</span>
         </div>

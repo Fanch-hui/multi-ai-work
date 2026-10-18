@@ -4,11 +4,13 @@ import { Circle, Database, Gauge } from 'lucide-react';
 import type { Conversation, Snapshot } from '../../../src/domain/types.js';
 import { conversationStatistics } from './conversation-statistics.js';
 import { StatisticsDetails } from './StatisticsDetails.js';
+import { ContextCompactionControl } from './ContextCompactionControl.js';
+import type { Mutate } from './store.js';
 
 const compact = (value?: number) => value === undefined ? '未知' : new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(value);
 type Panel = 'activity' | 'usage' | 'context';
 
-export function ConversationStats({ data, conversation }: { data: Snapshot; conversation: Conversation }) {
+export function ConversationStats({ data, conversation, mutate }: { data: Snapshot; conversation: Conversation; mutate?: Mutate }) {
   const stats = conversationStatistics(data, conversation);
   const { usage, context } = stats;
   const [panel, setPanel] = useState<Panel>();
@@ -47,6 +49,8 @@ export function ConversationStats({ data, conversation }: { data: Snapshot; conv
         <Circle size={13} aria-hidden="true" /> {context.percent === undefined ? '未知' : `${context.source === 'estimated' ? '约 ' : ''}${Math.round(context.percent)}%`}
       </button>
     </div>
-    <ModalPresence show={!!panel}>{panel && <StatisticsDetails id={panelId} panel={panel} stats={stats} rate={rate} close={() => { setPanel(undefined); trigger.current?.focus(); }} />}</ModalPresence>
+    <ModalPresence show={!!panel}>{panel && <StatisticsDetails id={panelId} panel={panel} stats={stats} rate={rate}
+      contextAction={mutate && <ContextCompactionControl key={conversation.id} data={data} conversation={conversation} mutate={mutate} />}
+      close={() => { setPanel(undefined); trigger.current?.focus(); }} />}</ModalPresence>
   </div>;
 }

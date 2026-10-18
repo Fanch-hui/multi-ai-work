@@ -42,7 +42,7 @@ export function conversationStatistics(data: Pick<Snapshot, 'tasks' | 'runs' | '
   const runs = byTime(data.runs.filter(run => taskIds.has(run.taskId)));
   const runIds = new Set(runs.map(run => run.id));
   const events = byTime(data.events.filter(event => runIds.has(event.runId)));
-  const rootTasks = tasks.filter(task => !task.parentId || !taskIds.has(task.parentId));
+  const rootTasks = tasks.filter(task => !task.kind && (!task.parentId || !taskIds.has(task.parentId)));
   const turns = rootTasks.filter(task => runs.some(run => run.taskId === task.id)).length;
   const latestRun = runs.at(-1);
   return { turns, runs: runs.length, latestRun, ...requestStatistics(runs, events),

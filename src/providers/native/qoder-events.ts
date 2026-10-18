@@ -5,12 +5,15 @@ import { ModelActivity } from '../activity.js';
 export class QoderEvents {
   text = '';
   private streamedMessage = false;
+  private messageSequence = 0;
+  private messageStarted = false;
   private activity: ModelActivity;
   constructor(private context: RunContext) { this.activity = new ModelActivity(event => context.emit(event)); }
-  beginReply(): void { this.text = ''; this.streamedMessage = false; this.activity.reset(); }
+  beginReply(): void { this.text = ''; this.streamedMessage = false; this.messageStarted = false; this.activity.reset(); }
   accept(message: SDKMessage): void {
     if (message.type === 'stream_event' && !message.parent_tool_use_id) {
       if (message.event.type === 'message_start') {
+        this.messageSequence++; this.messageStarted = true;
         this.streamedMessage = false;
         this.activity.report('waiting', 'message_start');
       }
@@ -31,8 +34,9 @@ export class QoderEvents {
     }
     if (message.type === 'assistant' && !message.parent_tool_use_id) {
       if (message.error) throw new Error(message.error === 'authentication_failed' ? 'Qoder 需要重新登录' : 'Qoder 模型请求失败');
+      if (!this.messageStarted) this.messageSequence++;
       if (!this.streamedMessage) for (const block of message.message.content) if (block.type === 'text' && typeof block.text === 'string') this.append(block.text);
-      this.streamedMessage = false;
+      this.streamedMessage = false; this.messageStarted = false;
     }
     if (message.type === 'system' && message.subtype === 'compact_boundary')
       this.context.emit({ type: 'compaction', data: { owner: 'native', trigger: message.compact_metadata.trigger,
@@ -42,6 +46,6 @@ export class QoderEvents {
   }
   private append(delta: string): void {
     if (delta) this.activity.report('responding', 'text_delta');
-    this.text += delta; this.context.emit({ type: 'text', data: { delta } });
+    this.text += delta; this.context.emit({ type: 'text', data: { delta, messageKey: `qoder:${this.messageSequence}` } });
   }
 }

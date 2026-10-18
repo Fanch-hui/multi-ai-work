@@ -14,6 +14,7 @@ export interface ManagedCheckpoint {
   generation: number;
   workspaceId: string;
   draftId: string;
+  draftPrefixLength?: number;
   cutoff: number;
   progress: ManagedProgress;
 }
@@ -51,12 +52,13 @@ export function loadManagedProgress(storage: Storage, task: Task, binding: Sessi
 }
 
 export function saveManagedProgress(storage: Storage, run: Run, task: Task, binding: SessionBinding,
-  draft: Message, cutoff: number, input: RunContext, progress: ManagedProgress, change?: ManagedProgressChange) {
+  draft: Message, cutoff: number, input: RunContext, progress: ManagedProgress, change?: ManagedProgressChange, draftPrefixLength = 0) {
   storage.transaction(() => {
-    if (!change || !saveProgressDelta(storage, run.id, progress, change)) {
+    const previous = storage.get<ProgressArchive>('provider_archive', run.id)?.checkpoint;
+    if (!change || previous?.draftId !== draft.id || !saveProgressDelta(storage, run.id, progress, change)) {
       storage.put('provider_archive', { id: run.id, bindingId: binding.id, entries: [], checkpoint: {
         taskId: task.id, conversationId: task.conversationId, botId: task.botId, generation: binding.generation,
-        workspaceId: binding.workspaceId, draftId: draft.id, cutoff, progress,
+        workspaceId: binding.workspaceId, draftId: draft.id, draftPrefixLength, cutoff, progress,
       } satisfies ManagedCheckpoint });
       clearProgressDeltas(storage, run.id);
     }

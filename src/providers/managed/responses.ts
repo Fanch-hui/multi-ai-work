@@ -29,11 +29,15 @@ export class ResponsesAccumulator {
   private completed?: Response;
   private items = new Map<number, ResponseOutputItem>();
   private doneItems = new Set<number>();
-  constructor(private emit: RunContext['emit']) {}
+  private streamed = new Set<string>();
+  constructor(private emit: RunContext['emit'], private messagePrefix?: string) {}
   accept(event: ResponseStreamEvent): void {
     if (event.type === 'response.output_item.added' || event.type === 'response.output_item.done') {
       this.items.set(event.output_index, structuredClone(event.item));
-      if (event.type === 'response.output_item.done') this.doneItems.add(event.output_index);
+      if (event.type === 'response.output_item.done') {
+        this.doneItems.add(event.output_index);
+        if (event.item.type === 'message') this.emitMessage(event.item);
+      }
     }
     if (event.type === 'response.content_part.added' || event.type === 'response.content_part.done') {
       if (event.part.type !== 'reasoning_text') this.message(event.output_index, event.item_id).content[event.content_index] = structuredClone(event.part);
@@ -45,7 +49,11 @@ export class ResponsesAccumulator {
         const text = event.type === 'response.output_text.done' ? event.text : (part?.type === 'output_text' ? part.text : '') + event.delta;
         message.content[event.content_index] = { ...(part?.type === 'output_text' ? part : {}), type: 'output_text', text, annotations: part?.type === 'output_text' ? part.annotations : [] };
       }
-      if (event.type === 'response.output_text.delta') this.emit({ type: 'text', data: { delta: event.delta } });
+      if (event.type === 'response.output_text.delta') {
+        this.streamed.add(event.item_id);
+        this.emit({ type: 'text', data: { delta: event.delta,
+          ...(this.messagePrefix ? { messageKey: `${this.messagePrefix}:${event.item_id}` } : {}) } });
+      }
     }
     if (event.type === 'response.failed' || event.type === 'response.incomplete') {
       const code = event.type === 'response.failed' ? event.response.error?.code ?? 'failed' : event.response.incomplete_details?.reason ?? 'incomplete';
@@ -63,12 +71,17 @@ export class ResponsesAccumulator {
     if (output.some(item => (item.type === 'message' || item.type === 'function_call') && item.status === 'incomplete')) {
       throw new Error('模型输出条目未完成');
     }
-    const refusals = output.filter(item => item.type === 'message').flatMap(item => item.content)
-      .filter(content => content.type === 'refusal');
-    if (refusals.length) {
-      this.emit({ type: 'text', data: { delta: refusals.map(item => item.refusal).join('') } });
-      throw new Error('模型拒绝执行该请求');
+    const messages = output.filter(item => item.type === 'message');
+    let refused = false;
+    for (const message of messages) {
+      this.emitMessage(message);
+      const refusal = message.content.filter(part => part.type === 'refusal').map(part => part.refusal).join('');
+      if (!refusal) continue;
+      refused = true;
+      this.emit({ type: 'text', data: { delta: refusal,
+        ...(this.messagePrefix ? { messageKey: `${this.messagePrefix}:${message.id}` } : {}) } });
     }
+    if (refused) throw new Error('模型拒绝执行该请求');
     const calls = output.filter(item => item.type === 'function_call').map(item => ({ id: item.call_id, name: item.name, arguments: item.arguments }));
     const text = output.filter(item => item.type === 'message').flatMap(item => item.content)
       .map(content => content.type === 'output_text' ? content.text : content.type === 'refusal' ? content.refusal : '').join('');
@@ -77,6 +90,14 @@ export class ResponsesAccumulator {
     return { message: { role: 'assistant', content: text, toolCalls: calls, providerItems: output },
       usage: usage ? { inputTokens: usage.input_tokens, outputTokens: usage.output_tokens, source: 'reported',
         ...(cached === undefined ? {} : { cachedInputTokens: cached }) } : undefined };
+  }
+  private emitMessage(item: ResponseOutputMessage) {
+    if (this.streamed.has(item.id)) return;
+    const text = item.content.map(part => part.type === 'output_text' ? part.text : '').join('');
+    if (!text) return;
+    this.streamed.add(item.id);
+    this.emit({ type: 'text', data: { delta: text,
+      ...(this.messagePrefix ? { messageKey: `${this.messagePrefix}:${item.id}` } : {}) } });
   }
   private message(index: number, id: string): ResponseOutputMessage {
     const existing = this.items.get(index);
@@ -125,7 +146,7 @@ export async function responsesTurn(client: OpenAI, context: RunContext, message
     const payload = { ...body, ...trace?.options };
     const stream = transport ? await transport.stream(payload, request.signal)
       : await client.responses.create(payload, { signal: request.signal });
-    const accumulator = new ResponsesAccumulator(context.emit);
+    const accumulator = new ResponsesAccumulator(context.emit, requestId);
     let completed: Response | undefined;
     for await (const event of stream) {
       if (event.type.startsWith('response.output_') || event.type.startsWith('response.content_part.')

@@ -46,6 +46,7 @@ import { deleteArtifact } from './artifact-delete.js';
 import { MAX_MESSAGE_ATTACHMENTS, requireAttachmentCapacity } from '../domain/attachment-policy.js';
 import { MaintenanceAdmission } from './maintenance-admission.js';
 import { createStorageMemoryStore, ensureMemoryContentHashes } from './memory-storage.js';
+import { queueContextCompaction } from './conversation-compaction.js';
 
 export type HostRequest = (method: 'chooseDirectory' | 'chooseFile' | 'chooseAvatar' | 'openPath', params?: Record<string, unknown>) => Promise<unknown>;
 export class CoreService {
@@ -209,6 +210,7 @@ export class CoreService {
       }
       case 'conversations.create': return this.entities.createConversation(params);
       case 'conversations.rename': return this.conversations.rename(objectId(), z.string().parse(params.name));
+      case 'conversations.compact': return queueContextCompaction(this.state, this.tasks, objectId());
       case 'conversations.archive': return this.conversations.archive(objectId(), z.boolean().parse(params.archived));
       case 'conversations.delete': return this.conversations.delete(objectId());
       case 'conversations.members.update': return this.conversations.updateMembers(objectId(), z.array(z.string()).max(50).parse(params.memberIds));

@@ -89,7 +89,8 @@ describe('managed recovery through Core', () => {
     expect(core.state.storage.all('tool_operations'))
       .toEqual([expect.objectContaining({ runId: task.runIds[0], status: 'succeeded' })]);
     expect(core.state.storage.messages(room.id).filter(message => message.authorType === 'bot'))
-      .toEqual([expect.objectContaining({ content: '已生成。核验完成', status: 'committed' })]);
+      .toEqual([expect.objectContaining({ content: '已生成。', status: 'committed' }),
+        expect.objectContaining({ content: '核验完成', status: 'committed' })]);
     expect(model.requests).toHaveLength(3);
     expect(model.requests[2]).toEqual(model.requests[1]);
     expect(model.requests[2].messages).toEqual(expect.arrayContaining([

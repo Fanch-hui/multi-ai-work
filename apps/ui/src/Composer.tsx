@@ -190,7 +190,7 @@ export function Composer({
             </div>
           </div>
         </div>
-        {conversation.kind === "private" && <ConversationStats data={data} conversation={conversation} />}
+        {conversation.kind === "private" && <ConversationStats data={data} conversation={conversation} mutate={mutate} />}
       </form>
       <ModalPresence show={settingsOpen && !!configureChief}>{settingsOpen && configureChief && <ChiefConversationEditor data={data} mutate={mutate} conversation={conversation}
         close={() => setSettingsOpen(false)} configureChief={configureChief} />}</ModalPresence>

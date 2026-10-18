@@ -1,14 +1,16 @@
 import { useModalVisible } from './ModalPresence.js';
 import { Circle, Database, Gauge, X } from 'lucide-react';
 import { conversationStatistics, nonnegative } from './conversation-statistics.js';
+import type { ReactNode } from 'react';
 
 const exact = (value?: number) => value === undefined ? '—' : new Intl.NumberFormat('en').format(value);
 const tokens = (value?: number) => value === undefined ? '—' : `${exact(value)} tok`;
 const duration = (ms?: number) => !nonnegative(ms) ? '—' : ms < 60000 ? `${(ms / 1000).toFixed(1)} 秒` : `${Math.floor(ms / 60000)} 分 ${Math.round(ms % 60000 / 1000)} 秒`;
 const row = (label: string, value: string) => <div className="flex items-start justify-between gap-5"><dt className="text-slate-500">{label}</dt><dd className="min-w-0 break-words text-right text-slate-700">{value}</dd></div>;
 
-export function StatisticsDetails({ id, panel, stats, rate, close }: {
+export function StatisticsDetails({ id, panel, stats, rate, close, contextAction }: {
   id: string; panel: 'activity' | 'usage' | 'context'; stats: ReturnType<typeof conversationStatistics>; rate: string; close: () => void;
+  contextAction?: ReactNode;
 }) {
   const visible = useModalVisible();
   const { usage, context } = stats;
@@ -26,6 +28,7 @@ export function StatisticsDetails({ id, panel, stats, rate, close }: {
     {panel === 'activity' && <ActivityDetails stats={stats} rate={rate} />}
     {panel === 'usage' && <UsageDetails stats={stats} />}
     {panel === 'context' && <ContextDetails stats={stats} />}
+    {panel === 'context' && contextAction}
 
   </section>;
 }

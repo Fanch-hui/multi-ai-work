@@ -55,7 +55,7 @@ export function MessageFeed({
   const feedback = messageInputFeedbackIndex(data, conversation.id);
   const main = conversation.purpose === "chief";
   const groups = main ? data.conversations.filter((item) => item.purpose === "task" && !item.archived && item.sourceConversationId === conversation.id) : [];
-  const taskIds = new Set(data.tasks.filter((item) => item.kind !== 'memory-review' && item.conversationId === conversation.id).map((item) => item.id));
+  const taskIds = new Set(data.tasks.filter((item) => item.kind !== 'memory-review' && item.kind !== 'context-compaction' && item.conversationId === conversation.id).map((item) => item.id));
   const recovery = recoveringTasks(data, conversation, messages);
   const working = [...workingMembers(data, conversation, messages), ...recovery.map(task => ({ task, run: undefined }))];
   const approvals = data.approvals.filter((item) => taskIds.has(item.taskId) && item.status === "pending");
@@ -74,15 +74,19 @@ export function MessageFeed({
           <h2 className="text-balance text-xl font-medium text-slate-700">{main ? "今天想完成什么？" : conversation.kind === "group" ? conversation.name : "开始对话"}</h2>
           {!main && conversation.kind === "group" && <p className="max-w-lg text-xs leading-6 text-slate-400">{conversation.memberIds.map((id) => bots.get(id)?.name).filter(Boolean).join(" · ")}</p>}
         </div>}
-        {messages.map((message) => {
+        {messages.map((message, index) => {
           const bot = bots.get(message.authorBotId ?? "");
           const user = message.authorType === "user";
+          const previous = messages[index - 1];
+          const continuation = message.authorType === "bot" && previous?.authorType === "bot"
+            && previous.authorBotId === message.authorBotId && previous.runId === message.runId;
           const inputFeedback = user ? feedback.get(message.id) ?? [] : [];
           return (
-            <article key={message.id} data-message-id={message.id} className={cn("flex min-w-0 items-start gap-3", user && "justify-end")}>
-              {!user && <Avatar bot={bot} name={bot?.name || "系统"} className="size-8" />}
+            <article key={message.id} data-message-id={message.id} className={cn("flex min-w-0 items-start gap-3", user && "justify-end", continuation && "-mt-5")}>
+              {!user && (continuation ? <span aria-hidden="true" className="size-8 shrink-0" />
+                : <Avatar bot={bot} name={bot?.name || "系统"} className="size-8" />)}
               <div className={cn("min-w-0", user ? "max-w-[85%]" : "flex-1")}>
-                {!user && <div className="mb-2 flex items-center gap-2">
+                {!user && (!continuation || message.status !== "committed") && <div className="mb-2 flex items-center gap-2">
                   {!main && <span className="text-xs font-medium text-slate-600">{bot?.name || "系统"}</span>}
                   {!main && <span className="text-xs tabular-nums text-slate-400">{timeLabel(message.createdAt)}</span>}
                   {message.status === "interrupted" && <Badge status="interrupted" />}
@@ -97,7 +101,7 @@ export function MessageFeed({
                       .join(" ")}
                   </p>
                 ) : null}
-                <div className={cn("text-sm leading-7 text-slate-800", user && "rounded-2xl bg-slate-50 px-4 py-3")}>
+                <div className={cn("rounded-2xl bg-slate-50 px-4 py-3 text-sm leading-7 text-slate-800")}>
                   <Markdown>{message.content}</Markdown>
                 </div>
                 {message.artifactIds.length > 0 && <MessageArtifacts ids={message.artifactIds} user={user}

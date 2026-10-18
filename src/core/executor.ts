@@ -24,7 +24,7 @@ import { TaskInputService } from './task-inputs.js';
 import { receivedRequirementVersion } from './task-requirements.js';
 import { loadManagedProgress, restoreProgressTools, restoreProgressInputs, saveManagedProgress,
   type ManagedCheckpoint } from './managed-progress.js';
-import { RunTextWriter } from './message-stream.js';
+import { RunReplyWriter } from './run-reply.js';
 import { ModelRecoveryPendingError } from '../domain/recovery.js';
 import { clearProgressDeltas } from './managed-progress-deltas.js';
 
@@ -70,7 +70,7 @@ export class Executor {
         restoreProgressInputs(s, run, saved);
         const previous = s.getMessage(saved.draftId);
         if (previous && previous.status !== 'committed') {
-          const resumed = { ...previous, runId: run.id, content: saved.progress.text, status: 'draft' as const };
+          const resumed = { ...previous, runId: run.id, content: saved.progress.text.slice(saved.draftPrefixLength ?? 0), status: 'draft' as const };
           s.updateMessage(resumed); return resumed;
         }
       }
@@ -83,13 +83,13 @@ export class Executor {
       }
       return background ? message : s.appendMessage(message);
     });
-    const writer = new RunTextWriter(s, error => persistence.abort(error));
+    const writer = new RunReplyWriter(s, draft, error => persistence.abort(error), saved?.progress.text);
     const inputCutoff = background ? 0 : saved?.cutoff ?? draft.sequence - 1;
     const token = randomBytes(32).toString('base64url');
     const toolContext = this.tools.context(run, task, bot, room, workspace, signal);
     if (saved) toolContext.resumeOperations = restoreProgressTools(s, task, saved, toolContext);
     const postMessage = toolContext.postMessage;
-    toolContext.postMessage = (...args) => { writer.flush(); return postMessage(...args); };
+    toolContext.postMessage = (...args) => { writer.flush(); const result = postMessage(...args); writer.next(); return result; };
     const askUser = toolContext.askUser;
     if (askUser) toolContext.askUser = (...args) => { writer.flush(); return askUser(...args); };
     toolContext.getSecret = ref => this.vault.get(ref);
@@ -98,8 +98,18 @@ export class Executor {
     let inferenceStarted: number | undefined;
     try {
       if (connection.status !== 'ready') throw new Error('请先在连接页完成登录与连接测试');
+      if (task.kind === 'context-compaction' && !['chatgpt', 'custom'].includes(connection.provider))
+        throw new Error('此通道的上下文由原生运行时管理');
       const prepared = await this.prepare(run, task, bot, room, connection, binding, adapter, toolContext, draft, token, signal, writer, saved);
       const input = prepared.input; summaryUsage = prepared.summaryUsage;
+      if (task.kind === 'context-compaction') {
+        writer.close();
+        s.transaction(() => {
+          s.put('runs', { ...s.get<Run>('runs', run.id)!, status: 'completed', endedAt: now(), usage: summaryUsage() });
+          this.tasks.update(task, { status: 'completed', result: '上下文已压缩，完整聊天记录已保留' });
+        });
+        return;
+      }
       inferenceStarted = Date.now();
       const result = await adapter.run(input);
       writer.close();
@@ -109,7 +119,7 @@ export class Executor {
       signal.throwIfAborted();
       if (await this.tools.processes.settleRun(run.id)) throw new Error('模型结束时仍有命令运行，已停止命令；任务尚未完成');
       if (result.outcome === 'waiting_input' || this.tools.questions.forRun(run.id)) {
-        this.waitForInput(run, task, binding, draft, inputCutoff, input, result, inferenceDurationMs, summaryUsage()); return;
+        this.waitForInput(run, task, binding, draft, inputCutoff, input, { ...result, text: writer.finalText(result.text) }, inferenceDurationMs, summaryUsage()); return;
       }
       const sources = runMessageSources(s, run.id);
       const resultText = result.text.trim() ? result.text : s.messages(room.id)
@@ -130,7 +140,7 @@ export class Executor {
             .some(operation => operation.status === 'unknown'));
         s.put('runs', { ...s.get<Run>('runs', run.id) ?? run, status: 'completed', endedAt: now(), usage: addUsage(result.usage, summaryUsage()),
           inferenceDurationMs, inferenceUsage: result.usage, modelDurationMs: result.modelDurationMs ?? s.get<Run>('runs', run.id)?.modelDurationMs });
-        const published = background ? draft : completeRunMessage(s, draft, resultText, current.artifactIds);
+        const published = background ? draft : completeRunMessage(s, draft, writer.finalText(result.text), current.artifactIds);
         const lastDeliveredSequence = background ? 0 : this.inputs.complete(run.id, inputCutoff);
         const pendingInput = !background && this.inputs.hasPending(task.id);
         this.tasks.update(current, { status: unknown ? 'interrupted' : pendingInput ? 'queued' : waiting ? 'waiting_children' : 'completed',
@@ -230,15 +240,17 @@ export class Executor {
 
   private async prepare(run: Run, task: Task, bot: Bot, room: Conversation, connection: Connection,
     binding: SessionBinding, adapter: ProviderAdapter, toolContext: ToolExecutionContext, draft: Message,
-    token: string, signal: AbortSignal, writer: RunTextWriter, saved?: ManagedCheckpoint) {
+    token: string, signal: AbortSignal, writer: RunReplyWriter, saved?: ManagedCheckpoint) {
     const s = this.state.storage;
-    const archive = task.kind ? [] : s.messages(room.id).filter(message => message.status === 'committed'
-      && (saved ? message.sequence <= saved.cutoff : message.sequence < draft.sequence));
+    const manualCompaction = task.kind === 'context-compaction';
+    const archive = task.kind && !manualCompaction ? [] : s.messages(room.id).filter(message => message.status === 'committed'
+      && (manualCompaction || (saved ? message.sequence <= saved.cutoff : message.sequence < draft.sequence)));
     await this.tools.prepare(toolContext, bot);
     const managed = connection.provider === 'chatgpt' || connection.provider === 'custom';
     const hasHistory = s.metadata<ModelHistoryEntry[]>(`history:${binding.id}`) !== undefined;
-    const delivered = managed && !hasHistory ? archive.at(-2)?.sequence ?? 0 : binding.lastDeliveredSequence;
-    const delta = archive.filter(message => message.sequence > delivered
+    const delivered = manualCompaction ? archive.at(-1)?.sequence ?? 0
+      : managed && !hasHistory ? archive.at(-2)?.sequence ?? 0 : binding.lastDeliveredSequence;
+    const delta = manualCompaction ? [] : archive.filter(message => message.sequence > delivered
       && !(message.authorBotId === bot.id && message.runId && s.get<Run>('runs', message.runId)?.bindingId === binding.id));
     const memoryUpdate = managed || task.kind ? undefined : sessionMemory(this.memory, bot, binding, memorySelectOptions(this.state, task, bot, room, delta));
     const { instructions, prompt, contextInstructions, runtimeContext } = runPrompt(this.state, this.memory, task, bot, room, toolContext, delta, memoryUpdate?.prompt, managed);
@@ -252,7 +264,7 @@ export class Executor {
         .flatMap(artifactId => { const image = modelImage(toolContext.findArtifact(artifactId)); return image ? [image] : []; }),
       resolveImage: imageResolver(this.state, toolContext),
       isWaitingForInput: () => !!this.tools.questions.forRun(run.id), inputSignal: this.tools.inputSignal(run.id),
-      prompt, messages: [], instructions, contextInstructions, runtimeContext, tools: this.tools.definitions(toolContext, bot)
+      prompt: manualCompaction ? '' : prompt, messages: [], instructions, contextInstructions, runtimeContext, tools: this.tools.definitions(toolContext, bot)
         .sort((a, b) => managed ? (a.name < b.name ? -1 : a.name > b.name ? 1 : 0) : 0), signal,
       nativeMcp,
       parallelToolNames: ['read_file', 'list_directory', 'find_files', 'search_text', 'read_skill', 'read_messages', 'search_messages', 'read_artifact', 'fetch_web', 'search_web'],
@@ -261,7 +273,7 @@ export class Executor {
       emit: event => {
         writer.check();
         const recorded = { id: id(), runId: run.id, ...event, createdAt: now() };
-        if (!task.kind && event.type === 'text') writer.append(recorded, draft.id);
+        if (!task.kind && event.type === 'text') writer.append(recorded);
         else { writer.flush(); recordRunEvent(s, recorded); }
         this.state.changed('content');
       },
@@ -271,7 +283,7 @@ export class Executor {
     };
     if (input.userInput) {
       const beginReply = input.userInput.beginReply;
-      input.userInput.beginReply = output => { writer.flush(); beginReply(output); };
+      input.userInput.beginReply = output => { writer.flush(); beginReply(writer.finalText(output ?? '')); writer.beginReply(); };
     }
     if (managed && !task.kind) {
       input.progress = saved?.progress;
@@ -279,12 +291,12 @@ export class Executor {
       input.saveProgress = async (progress, change) => {
         writer.flush();
         const began = performance.now();
-        saveManagedProgress(s, run, task, binding, draft, saved?.cutoff ?? draft.sequence - 1, input, progress, change);
+        saveManagedProgress(s, run, task, binding, draft, saved?.cutoff ?? draft.sequence - 1, input, progress, change, writer.prefixLength);
         input.emit({ type: 'status', data: { phase: 'performance', stage: 'checkpoint-save',
           mode: change?.type ?? 'snapshot', durationMs: performance.now() - began, messageCount: progress.messages.length } });
       };
     }
-    const summaryUsage = managed ? await prepareManagedContext(input, archive, delivered, this.state, this.contextManager, adapter) : () => undefined;
+    const summaryUsage = managed ? await prepareManagedContext(input, archive, delivered, this.state, this.contextManager, adapter, manualCompaction) : () => undefined;
     return { input, summaryUsage, memoryVersions: memoryUpdate?.versions };
   }
 

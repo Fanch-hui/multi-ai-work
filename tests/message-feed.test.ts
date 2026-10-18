@@ -210,6 +210,17 @@ describe('conversation message feed', () => {
       { ...room, kind: 'private', purpose: 'chief' })).toContain('主管答复');
   });
 
+  it('renders separate consecutive output bubbles with one member avatar and retains the final response', () => {
+    const html = render(snapshot({ messages: [
+      message('progress', { content: '正在查看资料', status: 'committed', sequence: 1 }),
+      message('final', { content: '已经完成', status: 'committed', sequence: 2 }),
+    ] }));
+    expect(html.match(/<article/g)).toHaveLength(2);
+    expect(html.match(/class="size-full object-cover"/g)).toHaveLength(1);
+    expect(html).toContain('正在查看资料');
+    expect(html).toContain('已经完成');
+  });
+
   it('preserves pending questions and approvals, while leaving resolved questions in the records', () => {
     const data = snapshot({ tasks: [task('member', { status: 'waiting_input' })], runs: [run('member', { status: 'waiting_input' })],
       questions: [{ id: 'question', taskId: 'member', runId: 'member', botId: 'member', conversationId: room.id,

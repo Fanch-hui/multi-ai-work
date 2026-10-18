@@ -28,12 +28,16 @@ export function replaceRunMessage(storage: Storage, messageId: string, content: 
 
 export function completeRunMessage(storage: Storage, draft: Message, content: string, artifactIds: string[]): Message {
   const message = currentDraft(storage, draft.id);
-  if (!message) {
+  if (!message || !content.trim()) {
     const sources = runMessageSources(storage, draft.runId!);
-    return storage.messages(draft.conversationId).filter(message => message.runId && sources.has(message.runId)
-      && message.authorBotId === draft.authorBotId && message.status === 'committed').at(-1) ?? draft;
+    const previous = storage.messages(draft.conversationId).filter(message => message.runId && sources.has(message.runId)
+      && message.authorBotId === draft.authorBotId && message.status === 'committed').at(-1);
+    if (previous || !message || !artifactIds.length) {
+      if (message) storage.deleteMessage(message.id);
+      return previous ?? draft;
+    }
   }
-  const completed: Message = { ...message, content, artifactIds, status: 'committed' };
+  const completed: Message = { ...message!, content, artifactIds, status: 'committed' };
   storage.updateMessage(completed);
   return completed;
 }

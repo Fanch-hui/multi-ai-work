@@ -19,7 +19,7 @@ export class ChatAccumulator {
   private calls = new Map<number, { id: string; name: string; arguments: string }>();
   private usage?: Usage;
   private replay = new ChatReplayAccumulator();
-  constructor(private emit: RunContext['emit'], private bindingId?: string, private generation?: number) {}
+  constructor(private emit: RunContext['emit'], private bindingId?: string, private generation?: number, private messageKey?: string) {}
   get finished() { return this.finishReason !== undefined; }
   get completed() { return ['stop', 'tool_calls'].includes(this.finishReason ?? ''); }
   get hasUsage() { return this.usage !== undefined; }
@@ -32,7 +32,7 @@ export class ChatAccumulator {
     const choice = chunk.choices.find(item => item.index === 0);
     if (!choice) return;
     this.replay.accept(choice.delta);
-    if (choice.delta.content) { this.text += choice.delta.content; this.emit({ type: 'text', data: { delta: choice.delta.content } }); }
+    if (choice.delta.content) { this.text += choice.delta.content; this.emit({ type: 'text', data: { delta: choice.delta.content, ...(this.messageKey ? { messageKey: this.messageKey } : {}) } }); }
     for (const fragment of choice.delta.tool_calls ?? []) {
       const call = this.calls.get(fragment.index) ?? { id: '', name: '', arguments: '' };
       call.id += fragment.id ?? ''; call.name += fragment.function?.name ?? ''; call.arguments += fragment.function?.arguments ?? '';
@@ -65,7 +65,7 @@ function chunkActivity(chunk: ChatCompletionChunk): ModelActivityKind | undefine
 }
 export async function chatTurn(client: OpenAI, context: RunContext, messages: ModelMessage[], requestId?: string, compatibility?: ChatReplayCompatibility): Promise<Turn> {
   const request = new ModelRequest(context, requestId);
-  const accumulator = new ChatAccumulator(context.emit, context.binding.id, context.binding.generation);
+  const accumulator = new ChatAccumulator(context.emit, context.binding.id, context.binding.generation, requestId);
   let partialOutput = false;
   let callsReady = false;
   try {

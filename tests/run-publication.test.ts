@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import type OpenAI from 'openai';
+import { runManaged } from '../src/providers/managed/loop.js';
 import { mkdtemp } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -26,7 +28,7 @@ async function setupPublication(provider: ProviderKind, run: ProviderAdapter['ru
 const text = (context: RunContext, delta: string) => context.emit({ type: 'text', data: { delta } });
 
 describe('Core reply publication', () => {
-  it.each(['antigravity', 'qoder', 'chatgpt', 'custom'] as const)('%s keeps the actual posted reply and archives the provider receipt', async provider => {
+  it.each(['antigravity', 'qoder', 'chatgpt', 'custom'] as const)('%s preserves visible progress, posted replies and the final response', async provider => {
     let postedId = '';
     const { core, room } = await setupPublication(provider, async context => {
       text(context, '准备回复。');
@@ -40,8 +42,9 @@ describe('Core reply publication', () => {
     const sent = core.tasks.send({ conversationId: room.id, content: '收到请回复' });
     await eventually(() => core.state.storage.get<Task>('tasks', sent.taskIds[0])?.status === 'completed');
     const replies = core.state.storage.messages(room.id).filter(message => message.authorType === 'bot');
-    expect(replies).toHaveLength(1);
-    expect(replies[0]).toMatchObject({ id: postedId, content: '收到！', status: 'committed' });
+    expect(replies.map(message => message.content)).toEqual(['准备回复。', '收到！', '已发布消息，消息 ID 和回执。']);
+    expect(replies.every(message => message.status === 'committed')).toBe(true);
+    expect(replies[1].id).toBe(postedId);
     expect(core.state.storage.all<{ output?: string }>('provider_archive')[0]?.output).toBe('已发布消息，消息 ID 和回执。');
   });
 
@@ -58,7 +61,7 @@ describe('Core reply publication', () => {
     const second = core.tasks.send({ conversationId: room.id, content: '分两条发言' });
     await eventually(() => core.state.storage.get<Task>('tasks', second.taskIds[0])?.status === 'completed');
     expect(core.state.storage.messages(room.id).filter(message => message.authorType === 'bot').map(message => message.content))
-      .toEqual(['收到！', '第一条实际发言', '第二条实际发言']);
+      .toEqual(['收到！', '第一条实际发言', '第二条实际发言', '执行记录']);
   });
 
   it('retains a delivered message on a later run failure and removes an empty failed draft', async () => {
@@ -76,6 +79,7 @@ describe('Core reply publication', () => {
     }
     expect(core.state.storage.messages(room.id).filter(message => message.authorType === 'bot')).toMatchObject([
       { content: '已经送达的回复', status: 'committed' },
+      { content: '内部回执', status: 'interrupted' },
     ]);
   });
 
@@ -96,7 +100,110 @@ describe('Core reply publication', () => {
     await eventually(() => core.state.storage.get<Task>('tasks', first.taskIds[0])?.status === 'completed');
     await eventually(() => core.state.storage.get<Task>('tasks', followupTaskId)?.status === 'completed');
     expect(core.state.storage.messages(room.id).map(message => message.content))
-      .toEqual(['收到请回复', '补充要求', '收到补充要求', '补充回复']);
+      .toEqual(['收到请回复', '正在回复', '补充要求', '收到补充要求', '发布回执', '补充回复']);
+  });
+
+  it('keeps each assistant output as one bubble and commits the final output without cumulative duplication', async () => {
+    const { core, room } = await setupPublication('custom', async context => {
+      context.emit({ type: 'text', data: { delta: '先查看', messageKey: 'first' } });
+      context.emit({ type: 'text', data: { delta: '资料。', messageKey: 'first' } });
+      context.emit({ type: 'text', data: { delta: '已找到问题。', messageKey: 'second' } });
+      context.emit({ type: 'text', data: { delta: '最终答复。', messageKey: 'final' } });
+      return { text: '先查看资料。已找到问题。最终答复。' };
+    });
+    const sent = core.tasks.send({ conversationId: room.id, content: '处理资料' });
+    await eventually(() => core.state.storage.get<Task>('tasks', sent.taskIds[0])?.status === 'completed');
+    expect(core.state.storage.messages(room.id).filter(message => message.authorType === 'bot'))
+      .toMatchObject([{ content: '先查看资料。', status: 'committed' },
+        { content: '已找到问题。', status: 'committed' }, { content: '最终答复。', status: 'committed' }]);
+  });
+
+  it.each(['responses', 'chat-completions'] as const)('%s separates real model tool turns and final output', async protocol => {
+    let requests = 0;
+    const create = async () => {
+      const first = requests++ === 0, content = first ? '先检查资料。' : '检查完成。';
+      return (async function* () {
+        if (protocol === 'chat-completions') {
+          yield { choices: [{ index: 0, delta: { content }, finish_reason: null }] };
+          if (first) yield { choices: [{ index: 0, delta: { tool_calls: [
+            { index: 0, id: 'read', type: 'function', function: { name: 'read_messages', arguments: '{}' } },
+          ] }, finish_reason: null }] };
+          yield { choices: [{ index: 0, delta: {}, finish_reason: first ? 'tool_calls' : 'stop' }] };
+          return;
+        }
+        const message = { type: 'message', id: 'visible', role: 'assistant', status: 'completed',
+          content: [{ type: 'output_text', text: content, annotations: [] }] };
+        const call = { type: 'function_call', id: 'read-item', call_id: 'read', name: 'read_messages', arguments: '{}', status: 'completed' };
+        yield { type: 'response.output_text.delta', output_index: 0, item_id: 'visible', content_index: 0, delta: content };
+        yield { type: 'response.output_item.done', output_index: 0, item: message };
+        if (first) yield { type: 'response.output_item.done', output_index: 1, item: call };
+        yield { type: 'response.completed', response: { id: `response-${requests}`, status: 'completed', output: first ? [message, call] : [message] } };
+      })();
+    };
+    const client = { baseURL: 'http://fixture.invalid/v1', responses: { create }, chat: { completions: { create } } } as unknown as OpenAI;
+    const { core, room } = await setupPublication('custom', context => runManaged(client, context, protocol, []));
+    const sent = core.tasks.send({ conversationId: room.id, content: '请检查' });
+    await eventually(() => ['completed', 'failed'].includes(core.state.storage.get<Task>('tasks', sent.taskIds[0])?.status ?? ''));
+    expect(core.state.storage.get<Task>('tasks', sent.taskIds[0])).toMatchObject({ status: 'completed' });
+    expect(requests).toBe(2);
+    expect(core.state.storage.messages(room.id).filter(message => message.authorType === 'bot'))
+      .toMatchObject([{ content: '先检查资料。', status: 'committed' }, { content: '检查完成。', status: 'committed' }]);
+    expect(core.state.storage.all<{ name: string; status: string }>('tool_operations'))
+      .toMatchObject([{ name: 'read_messages', status: 'succeeded' }]);
+  });
+
+  it('preserves separate message items from one Responses request, including terminal-only output', async () => {
+    const output = ['先检查资料。', '检查完成。'].map((content, index) => ({ type: 'message', id: `message-${index}`,
+      role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: content, annotations: [] }] }));
+    const client = { baseURL: 'http://fixture.invalid/v1', responses: { create: async () => (async function* () {
+      yield { type: 'response.output_text.delta', output_index: 0, item_id: 'message-0', content_index: 0, delta: '先检查资料。' };
+      yield { type: 'response.output_item.done', output_index: 0, item: output[0] };
+      yield { type: 'response.completed', response: { id: 'response', status: 'completed', output } };
+    })() } } as unknown as OpenAI;
+    const { core, room } = await setupPublication('custom', context => runManaged(client, context, 'responses', []));
+    const sent = core.tasks.send({ conversationId: room.id, content: '检查资料' });
+    await eventually(() => core.state.storage.get<Task>('tasks', sent.taskIds[0])?.status === 'completed');
+    expect(core.state.storage.messages(room.id).filter(message => message.authorType === 'bot'))
+      .toMatchObject([{ content: '先检查资料。', status: 'committed' }, { content: '检查完成。', status: 'committed' }]);
+  });
+
+  it('completes the current bubble using the authoritative final response', async () => {
+    const { core, room } = await setupPublication('antigravity', async context => {
+      context.emit({ type: 'text', data: { delta: '先检查资料。', messageKey: 'progress' } });
+      context.emit({ type: 'text', data: { delta: '检查完成', messageKey: 'final' } });
+      return { text: '检查完成，发现两处需要调整。' };
+    });
+    const sent = core.tasks.send({ conversationId: room.id, content: '检查资料' });
+    await eventually(() => core.state.storage.get<Task>('tasks', sent.taskIds[0])?.status === 'completed');
+    expect(core.state.storage.messages(room.id).filter(message => message.authorType === 'bot'))
+      .toMatchObject([{ content: '先检查资料。', status: 'committed' },
+        { content: '检查完成，发现两处需要调整。', status: 'committed' }]);
+  });
+
+  it('does not repeat committed progress when a supplemental reply starts after post_message', async () => {
+    const { core, room } = await setupPublication('custom', async context => {
+      text(context, '先检查资料。');
+      await context.executeTool('post_message', { content: '已通知成员。' }, 'post');
+      context.userInput!.beginReply('先检查资料。');
+      text(context, '按补充要求完成。');
+      return { text: '按补充要求完成。' };
+    });
+    const sent = core.tasks.send({ conversationId: room.id, content: '检查资料' });
+    await eventually(() => core.state.storage.get<Task>('tasks', sent.taskIds[0])?.status === 'completed');
+    expect(core.state.storage.messages(room.id).filter(message => message.authorType === 'bot').map(message => message.content))
+      .toEqual(['先检查资料。', '已通知成员。', '按补充要求完成。']);
+  });
+
+  it('preserves earlier assistant outputs and interrupted text after a stream failure', async () => {
+    const { core, room } = await setupPublication('custom', async context => {
+      context.emit({ type: 'text', data: { delta: '已完成第一步。', messageKey: 'first' } });
+      context.emit({ type: 'text', data: { delta: '第二步进行中', messageKey: 'second' } });
+      throw new Error('stream interrupted');
+    });
+    const sent = core.tasks.send({ conversationId: room.id, content: '分步执行' });
+    await eventually(() => core.state.storage.get<Task>('tasks', sent.taskIds[0])?.status === 'failed');
+    expect(core.state.storage.messages(room.id).filter(message => message.authorType === 'bot'))
+      .toMatchObject([{ content: '已完成第一步。', status: 'committed' }, { content: '第二步进行中', status: 'interrupted' }]);
   });
 
   it('keeps tool pairing and opaque provider history tied to the actual published message', async () => {

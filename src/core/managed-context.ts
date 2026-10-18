@@ -19,7 +19,7 @@ export { addUsage } from '../domain/usage.js';
 export interface ProviderArchive { id: string; bindingId: string; entries: ModelHistoryEntry[]; output?: string; }
 
 export async function prepareManagedContext(input: RunContext, archive: Message[], delivered: number,
-  state: State, manager: ContextManager, adapter: ProviderAdapter): Promise<() => Usage | undefined> {
+  state: State, manager: ContextManager, adapter: ProviderAdapter, force = false): Promise<() => Usage | undefined> {
   const s = state.storage;
   const savedHistory = s.metadata<ModelHistoryEntry[]>(`history:${input.binding.id}`);
   let history = savedHistory
@@ -60,9 +60,25 @@ export async function prepareManagedContext(input: RunContext, archive: Message[
       const expected = new Set(ids);
       return contextSourceHash(s.messages(input.binding.conversationId).filter(message => expected.has(message.id))) === hash;
     } });
-  const prepared = await prepare(false, input.prompt);
+  const previousCheckpoint = force ? s.byField<ContextCheckpoint>('context_checkpoints', 'bindingId', input.binding.id).at(-1)?.id : undefined;
+  const previousOperation = force ? s.byField<{ id: string }>('compactions', 'bindingId', input.binding.id).at(-1)?.id : undefined;
+  const prepared = await prepare(force, input.prompt);
   prepareRuntimeContext(input, prepared.messages, signature);
   input.emit({ type: 'context', data: { estimatedTokens: prepared.estimatedTokens, ...settings, source: 'app-estimated', owner: 'app' } });
+  if (force) {
+    if (!prepared.checkpoint || prepared.checkpoint.id === previousCheckpoint) {
+      const operation = s.byField<{ id: string; reason?: string }>('compactions', 'bindingId', input.binding.id).at(-1);
+      const reason = operation?.id !== previousOperation ? operation?.reason : undefined;
+      throw new Error(reason === 'summary_failed' || reason === 'needs_split' ? '摘要生成未完成，请稍后重试'
+        : reason === 'source_changed' ? '对话内容已变化，请重新压缩'
+        : '当前可压缩的历史较少，继续对话后可重试');
+    }
+    s.transaction(() => {
+      const source = archive.at(-1)!;
+      s.setMetadata(`history:${input.binding.id}`, workingHistory(state, input, input.messages, source, source.sequence));
+      saveHistoryValidity(state, input);
+    });
+  }
   input.compactContext = async (messages, options) => {
     if (!budget || !triggerTokens) return undefined;
     const originalTokens = estimateTokens(input.instructions) + estimateTokens(input.tools) + 256
