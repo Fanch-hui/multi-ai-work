@@ -13,13 +13,16 @@ import { ArtifactImagePreview, isImageAttachment } from "./ImageAttachment.js";
 import { DocumentPreview, isDocumentPreview } from './DocumentPreview.js';
 import { ArtifactRequirement } from './RequirementDetails.js';
 import DeleteArtifactButton from './DeleteArtifactButton.js';
+import { useArtifactSelection } from './ArtifactSelection.js';
 
 export function ArtifactGroups({ groups, data, mutate }: {
   groups: ArtifactGroup[]; data: Pick<Snapshot, 'tasks' | 'bots'>; mutate: Mutate;
 }) {
+  const selection = useArtifactSelection(groups.flatMap(group => group.artifacts.map(artifact => artifact.id)), mutate);
   const tasks = new Map(data.tasks.map(task => [task.id, task]));
   const bots = new Map(data.bots.map(bot => [bot.id, bot]));
   return <div className="space-y-6">
+    {selection.toolbar}
     {groups.map(group => <section key={group.id} aria-labelledby={`artifact-group-${group.id}`}>
       <div className="mb-2 flex items-center justify-between gap-4">
         <div className="min-w-0">
@@ -30,8 +33,12 @@ export function ArtifactGroups({ groups, data, mutate }: {
         <span className="shrink-0 text-xs text-slate-500 tabular-nums">{group.artifacts.length} 个成果</span>
       </div>
       <ul className="@container list-none divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white">
-        {group.artifacts.map(artifact => <li key={artifact.id}><ArtifactItem artifact={artifact}
-          producer={artifactProducer(artifact, tasks, bots)} showProducer layout="row" allowDelete mutate={mutate} /></li>)}
+        {group.artifacts.map(artifact => <li key={artifact.id} className="flex items-center">
+          {selection.selecting && <input type="checkbox" className="ml-3 shrink-0" aria-label={`选择${artifact.name}`}
+            disabled={selection.busy} checked={selection.checked.has(artifact.id)} onChange={() => selection.toggle(artifact.id)} />}
+          <div className="min-w-0 flex-1"><ArtifactItem artifact={artifact}
+            producer={artifactProducer(artifact, tasks, bots)} showProducer layout="row" allowDelete={!selection.selecting} mutate={mutate} /></div>
+        </li>)}
       </ul>
     </section>)}
   </div>;
