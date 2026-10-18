@@ -76,6 +76,17 @@ describe('native adapter isolation', () => {
     projection.accept({ type: 'assistant', message: { content: [{ type: 'text', text: 'answer' }] }, parent_tool_use_id: null } as Qoder.SDKMessage);
     expect(projection.text).toBe('answer'); expect(ctx.events.filter(event => event.type === 'text')).toHaveLength(1);
   });
+
+  it('reports Qoder reasoning and tool arguments before visible text without exposing reasoning', async () => {
+    const ctx = await context(); const projection = new QoderEvents(ctx);
+    for (const delta of [{ type: 'thinking_delta', thinking: 'private-thought' },
+      { type: 'thinking_delta', thinking: 'private-thought' }, { type: 'input_json_delta', partial_json: '{' },
+      { type: 'text_delta', text: 'answer' }]) projection.accept({ type: 'stream_event',
+      event: { type: 'content_block_delta', delta }, parent_tool_use_id: null } as Qoder.SDKMessage);
+    expect(ctx.events.filter(event => event.data.phase === 'model-activity').map(event => event.data.activityKind))
+      .toEqual(['thinking', 'tool', 'responding']);
+    expect(projection.text).toBe('answer'); expect(JSON.stringify(ctx.events)).not.toContain('private-thought');
+  });
 });
 
 function qoderFixture(account: () => string, completed: boolean, prompts: string[], opened: Qoder.Options[], onModels?: () => void) {

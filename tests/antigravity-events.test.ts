@@ -16,6 +16,17 @@ const step = (index: number, usage: Record<string, number>, extra = {}) => ({ ev
   step_update: { conversation_id: 'session', step_index: index, step_type: 'agent_response', state: 'DONE', usage, ...extra } });
 
 describe('Antigravity event accounting', () => {
+  it('reports native step activity before text and preserves actual tool events', () => {
+    const events: ProviderEvent[] = [], projection = new AntigravityEvents({ emit: event => events.push(event) });
+    projection.accept(init());
+    projection.accept(step(1, {}, { state: 'ACTIVE' }));
+    projection.accept(step(1, {}, { state: 'ACTIVE', text_delta: 'answer' }));
+    projection.accept(step(2, {}, { state: 'ACTIVE', step_type: 'tool', tool_name: 'read' }));
+    expect(events.filter(event => event.data.phase === 'model-activity').map(event => event.data.activityKind))
+      .toEqual(['working', 'responding', 'tool']);
+    expect(events.find(event => event.type === 'tool')?.data).toMatchObject({ name: 'read', status: 'running' });
+  });
+
   it('uses streamed text once and does not duplicate the final response', () => {
     const events: ProviderEvent[] = [], projection = new AntigravityEvents({ emit: event => events.push(event) });
     projection.accept(init());

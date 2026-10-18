@@ -1,8 +1,13 @@
 import type { Run, Task } from '../../../src/domain/types.js';
-import type { TaskActivity } from '../../../src/domain/task-activity.js';
+import type { ModelActivityKind, TaskActivity } from '../../../src/domain/task-activity.js';
+
+const modelLabels: Record<ModelActivityKind, string> = {
+  waiting: '正在等待响应', thinking: '正在认真思考', responding: '正在组织回复',
+  tool: '正在努力工作', working: '正在努力工作',
+};
 
 const phaseLabels: Record<TaskActivity['phase'], string> = {
-  preparing: '准备开始', model: '等待模型响应', recovering: '正在恢复连接', responding: '正在整理答复', tool: '正在执行工具',
+  preparing: '正在做准备', model: '正在等待响应', recovering: '正在恢复连接', responding: '正在组织回复', tool: '正在努力工作',
   compacting: '正在整理上下文', queued: '排队中', children: '等待成员任务',
   approval: '等待批准', input: '等待回答', stopping: '停止处理中', finished: '运行已结束',
 };
@@ -15,6 +20,7 @@ export function currentActivityLabel(task?: Task, run?: Run): string | undefined
   if (run?.cancelRequestedAt && !run.endedAt) return '停止处理中';
   const recovery = taskRecovery(task);
   if (recovery) return `正在恢复连接，第 ${recovery.attempt}/${recovery.maxAttempts} 次`;
+  if (task?.activity?.phase === 'model' && task.activity.modelActivity) return modelLabels[task.activity.modelActivity];
   return task?.activity ? phaseLabels[task.activity.phase] : undefined;
 }
 

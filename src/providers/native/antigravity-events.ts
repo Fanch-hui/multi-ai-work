@@ -1,5 +1,6 @@
 import type { ProviderEvent } from '../../domain/provider.js';
 import type { Usage } from '../../domain/types.js';
+import { ModelActivity } from '../activity.js';
 
 export interface AntigravityUsage {
   input_tokens?: number; output_tokens?: number; cache_read_tokens?: number;
@@ -30,12 +31,14 @@ export class AntigravityEvents {
   initialization?: AntigravityInitialization;
   text = '';
   private stepUsage = new Map<number, AntigravityUsage>();
+  private activity: ModelActivity;
   constructor(private options: { expectedSessionId?: string; previousUsage?: AntigravityUsage;
-    emit?: (event: ProviderEvent) => void } = {}) {}
+    emit?: (event: ProviderEvent) => void } = {}) { this.activity = new ModelActivity(options.emit); }
 
   nextTurn(previousUsage?: AntigravityUsage): void {
     this.text = '';
     this.stepUsage.clear();
+    this.activity.reset();
     this.options.previousUsage = previousUsage;
     this.options.expectedSessionId = this.initialization?.conversationId;
   }
@@ -74,6 +77,8 @@ export class AntigravityEvents {
     const step = this.validateSession(value);
     if (typeof step.step_index !== 'number' || !Number.isInteger(step.step_index))
       throw new Error('Antigravity 返回了无效步骤序号');
+    if (step.state === 'ACTIVE') this.activity.report(step.step_type === 'tool' ? 'tool'
+      : step.step_type === 'agent_response' && step.text_delta ? 'responding' : 'working', `step_update:${step.step_type}`);
     if (step.step_type === 'agent_response' && typeof step.text_delta === 'string') this.append(step.text_delta);
     if (step.state === 'DONE') {
       const usage = usageValue(step.usage);

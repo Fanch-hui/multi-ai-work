@@ -3,6 +3,7 @@ import type { ReasoningEffort } from 'openai/resources/shared';
 import type { Response, ResponseCreateParamsStreaming, ResponseOutputItem, ResponseOutputMessage, ResponseStreamEvent } from 'openai/resources/responses/responses';
 import type { ModelMessage, RunContext } from '../../domain/provider.js';
 import type { Usage } from '../../domain/types.js';
+import type { ModelActivityKind } from '../../domain/task-activity.js';
 import { responsesInput } from './messages.js';
 import { markPartialOutput } from './retry.js';
 import { resolveMessageImages } from '../images.js';
@@ -11,6 +12,18 @@ import { InterruptedModelStreamError } from './request-errors.js';
 import type { ResponsesCacheDiagnostics } from './cache-diagnostics.js';
 
 export interface Turn { message: ModelMessage; usage?: Usage; }
+
+function responseActivity(event: ResponseStreamEvent): ModelActivityKind {
+  if (event.type === 'response.created' || event.type === 'response.in_progress' || event.type === 'response.queued') return 'waiting';
+  if (event.type.startsWith('response.reasoning_')) return 'thinking';
+  if (event.type.startsWith('response.function_call_arguments.')) return 'tool';
+  if (event.type.startsWith('response.output_text.') || event.type.startsWith('response.refusal.')) return 'responding';
+  if ('item' in event) {
+    if (event.item.type === 'reasoning') return 'thinking';
+    if (event.item.type === 'function_call') return 'tool';
+  }
+  return 'working';
+}
 export class ResponsesAccumulator {
   private completed?: Response;
   private items = new Map<number, ResponseOutputItem>();
@@ -113,7 +126,7 @@ export async function responsesTurn(client: OpenAI, context: RunContext, message
       if (event.type.startsWith('response.output_') || event.type.startsWith('response.content_part.')
         || event.type.startsWith('response.function_call_arguments.') || event.type.startsWith('response.reasoning_')
         || ('response' in event && event.response.output.length > 0)) partialOutput = true;
-      request.activity(event.type, partialOutput);
+      request.activity(event.type, partialOutput, responseActivity(event));
       accumulator.accept(event);
       if (event.type === 'response.completed') { completed = event.response; break; }
     }

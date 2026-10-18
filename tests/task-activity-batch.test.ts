@@ -4,6 +4,37 @@ import { taskActivity } from '../src/core/task-activity.js';
 import { setup } from './core-harness.js';
 
 describe('批量任务活动快照', () => {
+  it('按实际模型活动切换状态，缓存统计不覆盖推理和工具进度', async () => {
+    const { core } = await setup(async () => ({ text: '完成' }));
+    core.scheduler.pause();
+    const s = core.state.storage;
+    const task: Task = { id: 'activity-task', botId: core.state.settings().mainBotId!,
+      conversationId: core.state.settings().mainConversationId!, status: 'running', runIds: ['activity-run'],
+      dependencyIds: [], artifactIds: [], goal: '工作', expectedOutput: '', requestId: 'request', depth: 0,
+      createdAt: '', updatedAt: '' };
+    s.put('tasks', task);
+    s.put('runs', { id: 'activity-run', taskId: task.id, botId: task.botId, bindingId: 'binding',
+      status: 'running', configRevision: 1, createdAt: '2026-10-18T01:00:00Z' });
+    const cases: { event: Pick<RunEvent, 'type' | 'data'>; expected: Partial<NonNullable<Task['activity']>> }[] = [
+      { event: { type: 'status', data: { phase: 'model-request' } }, expected: { phase: 'model', modelActivity: 'waiting' } },
+      { event: { type: 'status', data: { phase: 'model-activity', activityKind: 'thinking' } }, expected: { phase: 'model', modelActivity: 'thinking' } },
+      { event: { type: 'status', data: { phase: 'model-cache-response' } }, expected: { phase: 'model', modelActivity: 'thinking' } },
+      { event: { type: 'status', data: { phase: 'model-activity', activityKind: 'tool' } }, expected: { phase: 'model', modelActivity: 'tool' } },
+      { event: { type: 'tool', data: { name: 'read_file', status: 'started' } }, expected: { phase: 'tool', toolName: 'read_file' } },
+      { event: { type: 'status', data: { phase: 'model-cache-request' } }, expected: { phase: 'tool', toolName: 'read_file' } },
+      { event: { type: 'text', data: { delta: '答复' } }, expected: { phase: 'responding' } },
+      { event: { type: 'status', data: { phase: 'model-request' } }, expected: { phase: 'model', modelActivity: 'waiting' } },
+      { event: { type: 'status', data: { phase: 'model-activity', activity: 'chat.chunk' } }, expected: { phase: 'model', modelActivity: 'working' } },
+    ];
+    for (const [index, item] of cases.entries()) {
+      s.event({ id: `activity-${index}`, runId: 'activity-run', ...item.event, createdAt: `2026-10-18T01:00:0${index}Z` });
+      const activity = taskActivity(s, task);
+      expect(activity).toMatchObject(item.expected);
+      expect(core.state.snapshot().tasks[0].activity).toEqual(activity);
+      if (activity.modelActivity && activity.modelActivity !== 'waiting') expect(activity.waitingFor).toBeUndefined();
+    }
+  });
+
   it('恢复等待显示重试进度，替换草稿不伪造模型活动', async () => {
     const { core } = await setup(async () => ({ text: '完成' }));
     core.scheduler.pause();

@@ -1,4 +1,6 @@
 import type { RunContext } from '../../domain/provider.js';
+import type { ModelActivityKind } from '../../domain/task-activity.js';
+import { ModelActivity } from '../activity.js';
 import { CompletedStreamTailError, InactiveModelStreamError } from './request-errors.js';
 
 export class SupplementalInputError extends Error {
@@ -11,10 +13,11 @@ export class ModelRequest {
   private timer?: ReturnType<typeof setTimeout>;
   private unsubscribe?: () => void;
   private outputStarted = false;
-  private lastActivity = 0;
+  private modelActivity: ModelActivity;
   private completed = false;
 
   constructor(private context: RunContext) {
+    this.modelActivity = new ModelActivity(event => context.emit(event));
     this.signal = AbortSignal.any([context.signal, this.controller.signal]);
     this.unsubscribe = context.userInput?.subscribe(() => {
       if (!this.outputStarted && context.userInput?.hasPending()
@@ -24,14 +27,11 @@ export class ModelRequest {
     this.arm();
   }
 
-  activity(kind: string, hasOutput: boolean) {
+  activity(kind: string, hasOutput: boolean, activityKind?: ModelActivityKind) {
     this.outputStarted ||= hasOutput;
     this.arm();
     if (['response.completed', 'response.failed', 'response.incomplete', 'error'].includes(kind)) return;
-    const time = Date.now();
-    if (time - this.lastActivity < 5000) return;
-    this.lastActivity = time;
-    this.context.emit({ type: 'status', data: { phase: 'model-activity', activity: kind } });
+    if (activityKind) this.modelActivity.report(activityKind, kind);
   }
 
   error(error: unknown) { return this.signal.aborted ? this.signal.reason : error; }

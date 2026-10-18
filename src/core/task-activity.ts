@@ -1,15 +1,17 @@
-import type { TaskActivity } from '../domain/task-activity.js';
+import type { ModelActivityKind, TaskActivity } from '../domain/task-activity.js';
 import type { Run, Task } from '../domain/types.js';
 import type { Storage } from './storage.js';
 import { terminal } from '../domain/task-status.js';
 
 interface ActivityEvent {
   at: string; type: string; phase?: string; status?: string; name?: string;
+  activityKind?: ModelActivityKind;
   attempt?: number; maxAttempts?: number; nextAttemptAt?: string; code?: string;
 }
 const eventFields = (prefix = '') => `json_extract(${prefix}payload, '$.createdAt') AS at, json_extract(${prefix}payload, '$.type') AS type,
   json_extract(${prefix}payload, '$.data.phase') AS phase, json_extract(${prefix}payload, '$.data.status') AS status,
   json_extract(${prefix}payload, '$.data.name') AS name,
+  json_extract(${prefix}payload, '$.data.activityKind') AS activityKind,
   json_extract(${prefix}payload, '$.data.attempt') AS attempt,
   json_extract(${prefix}payload, '$.data.maxAttempts') AS maxAttempts,
   json_extract(${prefix}payload, '$.data.nextAttemptAt') AS nextAttemptAt,
@@ -17,8 +19,10 @@ const eventFields = (prefix = '') => `json_extract(${prefix}payload, '$.createdA
 const streamedText = `json_extract(payload, '$.type') = 'text' AND json_type(payload, '$.data.replace') IS NULL`;
 const modelFilter = `(${streamedText}) OR
   (json_extract(payload, '$.type') = 'status' AND json_extract(payload, '$.data.phase') LIKE 'model-%'
-    AND json_extract(payload, '$.data.phase') != 'model-retry')`;
-const eventFilter = `(${streamedText}) OR json_extract(payload, '$.type') IN ('tool', 'status', 'compaction')`;
+    AND json_extract(payload, '$.data.phase') NOT IN ('model-retry', 'model-cache-request', 'model-cache-response'))`;
+const eventFilter = `(${streamedText}) OR json_extract(payload, '$.type') IN ('tool', 'compaction') OR
+  (json_extract(payload, '$.type') = 'status' AND
+    COALESCE(json_extract(payload, '$.data.phase'), '') NOT IN ('model-cache-request', 'model-cache-response'))`;
 
 export function taskActivity(storage: Storage, task: Task): TaskActivity {
   const run = task.runIds.at(-1) ? storage.get<Run>('runs', task.runIds.at(-1)!) : undefined;
@@ -87,6 +91,10 @@ function describeActivity(task: Task, run?: Run, event?: ActivityEvent, modelAt?
   if (event?.type === 'tool' && ['started', 'running'].includes(event.status ?? event.phase ?? ''))
     return { ...activity, phase: 'tool', toolName: event.name, waitingFor: event.name };
   if (event?.type === 'text') return { ...activity, phase: 'responding' };
-  if (event?.phase?.startsWith('model-')) return { ...activity, phase: 'model', waitingFor: event.phase === 'model-retry' ? '模型服务重试' : '模型响应' };
+  if (event?.phase?.startsWith('model-')) {
+    const modelActivity = event.activityKind ?? (['model-request', 'model-retry'].includes(event.phase) ? 'waiting' : 'working');
+    return { ...activity, phase: 'model', modelActivity,
+      ...(modelActivity === 'waiting' ? { waitingFor: event.phase === 'model-retry' ? '模型服务重试' : '模型响应' } : {}) };
+  }
   return { ...activity, phase: 'preparing' };
 }

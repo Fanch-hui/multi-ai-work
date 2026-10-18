@@ -3,6 +3,7 @@ import type { ReasoningEffort } from 'openai/resources/shared';
 import type { ChatCompletionChunk } from 'openai/resources/chat/completions/completions';
 import type { RunContext, ModelMessage } from '../../domain/provider.js';
 import type { Usage } from '../../domain/types.js';
+import type { ModelActivityKind } from '../../domain/task-activity.js';
 import type { Turn } from './responses.js';
 import { chatInput } from './messages.js';
 import { markPartialOutput } from './retry.js';
@@ -44,6 +45,19 @@ export class ChatAccumulator {
     return { message: { role: 'assistant', content: this.text, toolCalls: calls }, usage: this.usage };
   }
 }
+
+function chunkActivity(chunk: ChatCompletionChunk): ModelActivityKind | undefined {
+  const delta = chunk.choices.find(choice => choice.index === 0)?.delta;
+  if (!delta) return undefined;
+  if (delta.tool_calls?.length || delta.function_call) return 'tool';
+  if (delta.content || delta.refusal) return 'responding';
+  const fields = delta as Record<string, unknown>;
+  if (['reasoning_content', 'reasoning', 'reasoning_details'].some(key => fields[key]
+    && (!Array.isArray(fields[key]) || fields[key].length))) return 'thinking';
+  if (Object.entries(fields).some(([key, value]) => key !== 'role' && value != null && value !== ''
+    && (!Array.isArray(value) || value.length))) return 'working';
+  return delta.role ? 'waiting' : undefined;
+}
 export async function chatTurn(client: OpenAI, context: RunContext, messages: ModelMessage[]): Promise<Turn> {
   const request = new ModelRequest(context);
   const accumulator = new ChatAccumulator(context.emit);
@@ -59,7 +73,7 @@ export async function chatTurn(client: OpenAI, context: RunContext, messages: Mo
     for await (const chunk of stream) {
       if (chunk.choices.some(choice => Object.entries(choice.delta)
         .some(([key, value]) => key !== 'role' && value != null && value !== '' && (!Array.isArray(value) || value.length > 0)))) partialOutput = true;
-      request.activity('chat.chunk', partialOutput);
+      request.activity('chat.chunk', partialOutput, chunkActivity(chunk));
       accumulator.accept(chunk);
       if (accumulator.finished && !accumulator.completed) accumulator.finish();
       if (accumulator.completed) {

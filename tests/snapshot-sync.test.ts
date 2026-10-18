@@ -77,16 +77,22 @@ describe('versioned UI snapshots', () => {
     state.changed();
     const view = await core.request('state.view', { conversationId: room.id }) as SnapshotView;
     expect(view.snapshot.tasks.find(item => item.id === task.id)?.activity?.phase).toBe('model');
+    s.event({ id: 'thinking', runId: run.id, type: 'status', data: { phase: 'model-activity', activityKind: 'thinking' },
+      createdAt: '2026-10-18T12:00:00Z' });
+    state.changed('content');
+    const thinking = await core.request('state.changes', { cursor: view.cursor, conversationId: room.id }) as SnapshotDelta;
+    expect(thinking.tasks.find(item => item.id === task.id)?.activity).toMatchObject({ phase: 'model', modelActivity: 'thinking' });
+    expect(thinking.runs).toEqual([]);
     const events = vi.spyOn(s, 'events'), eventsAfter = vi.spyOn(s, 'eventsAfter');
     const createdAt = '2026-10-18T12:00:01Z';
     s.messageStream.append({ id: 'rpc-text', runId: run.id, type: 'text', data: { delta: 'live text' }, createdAt }, draft.id);
     state.changed('content');
-    const delta = await core.request('state.changes', { cursor: view.cursor, conversationId: room.id }) as SnapshotDelta;
+    const delta = await core.request('state.changes', { cursor: thinking.cursor, conversationId: room.id }) as SnapshotDelta;
     expect(delta.messages[0].content).toBe('live text');
     expect(delta.tasks.find(item => item.id === task.id)?.activity).toMatchObject({ phase: 'responding', lastActivityAt: createdAt });
     expect(delta.runs).toEqual([]);
     expect(delta.events).toBeUndefined();
-    expect(delta.cursor.eventSequence).toBe(view.cursor.eventSequence);
+    expect(delta.cursor.eventSequence).toBe(thinking.cursor.eventSequence);
     expect(events).not.toHaveBeenCalled(); expect(eventsAfter).not.toHaveBeenCalled();
 
     s.event({ id: 'tool-next', runId: run.id, type: 'tool', data: { name: 'read_file', phase: 'started' }, createdAt });

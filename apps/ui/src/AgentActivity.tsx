@@ -11,7 +11,7 @@ export function agentActivity(task?: Task, run?: Run, events: RunEvent[] = [], s
   if (status === 'waiting_approval' || run?.status === 'waiting_approval') return '等待你的批准';
   if (status === 'waiting_input' || run?.status === 'waiting_input') return '等待你的回答';
   if (status === 'waiting_children') return '正在协调团队';
-  if (processes.some(process => process.runId === run?.id && process.status === 'running')) return '命令运行中';
+  if (processes.some(process => process.runId === run?.id && process.status === 'running')) return '正在努力工作';
   const recent = events.filter(event => event.runId === run?.id
     && !(event.type === 'status' && ['model-cache-request', 'model-cache-response'].includes(String(event.data.phase))))
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
@@ -21,12 +21,12 @@ export function agentActivity(task?: Task, run?: Run, events: RunEvent[] = [], s
     const toolStatus = event.data.status ?? event.data.phase;
     if (toolStatus) tools.set(String(event.data.callId ?? event.data.name), String(toolStatus));
   }
-  if ([...tools.values()].some(status => ['started', 'running'].includes(status))) return '正在工作中';
+  if ([...tools.values()].some(status => ['started', 'running'].includes(status))) return '正在努力工作';
   const latest = recent.filter(event => ['status', 'compaction', 'tool', 'text'].includes(event.type)).at(-1);
   if (latest?.data.phase === 'model-retry') return '正在恢复连接';
   if (latest?.type === 'compaction' && latest.data.status === 'started') return '正在整理上下文';
-  if (streaming && (!recent.length || recent.at(-1)?.type === 'text')) return '正在为你整理答复';
-  return '思考中';
+  if (streaming && (!recent.length || recent.at(-1)?.type === 'text')) return '正在组织回复';
+  return '正在认真思考';
 }
 
 export function AgentActivity({ label, animated = true, className }: { label: string; animated?: boolean; className?: string }) {

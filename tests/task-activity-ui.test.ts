@@ -7,6 +7,8 @@ import { TaskActivityDetails } from '../apps/ui/src/TaskActivityDetails.js';
 import { taskRecordStatus } from '../apps/ui/src/conversation-records.js';
 import { activeTask } from '../apps/ui/src/components.js';
 import { ArtifactRequirement, RequirementDetails } from '../apps/ui/src/RequirementDetails.js';
+import { agentActivity } from '../apps/ui/src/AgentActivity.js';
+import type { ModelActivityKind } from '../src/domain/task-activity.js';
 
 const time = '2026-10-14T12:46:00Z';
 const task: Task = { id: 'task', botId: 'member', conversationId: 'room', dependencyIds: [], goal: '制作材料',
@@ -16,6 +18,18 @@ const run: Run = { id: 'run', taskId: task.id, botId: task.botId, bindingId: 'bi
   status: 'running', createdAt: time, cancelRequestedAt: '2026-10-14T13:01:00Z' };
 
 describe('task activity diagnostics', () => {
+  it('聊天状态区分实际模型活动并保留业务等待和终态优先级', () => {
+    const labels: Record<ModelActivityKind, string> = { waiting: '正在等待响应', thinking: '正在认真思考',
+      responding: '正在组织回复', tool: '正在努力工作', working: '正在努力工作' };
+    for (const [kind, label] of Object.entries(labels)) {
+      const current: Task = { ...task, activity: { phase: 'model', modelActivity: kind as ModelActivityKind } };
+      expect(agentActivity(current)).toBe(label);
+      expect(agentActivity({ ...current, status: 'completed' })).toBe('已完成');
+    }
+    expect(agentActivity({ ...task, status: 'waiting_approval', activity: { phase: 'approval' } })).toBe('等待批准');
+    expect(agentActivity({ ...task, activity: { phase: 'tool', toolName: 'read_file' } })).toBe('正在努力工作');
+  });
+
   it('uses actual activity timestamps and excludes declared waits from a stalled-model hint', () => {
     const now = Date.parse('2026-10-14T13:00:30Z');
     expect(activityStalled(task, now)).toBe(false);
