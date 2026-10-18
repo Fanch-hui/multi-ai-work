@@ -39,6 +39,34 @@ describe('managed history semantic projection', () => {
     expect(summaryMessageProjection({ role: 'tool', callId: 'c', content: '', providerItems: [{ type: 'function_call_output', output: 'fallback output' }] })).toMatchObject({ content: 'fallback output' });
   });
 
+  it('budgets Chat replay text once and keeps its binding metadata out of the estimate', () => {
+    const message: ModelMessage = { role: 'assistant', content: 'answer', chatReplay: { version: 1, bindingId: 'binding', generation: 1,
+      reasoningField: 'reasoning_content', reasoningText: 'intermediate reasoning '.repeat(100) } };
+    const estimate = estimateModelMessageTokens(message, 'chat-completions');
+    expect(estimate).toBeGreaterThan(estimateModelMessageTokens({ ...message, chatReplay: undefined }, 'chat-completions'));
+    expect(estimateModelMessageTokens({ ...message, chatReplay: { ...message.chatReplay!, bindingId: 'id'.repeat(500) } }, 'chat-completions')).toBe(estimate);
+    expect(estimateModelMessageTokens(message, 'responses')).toBe(estimateModelMessageTokens({ ...message, chatReplay: undefined }, 'responses'));
+    const semantic = JSON.stringify(summaryMessageProjection(message));
+    expect(semantic).toContain('answer');
+    expect(semantic).not.toContain('intermediate reasoning');
+  });
+
+  it('budgets structured Chat replay instead of its duplicate text and reserves opaque overhead', () => {
+    const message: ModelMessage = { role: 'assistant', content: 'answer', chatReplay: { version: 1, bindingId: 'binding', generation: 1,
+      reasoningField: 'reasoning', reasoningText: 'duplicate'.repeat(1000), reasoningDetails: [
+        { type: 'reasoning.text', text: 'structured text'.repeat(100), index: 0 },
+        { type: 'reasoning.encrypted', data: 'opaque'.repeat(20000), index: 1 },
+      ] } };
+    const estimate = estimateModelMessageTokens(message, 'chat-completions');
+    const next = structuredClone(message);
+    next.chatReplay!.reasoningText = 'other duplicate';
+    next.chatReplay!.reasoningDetails![1] = { type: 'reasoning.encrypted', data: 'short', index: 1 };
+    expect(estimateModelMessageTokens(next, 'chat-completions')).toBe(estimate);
+    next.chatReplay!.reasoningDetails![0] = { type: 'reasoning.text', text: 'short', index: 0 };
+    expect(estimateModelMessageTokens(next, 'chat-completions')).toBeLessThan(estimate);
+    expect(JSON.stringify(summaryMessageProjection(message))).not.toMatch(/structured text|opaque|duplicate/);
+  });
+
   it('splits a long user turn only at completed exchanges', async () => {
     const history = entries([
       { role: 'user', content: 'investigate' },

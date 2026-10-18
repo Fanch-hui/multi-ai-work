@@ -8,16 +8,19 @@ import { completeToolBatch } from './loop-tools.js';
 import { requestManagedTurn } from './loop-request.js';
 import { createResponsesTransport } from './responses-transport.js';
 import { ResponsesCacheDiagnostics } from './cache-diagnostics.js';
+import { ChatReplayCompatibility } from './chat-replay-compatibility.js';
 
 export async function runManaged(client: OpenAI, context: RunContext, protocol: Protocol,
-  retryDelays?: readonly number[]): Promise<ProviderResult> {
+  retryDelays?: readonly number[], resources: { chatReplay?: ChatReplayCompatibility } = {}): Promise<ProviderResult> {
   const transport = protocol === 'responses' ? createResponsesTransport(client, context) : undefined;
   try {
     const state = new ManagedRunState(context);
     let usage: Usage | undefined;
     let modelDurationMs = 0;
     let requestStep = 0;
-    const requestOptions = { transport, retryDelays, recovered: false, cacheDiagnostics: new ResponsesCacheDiagnostics(), nextStep: () => ++requestStep,
+    const requestOptions = { transport, retryDelays, recovered: false,
+      chatReplay: protocol === 'chat-completions' ? resources.chatReplay ?? new ChatReplayCompatibility() : undefined,
+      cacheDiagnostics: new ResponsesCacheDiagnostics(), nextStep: () => ++requestStep,
       recordDuration: (durationMs: number) => { modelDurationMs += durationMs; } };
     const result = (waiting = false): ProviderResult => ({ text: state.text, usage, messages: state.archiveMessages(), contextMessages: state.messages, modelDurationMs,
       ...(waiting ? { outcome: 'waiting_input' } : {}) });

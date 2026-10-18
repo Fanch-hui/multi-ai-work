@@ -11,10 +11,11 @@ import { isTransientModelError, requestWithRetry } from './retry.js';
 import { SupplementalInputError } from './request.js';
 import type { createResponsesTransport } from './responses-transport.js';
 import type { ResponsesCacheDiagnostics } from './cache-diagnostics.js';
+import type { ChatReplayCompatibility } from './chat-replay-compatibility.js';
 
 export async function requestManagedTurn(client: OpenAI, context: RunContext, protocol: Protocol, state: ManagedRunState,
   requestOptions: { retryDelays?: readonly number[]; nextStep(): number; recordDuration(durationMs: number): void; recovered: boolean;
-    cacheDiagnostics?: ResponsesCacheDiagnostics; transport?: ReturnType<typeof createResponsesTransport> }) {
+    cacheDiagnostics?: ResponsesCacheDiagnostics; transport?: ReturnType<typeof createResponsesTransport>; chatReplay?: ChatReplayCompatibility }) {
   const compact = async (force: boolean) => {
     context.signal.throwIfAborted();
     const projection = await context.compactContext?.(state.messages, { force, currentStart: state.currentStart });
@@ -25,11 +26,11 @@ export async function requestManagedTurn(client: OpenAI, context: RunContext, pr
     await state.applyProjection(projection.messages, projection.currentStart);
     return true;
   };
-  const request = () => {
+  const requestOnce = () => {
     state.takeUserInput();
     let early: EarlyResponseTools | undefined;
     return requestWithRetry(context, async (_, requestId) => {
-      if (protocol !== 'responses') return chatTurn(client, context, state.messages, requestId);
+      if (protocol !== 'responses') return chatTurn(client, context, state.messages, requestId, requestOptions.chatReplay);
       early = new EarlyResponseTools(context, state);
       try { return await responsesTurn(client, context, state.messages, requestOptions.cacheDiagnostics, requestId,
         (index, item) => early!.accept(index, item), requestOptions.transport); }
@@ -64,6 +65,15 @@ export async function requestManagedTurn(client: OpenAI, context: RunContext, pr
       if (!recoverable || state.earlyFailures > 5) throw error.streamError;
       return { message: state.messages[early!.assistantIndex!], persisted: true } as Turn;
     });
+  };
+  let replayDowngraded = false;
+  const request = async () => {
+    try { return await requestOnce(); }
+    catch (error) {
+      if (protocol === 'responses' || replayDowngraded || !requestOptions.chatReplay?.reject(error, context, state.messages)) throw error;
+      replayDowngraded = true;
+      return requestOnce();
+    }
   };
   try { const turn = await request(); requestOptions.recovered = false; return turn; }
   catch (error) {

@@ -4,7 +4,23 @@ import type { ModelRecovery } from './recovery.js';
 export interface ToolDefinition { name: string; description: string; inputSchema: Record<string, unknown>; }
 export interface ModelImage { artifactId: string; mimeType: string; width?: number; height?: number; }
 export interface ToolContentResult { content: ({ type: 'text'; text: string } | { type: 'image'; image: ModelImage })[]; isError?: boolean; }
+export type ChatReasoningField = 'reasoning_content' | 'reasoning' | 'reasoning_text';
+interface ChatReasoningDetailBase { id?: string | null; format?: string; index?: number; [key: string]: unknown; }
+export type ChatReasoningDetail = ChatReasoningDetailBase & (
+  { type: 'reasoning.text'; text: string; signature?: string | null }
+  | { type: 'reasoning.summary'; summary: string }
+  | { type: 'reasoning.encrypted'; data: string }
+);
+export interface ChatReplay {
+  version: 1;
+  bindingId: string;
+  generation: number;
+  reasoningField?: ChatReasoningField;
+  reasoningText?: string;
+  reasoningDetails?: ChatReasoningDetail[];
+}
 export interface ModelMessage { role: 'user' | 'assistant' | 'tool'; content: string; images?: ModelImage[]; callId?: string; toolCalls?: { id: string; name: string; arguments: string }[]; providerItems?: unknown[];
+  chatReplay?: ChatReplay;
   sourceMessageId?: string; sourceSequence?: number; contextSummary?: boolean; contextArtifactIds?: string[]; appContext?: { source: 'app.runtime' | 'app.repeat-tool-reminder'; version: string }; }
 export interface ManagedProgress {
   messages: ModelMessage[];

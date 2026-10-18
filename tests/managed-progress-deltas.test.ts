@@ -27,7 +27,9 @@ async function fixture() {
   const input = { userInput: { acknowledge: (ids: string[]) => { acknowledged.push(ids); } } } as RunContext;
   const calls = ['one', 'two', 'three'].map(id => ({ id, name: 'read_file', arguments: '{}' }));
   const progress: ManagedProgress = { messages: [{ role: 'user', content: 'source', sourceMessageId: 'input' },
-    { role: 'assistant', content: 'working', toolCalls: calls, providerItems: [{ encrypted_content: 'opaque-state' }] }],
+    { role: 'assistant', content: 'working', toolCalls: calls, providerItems: [{ encrypted_content: 'opaque-state' }],
+      chatReplay: { version: 1, bindingId: binding.id, generation: binding.generation, reasoningField: 'reasoning_content',
+        reasoningText: 'tool planning', reasoningDetails: [{ type: 'reasoning.encrypted', data: 'opaque-chat-state' }] } }],
     currentStart: 0, archiveStart: 0, contextSignature: 'signature', text: 'working', pendingInputIds: ['input'],
     turnId: 'turn', attempt: 2, phase: 'tools', compaction: { archived: [{ role: 'user', content: 'full history' }], start: 1 } };
   const save = (change?: ManagedProgressChange) => saveManagedProgress(resource.storage, run, task, binding, draft, 5, input, progress, change);
@@ -53,6 +55,7 @@ describe('incremental managed checkpoints', () => {
     expect(saved.progress).toMatchObject({ currentStart: 0, archiveStart: 0, contextSignature: 'signature', attempt: 2,
       pendingInputIds: ['input'], compaction: f.progress.compaction });
     expect(saved.progress.messages[1].providerItems).toEqual(f.progress.messages[1].providerItems);
+    expect(saved.progress.messages[1].chatReplay).toEqual(f.progress.messages[1].chatReplay);
     expect(progressForRun(f.resource.storage, 'run')?.progress).toEqual(saved.progress);
   });
 
@@ -114,6 +117,9 @@ describe('incremental managed checkpoints', () => {
 
   it.each([false, true])('restores backups with a delta table present: %s', async oldBackup => {
     const f = await fixture(); f.result('one');
+    const archive = f.storage.get<Record<string, unknown>>('provider_archive', f.run.id)!;
+    f.storage.put('provider_archive', { ...archive, id: f.run.id,
+      entries: [{ sequence: 1, messageId: 'source', message: f.progress.messages[1] }] });
     const state = { storage: f.storage, dataDirectory: f.root,
       artifactContents: new ArtifactContents(f.storage, f.root), changed: () => {} } as unknown as State;
     const backup = new BackupService(state), created = await backup.create();
@@ -124,5 +130,7 @@ describe('incremental managed checkpoints', () => {
     await backup.restore(created.path);
     expect(f.storage.all('managed_progress_deltas')).toEqual([]);
     expect(progressForRun(f.storage, 'run')).toBeUndefined();
+    expect(f.storage.get<{ entries: { message: { chatReplay: unknown } }[] }>('provider_archive', f.run.id)?.entries[0].message.chatReplay)
+      .toEqual(f.progress.messages[1].chatReplay);
   });
 });

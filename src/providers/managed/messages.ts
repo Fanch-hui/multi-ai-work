@@ -2,6 +2,7 @@ import type { ModelMessage } from '../../domain/provider.js';
 import type { ResponseInput } from 'openai/resources/responses/responses';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions/completions';
 import { imageUrl } from '../images.js';
+import { chatReplayFields, type ChatReplayOptions } from './chat-replay.js';
 
 function serializeToolArguments(raw: unknown): string {
   if (typeof raw === 'string') return raw;
@@ -21,7 +22,7 @@ export function responsesInput(messages: ModelMessage[], images = new Map<string
     return items;
   }) as ResponseInput;
 }
-export function chatInput(messages: ModelMessage[], instructions: string, images = new Map<string, string>()): ChatCompletionMessageParam[] {
+export function chatInput(messages: ModelMessage[], instructions: string, images = new Map<string, string>(), replay?: ChatReplayOptions): ChatCompletionMessageParam[] {
   const result: ChatCompletionMessageParam[] = [{ role: 'system', content: instructions }];
   let toolImages: NonNullable<ModelMessage['images']> = [];
   const flushImages = () => {
@@ -41,6 +42,7 @@ export function chatInput(messages: ModelMessage[], instructions: string, images
       ...message.images.map(image => ({ type: 'image_url' as const, image_url: { url: imageUrl(image, images) } })),
     ] : message.content });
     else result.push({ role: 'assistant', content: message.content || null,
+      ...chatReplayFields(message, replay),
       ...(message.toolCalls?.length ? { tool_calls: message.toolCalls.map(call => ({ id: call.id, type: 'function', function: { name: call.name, arguments: serializeToolArguments(call.arguments) } })) } : {}) });
   }
   flushImages();

@@ -32,8 +32,13 @@ function isModelMessage(value: unknown): value is ModelMessage {
 
 function messageProjection(message: ModelMessage, protocol: Protocol): unknown {
   if (protocol === 'responses' && message.providerItems?.length) return message.providerItems;
+  const replay = protocol === 'chat-completions' && message.role === 'assistant' && message.chatReplay?.version === 1
+    ? message.chatReplay : undefined;
+  const reasoning = replay?.reasoningDetails?.length ? { reasoning_details: replay.reasoningDetails }
+    : replay?.reasoningField && replay.reasoningText ? { [replay.reasoningField]: replay.reasoningText } : {};
   return {
     role: message.role, content: message.content,
+    ...reasoning,
     ...(message.callId ? { callId: message.callId } : {}),
     ...(message.toolCalls?.length ? { toolCalls: message.toolCalls } : {}),
     ...(message.images?.length ? { images: message.images.map(image => ({ artifactId: image.artifactId })) } : {}),
@@ -58,6 +63,7 @@ export function estimateTextTokens(text: string): number {
 function estimateValue(value: unknown, protocol: Protocol): number {
   const text = typeof value === 'string' ? value : JSON.stringify(value, (key, item) => {
     if (key === 'encrypted_content') return opaqueEstimate;
+    if (item?.type === 'reasoning.encrypted') return { ...item, data: opaqueEstimate };
     return isModelMessage(item) ? messageProjection(item, protocol) : item;
   }) ?? '';
   return estimateTextTokens(text);
@@ -70,7 +76,7 @@ export function estimateTokens(value: unknown): number {
 
 export function estimateModelMessageTokens(message: ModelMessage, protocol: Protocol = 'responses'): number {
   // Images are resolved later by the Provider; keep a conservative allowance per referenced image.
-  return 4 + estimateValue(messageProjection(message, protocol), protocol) + (message.images?.length ?? 0) * 1024;
+  return 4 + estimateValue(message, protocol) + (message.images?.length ?? 0) * 1024;
 }
 
 export function estimateModelMessagesTokens(messages: ModelMessage[], protocol: Protocol = 'responses'): number {
