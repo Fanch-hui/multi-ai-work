@@ -2,7 +2,8 @@ import { stat } from 'node:fs/promises';
 import type { Artifact, ImageMetadata } from '../domain/types.js';
 import type { ModelImage } from '../domain/provider.js';
 import type { ToolExecutionContext } from '../domain/tools.js';
-import { imageMimeTypes, normalizeArtifactImage, resolveArtifactImage } from '../tools/images.js';
+import { imageMimeTypes, normalizeArtifactImage } from '../tools/images.js';
+import { MODEL_IMAGE_ENCODING_VERSION, resolveModelArtifactImage } from '../tools/model-images.js';
 import type { State } from './state.js';
 
 export function modelImage(artifact?: Artifact): ModelImage | undefined {
@@ -11,7 +12,7 @@ export function modelImage(artifact?: Artifact): ModelImage | undefined {
     width: artifact.image?.width, height: artifact.image?.height };
 }
 
-type EncodedImage = Awaited<ReturnType<typeof resolveArtifactImage>>;
+type EncodedImage = Awaited<ReturnType<typeof resolveModelArtifactImage>>;
 interface ImageLruCache {
   entries: Map<string, { value: EncodedImage; bytes: number }>;
   bytes: number;
@@ -87,16 +88,17 @@ export function imageResolver(state: State, context: ToolExecutionContext) {
   return async (image: ModelImage) => {
     const artifact = await prepare(authorized(image.artifactId));
     const version = imageVersion(artifact);
-    const metadata = await stat(artifact.image!.path);
+    const metadata = await stat(artifact.path);
     const identity = artifact.sha256
       ? `sha256:${artifact.sha256}`
       : `path:${artifact.path}:${metadata.mtimeMs}:${metadata.size}`;
-    const key = JSON.stringify([identity, version, metadata.dev, metadata.ino, metadata.size, metadata.mtimeMs, metadata.ctimeMs]);
+    const key = JSON.stringify([MODEL_IMAGE_ENCODING_VERSION, identity, version, metadata.dev, metadata.ino,
+      metadata.size, metadata.mtimeMs, metadata.ctimeMs]);
     let result = readLru(store, key);
     if (!result) {
       let work = pending.get(key);
       if (!work) {
-        work = resolveArtifactImage(artifact);
+        work = resolveModelArtifactImage(artifact);
         pending.set(key, work);
       }
       try { result = await work; }
