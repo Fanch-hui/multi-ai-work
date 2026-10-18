@@ -18,7 +18,5 @@ export function queueContextCompaction(state: State, tasks: TaskService, convers
   const existing = unfinished.find(task => task.kind === 'context-compaction');
   if (existing) return existing;
   if (unfinished.some(task => !task.kind)) throw new Error('请等待当前对话任务结束后再压缩');
-  if (s.messages(room.id).filter(message => message.status === 'committed' && message.authorType === 'user').length < 2)
-    throw new Error('当前历史较少，继续对话后可压缩');
   return tasks.create({ conversationId: room.id, botId: bot.id, goal: '手动压缩上下文', kind: 'context-compaction' });
 }

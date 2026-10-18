@@ -45,6 +45,7 @@ describe('完整上下文预算与检查点兼容性', () => {
 
   it('首次摘要预算不足时有限扩展旧历史并保存准确来源', async () => {
     const { manager, storage, input } = fixture();
+    input.force = false;
     input.messages = [message(1, '旧'.repeat(500)), message(2, '中'.repeat(250)), message(3, '新'.repeat(150))];
     let calls = 0;
     input.summarize = async () => ++calls === 1 ? '摘'.repeat(300) : '完成前两轮；保留最新要求。';

@@ -103,10 +103,11 @@ export class Executor {
       const prepared = await this.prepare(run, task, bot, room, connection, binding, adapter, toolContext, draft, token, signal, writer, saved);
       const input = prepared.input; summaryUsage = prepared.summaryUsage;
       if (task.kind === 'context-compaction') {
+        const compaction = prepared.compaction!;
         writer.close();
         s.transaction(() => {
           s.put('runs', { ...s.get<Run>('runs', run.id)!, status: 'completed', endedAt: now(), usage: summaryUsage() });
-          this.tasks.update(task, { status: 'completed', result: '上下文已压缩，完整聊天记录已保留' });
+          this.tasks.update(task, { status: 'completed', result: compaction.result, contextCompactionOutcome: compaction.outcome });
         });
         return;
       }
@@ -299,8 +300,8 @@ export class Executor {
           mode: change?.type ?? 'snapshot', durationMs: performance.now() - began, messageCount: progress.messages.length } });
       };
     }
-    const summaryUsage = managed ? await prepareManagedContext(input, archive, delivered, this.state, this.contextManager, adapter, manualCompaction) : () => undefined;
-    return { input, summaryUsage, memoryVersions: memoryUpdate?.versions };
+    const context = managed ? await prepareManagedContext(input, archive, delivered, this.state, this.contextManager, adapter, manualCompaction) : undefined;
+    return { input, summaryUsage: context?.usage ?? (() => undefined), compaction: context?.compaction, memoryVersions: memoryUpdate?.versions };
   }
 
   private saveHistory(binding: SessionBinding, input: RunContext, messages: RunContext['messages'], draft: Message, cutoff: number, output: string, projected?: RunContext['messages']) {

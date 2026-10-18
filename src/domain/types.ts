@@ -81,6 +81,7 @@ export interface Task {
   activity?: TaskActivity; requirement?: TaskRequirement;
   recovery?: ModelRecovery;
   resumeFromRunId?: string;
+  contextCompactionOutcome?: 'compressed' | 'unchanged';
 }
 export interface Usage { inputTokens?: number; outputTokens?: number; cachedInputTokens?: number; source: 'reported' | 'estimated' | 'unknown'; }
 export interface RunMetrics {
@@ -137,7 +138,7 @@ export interface ContextCheckpoint {
   artifactIds?: string[];
 }
 export interface ContextOperation {
-  id: string; bindingId: string; generation: number; status: 'started' | 'completed' | 'failed';
+  id: string; bindingId: string; generation: number; status: 'started' | 'completed' | 'failed' | 'unchanged';
   sourceMessageIds: string[]; throughSequence: number; createdAt: string; reason?: string;
 }
 export interface ToolConnection {

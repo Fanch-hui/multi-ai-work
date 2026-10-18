@@ -27,7 +27,9 @@ export function compactionFeedback(task?: Task, pending?: CompactionRequest, err
     busy: true, cancellable: true, tone: 'progress',
   };
   if (task.status === 'completed') return {
-    label: '压缩完成', detail: task.result, busy: false, cancellable: false, tone: 'success',
+    label: task.contextCompactionOutcome === 'unchanged' ? '无需压缩' : '压缩完成',
+    detail: task.result, busy: false, cancellable: false,
+    tone: task.contextCompactionOutcome === 'unchanged' ? 'neutral' : 'success',
   };
   if (task.status === 'cancelled') return {
     label: '已取消压缩', busy: false, cancellable: false, tone: 'neutral',

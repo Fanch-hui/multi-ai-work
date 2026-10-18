@@ -8,13 +8,13 @@ export interface CompactionRecord {
   id: string;
   bindingId: string;
   generation: number;
-  status: 'started' | 'completed' | 'failed';
+  status: 'started' | 'completed' | 'failed' | 'unchanged';
   sourceMessageIds: string[];
   sourceHash: string;
   instructionsHash: string;
   throughSequence: number;
   createdAt: string;
-  reason?: 'summary_failed' | 'source_changed' | 'not_smaller' | 'needs_split' | 'cancelled' | 'over_budget';
+  reason?: 'summary_failed' | 'source_changed' | 'not_smaller' | 'needs_split' | 'cancelled' | 'over_budget' | 'no_history';
 }
 
 export interface ContextStore {
@@ -53,6 +53,7 @@ export interface PreparedContext {
   messages: ModelMessage[];
   checkpoint?: ContextCheckpoint;
   estimatedTokens: number;
+  compaction?: { status: 'completed' | 'unchanged' | 'failed'; reason?: CompactionRecord['reason'] };
 }
 
 function hash(value: unknown): string {
@@ -103,7 +104,8 @@ export class ContextManager {
     // Leave room for the replacement summary without changing the user's trigger.
     const summaryReserve = Math.min(4096, Math.ceil(trigger! * 0.15));
     let selected = this.select(active, fixedTokens, trigger! - summaryReserve, input.force, input.protocol);
-    if (selected.prefix.length === 0) return original;
+    if (!selected.prefix.length || checkpoint && selected.prefix.every(entry => entry.sequence <= checkpoint.throughSequence))
+      return { ...original, compaction: { status: 'unchanged', reason: 'no_history' } };
     const sourceIds = [...new Set([...(checkpoint?.sourceMessageIds ?? []), ...selected.prefix.map(entry => entry.messageId)])];
     const source = archive.filter(message => sourceIds.includes(message.id));
     const sourceHash = contextSourceHash(source);
@@ -112,9 +114,10 @@ export class ContextManager {
       sourceMessageIds: sourceIds, sourceHash, instructionsHash: contextCompatibilityHash(input),
       throughSequence: selected.prefix[selected.prefix.length - 1].sequence, createdAt: new Date().toISOString(),
     };
-    const fail = (reason: CompactionRecord['reason']) => {
-      this.store.recordCompaction?.({ ...record, status: 'failed', reason });
-      return original;
+    const fail = (reason: CompactionRecord['reason']): PreparedContext => {
+      const status = reason === 'not_smaller' ? 'unchanged' : 'failed';
+      this.store.recordCompaction?.({ ...record, status, reason });
+      return { ...original, compaction: { status, reason } };
     };
     this.store.recordCompaction?.({ ...record, sourceMessageIds: [...sourceIds] });
     try {
@@ -159,7 +162,7 @@ export class ContextManager {
       if (prepared.estimatedTokens >= trigger!) return fail('over_budget');
       this.store.saveCheckpoint(next);
       this.store.recordCompaction?.({ ...record, status: 'completed' });
-      return prepared;
+      return { ...prepared, compaction: { status: 'completed' } };
     } catch (error) {
       const failed = fail(input.signal.aborted ? 'cancelled' : error instanceof SummaryNeedsSplit ? 'needs_split' : 'summary_failed');
       if (input.signal.aborted) throw error;
@@ -180,7 +183,7 @@ export class ContextManager {
     const units = historyUnits(history);
     const weights = units.map(unit => estimateModelMessagesTokens(unit.map(entry => entry.message), protocol));
     let remainingTokens = weights.reduce((sum, weight) => sum + weight, 0), count = 0;
-    while (count < units.length - 1 && ((force && count === 0) || fixedTokens + remainingTokens > targetTokens)) {
+    while (count < units.length - 1 && (force || fixedTokens + remainingTokens > targetTokens)) {
       if (!toolsPaired(units[count])) break;
       remainingTokens -= weights[count++];
     }

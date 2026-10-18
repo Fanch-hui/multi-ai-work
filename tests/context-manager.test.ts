@@ -22,6 +22,21 @@ function setup() {
 const baseInput = { binding, instructions: '使用中文', tools: [], contextWindow: 3000, force: true, signal: new AbortController().signal };
 
 describe('ContextManager', () => {
+  it('手动提前压缩纳入较早的完整历史，保留最新一轮原文', async () => {
+    const { manager, checkpoint } = setup();
+    const older = '项目关键资料'.repeat(300);
+    const messages = [message(1, '你好'), message(2, '你好', 'bot'),
+      message(3, older), message(4, '已完成资料分析', 'bot'),
+      message(5, '最新要求保持原文'), message(6, '按最新要求继续', 'bot')];
+    let summaryPrompt = '';
+    const prepared = await manager.prepare({ ...baseInput, messages, contextWindow: 40000,
+      summarize: async prompt => { summaryPrompt = prompt; return '项目资料已整理，分析已完成'; } });
+    expect(summaryPrompt.includes(older)).toBe(true);
+    expect(summaryPrompt).not.toContain('最新要求保持原文');
+    expect(checkpoint()).toMatchObject({ throughSequence: 4, sourceMessageIds: ['m1', 'm2', 'm3', 'm4'] });
+    expect(prepared.messages.slice(-2).map(message => message.content)).toEqual(['最新要求保持原文', '按最新要求继续']);
+  });
+
   it('使用指定触发比例，提前压缩并保留最新请求', async () => {
     const messages = [message(1, '旧资料'.repeat(150)), message(2, '新请求')];
     const later = setup(), earlier = setup();

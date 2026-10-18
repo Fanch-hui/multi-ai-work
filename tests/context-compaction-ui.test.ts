@@ -55,6 +55,28 @@ describe('manual context compaction feedback', () => {
     expect(compactionFeedback(task('cancelled'))?.label).toBe('已取消压缩');
   });
 
+  it('shows an unchanged context as a neutral outcome with its explanation', () => {
+    const detail = '当前可压缩的历史较少，本次未做改动。';
+    const feedback = compactionFeedback(task('completed', { contextCompactionOutcome: 'unchanged', result: detail }))!;
+    expect(feedback).toMatchObject({ label: '无需压缩', tone: 'neutral', busy: false, cancellable: false });
+    const html = renderToStaticMarkup(createElement(CompactionStatus, { feedback }));
+    expect(html).toContain('无需压缩');
+    expect(html).toContain(detail);
+    expect(html).toContain('role="status"');
+    expect(html).not.toContain('text-red-600');
+    expect(html).not.toContain('text-emerald-700');
+    expect(html).not.toContain('<svg');
+  });
+
+  it('keeps actual failures as errors regardless of their explanatory wording', () => {
+    const detail = '当前可压缩的历史较少，继续对话后可重试';
+    const feedback = compactionFeedback(task('failed', { error: detail }))!;
+    expect(feedback).toMatchObject({ label: '压缩失败', tone: 'error', detail });
+    const html = renderToStaticMarkup(createElement(CompactionStatus, { feedback }));
+    expect(html).toContain('role="alert"');
+    expect(html).toContain('text-red-600');
+  });
+
   it('shows a request error instead of stale success and keeps active tasks cancellable', () => {
     expect(compactionFeedback(task('completed', { result: '旧结果' }), undefined, '请求失败')).toEqual({
       label: '操作失败', detail: '请求失败', busy: false, cancellable: false, tone: 'error',
