@@ -4,6 +4,7 @@ import { projectToolResult, toolResultBudgets } from '../runtime/tool-result-bud
 import type { ContextReferences } from './context-references.js';
 import { artifactReadPages, projectArtifactReadBatch } from '../runtime/artifact-read-projection.js';
 import type { Protocol } from '../domain/types.js';
+import { projectListToolResult } from '../runtime/tool-list-projection.js';
 
 export function prepareToolResultBudget(input: RunContext, references: ContextReferences | undefined,
   inputBudget?: number): NonNullable<RunContext['prepareToolResults']> {
@@ -37,7 +38,8 @@ export function prepareToolResultBudget(input: RunContext, references: ContextRe
           const reference = page ? typeof args?.artifactId === 'string' ? await references.readableArtifact(args.artifactId) : undefined
             : await references.preserveToolOutput(message);
           if (reference) {
-            next = projectToolResult(message, { id: reference.id, ...(page ? { offset: args?.offset ?? 0 } : {}) }, limit, protocol, page);
+            next = (!page && call ? projectListToolResult(message, reference, limit, protocol, call.name) : undefined)
+              ?? projectToolResult(message, { id: reference.id, ...(page ? { offset: args?.offset ?? 0 } : {}) }, limit, protocol, page);
             if (next && !page && references.isProjection(message)) {
               const value = JSON.parse(next.content);
               delete value.previewOmission;

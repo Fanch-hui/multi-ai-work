@@ -39,6 +39,24 @@ function batch(contents: string[]): ModelMessage[] {
 }
 
 describe('工具结果 token 预算', () => {
+  it('大列表短字段也受预算约束，省略条目从完整原始结果读取', async () => {
+    const { core, context } = await fixture(['find_files', 'read_artifact']);
+    const original = JSON.stringify({ path: '/workspace', items: Array.from({ length: 600 }, (_, index) => ({ path: `资料/文件-${index}.txt` })),
+      total: 1200, offset: 100, nextOffset: 700, version: 'v1' });
+    const messages: ModelMessage[] = [{ role: 'assistant', content: '', toolCalls: [{ id: 'list', name: 'find_files', arguments: '{}' }] },
+      { role: 'tool', callId: 'list', content: original }];
+    const next = await context.prepareToolResults!(messages, 1), result = JSON.parse(next![1].content);
+    expect(estimateModelMessageTokens(next![1])).toBeLessThanOrEqual(toolResultBudgets(20000).single);
+    expect(result).toMatchObject({ previewOnly: true, total: 1200, version: 'v1',
+      originalPagination: { offset: 100, nextOffset: 700 }, fullResult: { arguments: { offset: 0 } } });
+    expect(result.items.length).toBeGreaterThan(0);
+    expect(result.returnedItems + result.omittedItems).toBe(600);
+    const source = core.state.storage.get<Artifact>('artifacts', result.fullResult.arguments.artifactId)!;
+    expect((await core.state.artifactContents.read(source)).toString('utf8')).toBe(original);
+    const page = await context.executeTool('read_artifact', result.fullResult.arguments, 'list-page') as { content: string };
+    expect(page.content).toBe(original.slice(0, result.fullResult.arguments.limit));
+  });
+
   it('批量成果分别保留原文和分页坐标，重复投影与摘要不生成成果链', async () => {
     const { core, context, references } = await fixture();
     const first = await references.preserveToolOutput({ role: 'tool', content: '甲'.repeat(18000) });
