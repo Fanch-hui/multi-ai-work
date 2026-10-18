@@ -5,7 +5,8 @@ import type { ToolExecutionContext } from '../domain/tools.js';
 import { readDocument } from './documents.js';
 import { createArtifact } from './artifacts.js';
 import { fetchWeb } from './web.js';
-import { isSearchConnection, search } from './search.js';
+import { isSearchConnection, search, searchConnection } from './search.js';
+import { NetworkConcurrency } from './network-concurrency.js';
 import { createProcessTools } from './process.js';
 import { createFileTools } from './files.js';
 import { createArtifactTools } from './artifact-tools.js';
@@ -26,6 +27,7 @@ const id = z.string().min(1).max(200);
 const argumentsSchema = z.record(z.string(), z.unknown());
 
 export function createBuiltins(mcp: McpConnections): Record<string, Builtin> {
+  const network = new NetworkConcurrency();
   return {
     ...createTeamTools(),
     ...createMemoryTools(),
@@ -156,13 +158,16 @@ export function createBuiltins(mcp: McpConnections): Record<string, Builtin> {
     },
     fetch_web: {
       description: '获取公共网页文本，返回来源地址与时间；不访问内网或元数据地址。', schema: z.object({ url: z.string().url().max(8000) }),
-      execute: (args, context) => fetchWeb(args.url, context)
+      execute: (args, context) => network.run(`web:${new URL(args.url).origin}`, context, () => fetchWeb(args.url, context))
     },
     search_web: {
       description: '通过获准的 HTTP 搜索服务或 Tavily MCP 搜索网页，返回实际服务、查询、来源和时间；多个服务可指定 connectionId。',
       schema: z.object({ query: z.string().min(1).max(2000), connectionId: id.optional() }),
       available: context => context.toolConnections.some(isSearchConnection),
-      execute: (args, context) => search(args.query, args.connectionId, context, mcp)
+      execute: (args, context) => {
+        const connectionId = searchConnection(context, args.connectionId).id;
+        return network.run(`search:${connectionId}`, context, () => search(args.query, connectionId, context, mcp));
+      }
     },
     list_mcp_tools: {
       description: '读取获准使用的 MCP / Bridge 工具及输入 schema，调用前先检查接口。', schema: z.object({ connectionId: id }),
