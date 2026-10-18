@@ -30,6 +30,7 @@ import { scopedTask, returnTaskArtifacts } from './task-access.js';
 import { artifactRequirement } from './task-requirements.js';
 import type { TaskControlService } from './task-control.js';
 import { assertUserMemorySources } from './memory-policy.js';
+import { prepareWebToolResult } from './web-tool-result.js';
 
 interface Operation { id: string; fingerprint: string; runId: string; name: string; status: 'prepared' | 'dispatched' | 'succeeded' | 'failed' | 'unknown'; result?: unknown; modelResult?: unknown; error?: string; errorCode?: string; requirementVersion?: number; }
 export class ToolRuntime {
@@ -270,7 +271,8 @@ export class ToolRuntime {
         ? { commandStatus: result.status, exitCode: 'code' in result ? result.code : undefined } : {};
       s.event({ id: id(), runId: context.runId, type: 'tool', data: { name, callId, summary, status: 'completed', source: 'app', ...command }, createdAt: now() });
       const provider = s.get<Connection>('connections', currentBot.connectionId)?.provider;
-      const modelResult = provider === 'chatgpt' || provider === 'custom' ? result : await this.compactResult(result, context, name);
+      const preview = await prepareWebToolResult(this.state, context, currentBot, name, args, result);
+      const modelResult = provider === 'chatgpt' || provider === 'custom' ? preview : await this.compactResult(preview, context, name);
       s.put('tool_operations', { ...operation, status: 'succeeded', result, modelResult });
       this.state.changed(); return modelResult;
     } catch (error) {

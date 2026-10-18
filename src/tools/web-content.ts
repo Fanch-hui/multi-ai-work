@@ -1,6 +1,5 @@
 import { load } from 'cheerio';
 
-const CONTENT_LIMIT = 80_000;
 const LINK_LIMIT = 100;
 const LINK_BUDGET = 12_000;
 
@@ -36,7 +35,7 @@ function collectLinks(candidates: Iterable<WebLink>): { links: WebLink[]; trunca
 
 export function extractWebContent(text: string, contentType: string, url: string) {
   if (!/html/i.test(contentType)) {
-    return { title: '', content: text.slice(0, CONTENT_LIMIT), links: [] as WebLink[], truncated: text.length > CONTENT_LIMIT };
+    return { title: '', content: text, links: [] as WebLink[], truncated: false };
   }
   const $ = load(text);
   const title = cleanText($('title').first().text()).slice(0, 512);
@@ -54,7 +53,7 @@ export function extractWebContent(text: string, contentType: string, url: string
   root.find('br').replaceWith('\n');
   root.find('p, div, section, article, h1, h2, h3, h4, h5, h6, li, tr, pre, blockquote').append('\n');
   const content = cleanText(root.text());
-  return { title, content: content.slice(0, CONTENT_LIMIT), links, truncated: content.length > CONTENT_LIMIT || linksTruncated };
+  return { title, content, links, truncated: linksTruncated };
 }
 
 function* resultLinks(value: unknown): Generator<WebLink> {
@@ -76,6 +75,6 @@ export function extractSearchResults(text: string) {
     const { links: sources, truncated } = collectLinks(resultLinks(results));
     return { results, sources, truncated };
   } catch {
-    return { results: text.slice(0, CONTENT_LIMIT), sources: [] as WebLink[], truncated: text.length > CONTENT_LIMIT };
+    return { results: text, sources: [] as WebLink[], truncated: false };
   }
 }

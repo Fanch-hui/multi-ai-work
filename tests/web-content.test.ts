@@ -30,12 +30,12 @@ describe('web content extraction', () => {
     });
   });
 
-  it('bounds returned text and links with explicit truncation', () => {
+  it('preserves full fetched text for Core archiving and bounds link metadata', () => {
     const output = extractWebContent(`<main>${'x'.repeat(80_001)}${Array.from({ length: 101 }, (_, index) => `<a href="/${index}">link</a>`).join('')}</main>`, 'text/html', 'https://example.com');
-    expect(output.content).toHaveLength(80_000);
+    expect(output.content.length).toBeGreaterThan(80_000);
     expect(output.links).toHaveLength(100);
     expect(output.truncated).toBe(true);
-    expect(extractWebContent('x'.repeat(80_001), 'text/plain', 'https://example.com').truncated).toBe(true);
+    expect(extractWebContent('x'.repeat(80_001), 'text/plain', 'https://example.com')).toMatchObject({ content: 'x'.repeat(80_001), truncated: false });
   });
 });
 
@@ -65,10 +65,10 @@ describe('search result extraction', () => {
     expect(output.truncated).toBe(true);
   });
 
-  it('reports truncation for a non-JSON search response without inventing sources', () => {
+  it('preserves a non-JSON search response for Core archiving without inventing sources', () => {
     const output = extractSearchResults('x'.repeat(80_001));
-    expect(output.results).toHaveLength(80_000);
+    expect(output.results).toHaveLength(80_001);
     expect(output.sources).toEqual([]);
-    expect(output.truncated).toBe(true);
+    expect(output.truncated).toBe(false);
   });
 });
