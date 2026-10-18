@@ -13,7 +13,7 @@ export const toolPermissionGroups = [
   { id: 'conversation', label: '会话与问答', hint: '发言、读取历史、查询进展和向你提问。',
     tools: ['post_message', 'read_messages', 'search_messages', 'get_task', 'ask_user'] },
   { id: 'read', label: '读取资料', hint: '查找、搜索、读取工作目录文件和获准成果。',
-    tools: ['list_directory', 'find_files', 'search_text', 'read_file', 'read_artifact', 'list_artifacts', 'load_workspace_dependencies', 'read_skill'] },
+    tools: ['list_directory', 'find_files', 'search_text', 'read_file', 'read_artifact', 'list_artifacts', 'load_workspace_dependencies'] },
   { id: 'write', label: '文件与成果', hint: '创建、修改、删除文件及生成成果。',
     tools: ['write_file', 'edit_file', 'write_artifact', 'register_artifact', 'delete_file'] },
   { id: 'web', label: '网页检索', hint: '读取公共网页，使用已授权的搜索服务。', tools: ['fetch_web', 'search_web'] },

@@ -46,9 +46,22 @@ describe('skill packages', () => {
     const migrated = state.storage.get<Bot>('bots', reader.id)!;
     expect(migrated.toolNames).toEqual(['read_file', 'read_skill', 'load_workspace_dependencies']);
     expect(state.storage.get<Bot>('bots', executor.id)!.toolNames).toContain('render_document');
-    expect(authorizedSkills(state, { ...migrated, toolNames: [] })).toEqual([]);
+    expect(authorizedSkills(state, { ...migrated, toolNames: [] }).every(skill => skill.bundled)).toBe(true);
     state.storage.put('bots', reader);
     syncOfficeSkills(state);
     expect(state.storage.get<Bot>('bots', reader.id)!.toolNames).toEqual(['read_file']);
   });
+  it('makes built-in skills available without tool grants and keeps imported skills opt-in', async () => {
+    const bot = { ...state.storage.all<Bot>('bots')[0]!, toolNames: [], skillIds: ['chosen'] };
+    for (const [id, bundled] of [['office', true], ['chosen', false], ['other', false]] as const)
+      state.storage.put('skills', { id, name: id, bundled, content: id, path: '/skills/' + id });
+    const skills = authorizedSkills(state, bot);
+    expect(skills.map(skill => skill.id)).toContain('office');
+    expect(skills.map(skill => skill.id)).toContain('chosen');
+    expect(skills.map(skill => skill.id)).not.toContain('other');
+    const context = { skills, signal: new AbortController().signal } as ToolExecutionContext;
+    expect(await registry.execute('read_skill', { skillId: 'office' }, context)).toMatchObject({ content: 'office' });
+    await expect(registry.execute('read_skill', { skillId: 'other' }, context)).rejects.toThrow('未授权');
+  });
+
 });

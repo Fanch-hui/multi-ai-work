@@ -5,6 +5,21 @@ import type { Bot, Task } from '../src/domain/types.js';
 import { eventually, setup } from './core-harness.js';
 
 describe('Core 执行权限', () => {
+  it('默认读取内置和已选技能，同时保留其他工具与技能边界', async () => {
+    const { core, bot } = await setup(async context => {
+      expect(context.tools.some(tool => tool.name === 'read_skill')).toBe(true);
+      expect(context.tools.some(tool => tool.name === 'run_command')).toBe(false);
+      expect(await context.executeTool('read_skill', { skillId: 'office-test' }, 'office')).toMatchObject({ content: 'office-content' });
+      expect(await context.executeTool('read_skill', { skillId: 'imported-test' }, 'imported')).toHaveProperty('error');
+      return { text: '完成' };
+    });
+    for (const [id, bundled] of [['office-test', true], ['imported-test', false]] as const)
+      core.state.storage.put('skills', { id, name: id, bundled, content: 'office-content', path: '/skills/' + id });
+    const member = bot('技能助手', []);
+    const room = core.entities.createConversation({ name: '技能', kind: 'private', memberIds: [member.id], workspaceId: core.state.snapshot().workspaces[0].id });
+    const sent = core.tasks.send({ conversationId: room.id, content: '读取技能' });
+    await eventually(() => core.state.storage.get<Task>('tasks', sent.taskIds[0])?.status === 'completed');
+  });
   it('完整权限主管执行真实命令、覆盖和删除文件，记录操作且不创建审批', async () => {
     let original = '', removed = '';
     const { core, root, connection } = await setup(async context => {

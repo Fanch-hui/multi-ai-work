@@ -102,7 +102,7 @@ function PermissionControls({ toolNames, approvalMode, onPermissionsChange, chie
     <details ref={details} className="rounded-lg border border-slate-200 p-3">
       <summary className="cursor-pointer text-sm font-medium text-slate-700">精细设置</summary>
       <div className="mt-3 grid grid-cols-2 gap-2">
-        {Object.entries(builtinToolLabels).filter(([name]) => chief || !chiefOnlyTools.includes(name)).map(([name, label]) => (
+        {Object.entries(builtinToolLabels).filter(([name]) => name !== 'read_skill' && (chief || !chiefOnlyTools.includes(name))).map(([name, label]) => (
           <label key={name} className="flex min-w-0 items-center gap-2 text-xs text-slate-600" title={name}>
             <input type="checkbox" checked={toolNames.includes(name)} onChange={() => onPermissionsChange({ approvalMode, toolNames: toggle(toolNames, name) })} />
             <span>{chief && name === 'list_processes' ? '查看应用内命令' : chief && name === 'stop_process' ? '停止应用内命令' : label}</span>

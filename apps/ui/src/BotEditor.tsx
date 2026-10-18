@@ -55,7 +55,7 @@ export function BotEditor({
   const selectedModel = connection?.models.find((item) => item.id === model);
   const reasoningOptions = selectedModel?.reasoning || [];
   const selectedReasoning = reasoningOptions.includes(reasoning) ? reasoning : "";
-  const availableSkills = skillsForMember(data.skills, (detached || bot)?.skillIds);
+  const availableSkills = skillsForMember(data.skills);
   async function save(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
@@ -231,25 +231,23 @@ export function BotEditor({
           qoderServices={qoderServices}
           onQoderServicesChange={!main && connection?.provider === "qoder" ? setQoderServices : undefined}
         />
-        {!!availableSkills.length && (
-          <fieldset>
+        <fieldset>
             <legend className="mb-2 text-sm font-medium text-slate-700">Skills</legend>
-            <p className="mb-3 text-xs text-slate-500">Office 技能随资料读取能力提供；成员配套技能仅供当前成员使用，导入的技能可单独启用。</p>
+            <p className="mb-3 text-xs text-slate-500">内置 Word、Excel、PPT、PDF 技能默认可用。勾选此成员需要使用的已导入技能；市场配套技能随成员保留。</p>
             <div className="flex flex-wrap gap-4">
+              {!availableSkills.length && <p className="text-xs text-slate-400">尚未导入技能，可在设置中导入。</p>}
               {availableSkills.map((item) => (
                 <label key={item.id} className="flex items-center gap-2 text-sm text-slate-600">
                   <input
                     type="checkbox"
-                    disabled={item.bundled || preset?.managedSkillIds.includes(item.id)}
-                    checked={item.bundled ? toolNames.includes('read_skill') : skillIds.includes(item.id)}
+                    checked={skillIds.includes(item.id)}
                     onChange={() => setSkills(toggle(skillIds, item.id))}
                   />
-                  {item.name}{item.presetOnly ? '（成员配套）' : ''}{item.missing ? '（资源缺失，请重新导入）' : ''}
+                  {item.name}{item.missing ? '（资源缺失，请重新导入）' : ''}
                 </label>
               ))}
             </div>
-          </fieldset>
-        )}
+        </fieldset>
         <ErrorNote error={error} />
         <div className="mt-2 flex justify-between gap-3">
           {bot && !bot.archived && !main ? (

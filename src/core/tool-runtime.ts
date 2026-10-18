@@ -149,7 +149,7 @@ export class ToolRuntime {
 
   definitions(context: ToolExecutionContext, bot: Bot): ToolDefinition[] {
     if (context.task.kind === 'question-decision') return [];
-    return this.registry.definitions(context).filter(tool => (bot.toolNames.includes(tool.name)
+    return this.registry.definitions(context).filter(tool => (bot.toolNames.includes(tool.name) || tool.name === 'read_skill'
         || tool.name === 'scan_code_security' && !!context.scanCodeSecurity && enabledQoderServices(bot).includes('SecurityScan')
         || tool.name.startsWith('mcp__') && bot.toolNames.includes('call_mcp')
         || tool.name === 'manage_memory' && bot.memoryMode !== 'off')

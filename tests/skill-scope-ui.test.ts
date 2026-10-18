@@ -40,27 +40,15 @@ describe('market skill ownership in settings', () => {
     expect(html).not.toContain('其他成员技能');
   });
 
-  it('shows only the current member companion skills and retains preset locks', () => {
-    const html = renderMember(member);
-    expect(html).toContain('本成员技能（成员配套）');
-    expect(html).not.toContain('其他成员技能');
-    expect(html).toMatch(/<input[^>]*type="checkbox"[^>]*disabled=""[^>]*checked=""\/>本成员技能/);
-    expect(html).toMatch(/<input[^>]*type="checkbox"[^>]*disabled=""[^>]*checked=""\/>Office/);
-    expect(html).toMatch(/<input[^>]*type="checkbox"\/>手动导入/);
-  });
-
-  it('does not offer other members companion skills to a new member', () => {
-    expect(skillsForMember(skills).map(item => item.id)).toEqual(['Office', '手动导入']);
-    const html = renderMember();
-    expect(html).not.toContain('本成员技能');
-    expect(html).not.toContain('其他成员技能');
-  });
-
-  it('retains bound companion skills when a preset member becomes custom', () => {
-    const custom = { ...member, preset: undefined };
-    expect(skillsForMember(skills, custom.skillIds).map(item => item.id)).toEqual(['Office', '手动导入', '本成员技能']);
-    const html = renderMember(custom);
-    expect(html).toMatch(/<input[^>]*type="checkbox"[^>]*checked=""\/>本成员技能/);
-    expect(html).not.toMatch(/<input[^>]*type="checkbox"[^>]*disabled=""[^>]*checked=""\/>本成员技能/);
+  it('offers imported skills only for new, preset and detached members', () => {
+    expect(skillsForMember(skills).map(item => item.id)).toEqual(['手动导入']);
+    for (const bot of [undefined, member, { ...member, preset: undefined }]) {
+      const html = renderMember(bot);
+      expect(html).toContain('内置 Word、Excel、PPT、PDF 技能默认可用');
+      expect(html).not.toContain('本成员技能');
+      expect(html).not.toContain('其他成员技能');
+      expect(html).not.toMatch(/<input[^>]*\/>Office/);
+      expect(html).toMatch(/<input[^>]*type="checkbox"\/>手动导入/);
+    }
   });
 });

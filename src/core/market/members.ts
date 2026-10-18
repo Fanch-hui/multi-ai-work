@@ -92,9 +92,8 @@ export class PresetMembers {
   }
   private async checkDependencies(preset: AgentPreset, config: { toolNames: string[]; toolConnectionIds?: string[] }) {
     if (!preset.platforms.includes(process.platform as 'darwin' | 'win32' | 'linux')) throw new Error('此预设尚未支持当前系统');
-    if (!config.toolNames.includes('read_skill')) throw new Error('请启用技能读取能力');
     for (const dependency of preset.dependencies.filter(item => item.required)) {
-      if (dependency.kind === 'tool' && !config.toolNames.includes(dependency.key)) throw new Error(`请启用能力：${dependency.label}`);
+      if (dependency.kind === 'tool' && dependency.key !== 'read_skill' && !config.toolNames.includes(dependency.key)) throw new Error(`请启用能力：${dependency.label}`);
       if (dependency.kind === 'connection') {
         const connections = (config.toolConnectionIds ?? []).map(id => this.state.storage.get<ToolConnection>('tool_connections', id));
         if (!connections.some(item => item?.enabled && item.status === 'ready'

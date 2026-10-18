@@ -36,7 +36,7 @@ export function syncOfficeSkills(state: State) {
 
 export function authorizedSkills(state: State, bot: Bot): Skill[] {
   return state.storage.all<Skill>('skills').filter(skill => !skill.missing && (bot.skillIds.includes(skill.id)
-    || skill.bundled && bot.toolNames.includes('read_skill')));
+    || skill.bundled));
 }
 
 export function presetSkillIds(state: State): Set<string> {
