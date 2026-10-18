@@ -173,7 +173,7 @@ describe('conversation message feed', () => {
     expect(workingMembers(data, room, conversationMessages(data, room)).map(item => item.run.id)).toEqual(['member']);
     const html = render(data);
     expect(html).toContain('member 成员');
-    expect(html).toContain('思考中');
+    expect(html).toContain('正在认真思考');
     for (const id of ids.slice(1)) expect(html).not.toContain(`${id} 成员`);
     expect(html).toContain('消息 · 已发布');
     expect(html.match(/class="agent-activity /g)).toHaveLength(1);
@@ -230,7 +230,7 @@ describe('working member activity', () => {
   it('keeps cache diagnostics out of the visible working status', () => {
     const owner = task('member'), current = run('member');
     const diagnostics = event('cache', { type: 'status', data: { phase: 'model-cache-response' } });
-    expect(agentActivity(owner, current, [event('text', { type: 'text' }), diagnostics], true)).toBe('正在为你整理答复');
+    expect(agentActivity(owner, current, [event('text', { type: 'text' }), diagnostics], true)).toBe('正在组织回复');
     expect(agentActivity(owner, current, [event('retry', { type: 'status', data: { phase: 'model-retry' } }), diagnostics]))
       .toBe('正在恢复连接');
   });
@@ -239,10 +239,10 @@ describe('working member activity', () => {
     const owner = task('member'), current = run('member');
     const process: ProcessRecord = { id: 'process', taskId: 'member', runId: 'member', botId: 'member',
       conversationId: room.id, workspaceId: 'workspace', command: 'node', args: [], status: 'running', createdAt: time };
-    expect(agentActivity(owner, current, [], true, [process])).toBe('命令运行中');
+    expect(agentActivity(owner, current, [], true, [process])).toBe('正在努力工作');
     const events = [event('start'), event('done', { data: { callId: 'call', status: 'completed' } }),
       event('phase', { data: { callId: 'call', phase: 'completed' } })];
-    expect(agentActivity(owner, current, events)).toBe('思考中');
-    expect(agentActivity(owner, current, [event('start')], true)).toBe('正在工作中');
+    expect(agentActivity(owner, current, events)).toBe('正在认真思考');
+    expect(agentActivity(owner, current, [event('start')], true)).toBe('正在努力工作');
   });
 });

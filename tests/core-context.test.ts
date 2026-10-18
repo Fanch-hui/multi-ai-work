@@ -75,7 +75,7 @@ describe('Core 工作上下文', () => {
         messages: [...context.messages, { role: 'user', content: context.prompt }, { role: 'assistant', content: text }] };
       return result;
     });
-    const member = core.entities.saveBot({ ...bot('助手'), contextWindow: 4000 });
+    const member = core.entities.saveBot({ ...bot('助手'), contextWindow: 6000 });
     const room = core.entities.createConversation({ name: '私聊', kind: 'private', memberIds: [member.id], workspaceId: core.state.snapshot().workspaces[0].id });
     async function turn(content: string) {
       const sent = core.tasks.send({ conversationId: room.id, content });
