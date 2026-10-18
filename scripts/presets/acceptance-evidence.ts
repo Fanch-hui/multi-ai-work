@@ -3,7 +3,7 @@ import { copyFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path';
 import { z } from 'zod';
 import type { AgentPreset } from '../../src/domain/market.js';
-import type { Artifact, Task } from '../../src/domain/types.js';
+import type { Artifact, ProviderKind, Task } from '../../src/domain/types.js';
 import type { CoreService } from '../../src/core/service.js';
 
 const relativePath = z.string().min(1).refine(value => !value.includes('\\') && !value.includes(':')
@@ -57,7 +57,7 @@ async function collectArtifacts(core: CoreService, task: Task, output: string) {
   return result;
 }
 export async function saveEvidence(core: CoreService, preset: AgentPreset, fixture: Fixture,
-  task: Task, output: string, model: string, durationMs: number) {
+  task: Task, output: string, model: string, durationMs: number, provider: ProviderKind = 'qoder') {
   await mkdir(output, { recursive: true });
   const operations = core.state.storage.all<Operation>('tool_operations').filter(item => task.runIds.includes(item.runId));
   const skillIds = new Set(core.state.storage.get<{ skillIds: string[] }>('bots', task.botId)?.skillIds);
@@ -68,7 +68,7 @@ export async function saveEvidence(core: CoreService, preset: AgentPreset, fixtu
     boundSkillRead: operations.some(item => item.name === 'read_skill' && item.status === 'succeeded'
       && !!item.result?.id && skillIds.has(item.result.id)),
     readableArtifact: artifacts.some(item => item.readable) };
-  const scope = { platform: process.platform, architecture: process.arch, provider: 'qoder', model, scenario: fixture.scenario };
+  const scope = { platform: process.platform, architecture: process.arch, provider, model, scenario: fixture.scenario };
   await writeFile(join(output, 'response.md'), task.result ?? '', { mode: 0o600 });
   await json(join(output, 'fixture.json'), fixture);
   await json(join(output, 'run.json'), { preset, version: preset.version, scope, status: task.status,

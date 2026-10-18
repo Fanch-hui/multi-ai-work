@@ -18,7 +18,8 @@ const root = fileURLToPath(new URL('../../', import.meta.url));
 const help = `职业预设真实运行验收
 用法：pnpm exec tsx scripts/presets/run-acceptance.ts --fixtures <JSON> [选项]
 默认校验目录、ZIP 和逐岗位模拟资料；不探测登录、不调用模型。
-  --run                   执行真实 Qoder 推理，保存待人工审阅的证据
+  --run                   执行真实推理，保存待人工审阅的证据
+  --provider <id>          qoder（默认）或 antigravity，复用官方本机登录
   --compute               授权本批岗位在临时工作目录使用随包运行库和命令计算
   --preset <id>           选择岗位，可重复；省略则选择全部目录
   --catalog <路径>        默认 resources/agent-presets/catalog.json
@@ -68,7 +69,7 @@ async function runPreset(core: CoreService, preset: AgentPreset, fixture: Fixtur
   const task = core.tasks.create({ conversationId: conversation.id, botId: bot.id, goal });
   const settled = await waitForTask(core, task.id, timeout);
   try {
-    const report = await saveEvidence(core, preset, fixture, settled, output, model, Date.now() - started);
+    const report = await saveEvidence(core, preset, fixture, settled, output, model, Date.now() - started, connection.provider);
     await saveWorkspace(workspacePath, join(output, 'workspace'));
     return report;
   }
@@ -78,10 +79,12 @@ async function prepare(args: string[]) {
   const { values } = parseArgs({ args, options: { help: { type: 'boolean' }, run: { type: 'boolean' },
     compute: { type: 'boolean' }, fixtures: { type: 'string' }, preset: { type: 'string', multiple: true }, catalog: { type: 'string' },
     packages: { type: 'string' }, output: { type: 'string' }, model: { type: 'string', default: 'qmodel_38max' },
+    provider: { type: 'string', default: 'qoder' },
     concurrency: { type: 'string', default: '2' }, 'timeout-ms': { type: 'string', default: '480000' },
     'skip-existing': { type: 'boolean' } } });
   if (values.help) { console.log(help); return; }
   if (!values.fixtures) throw new Error('--fixtures 必填');
+  const provider = z.enum(['qoder', 'antigravity']).parse(values.provider);
   const concurrency = Number(values.concurrency), timeout = Number(values['timeout-ms']);
   if (![1, 2, 3, 4].includes(concurrency)) throw new Error('concurrency 必须为 1 至 4');
   if (!Number.isInteger(timeout) || timeout < 1000 || timeout > 600000) throw new Error('timeout-ms 必须为 1000 至 600000');
@@ -96,7 +99,7 @@ async function prepare(args: string[]) {
     if (!fixtures[preset.id]) throw new Error(`缺少岗位模拟资料：${preset.id}`);
     await readFile(join(packages, `${preset.id}-${preset.version}.zip`));
   }
-  return { presets, fixtures, packages, concurrency, timeout, model: values.model!, run: values.run,
+  return { presets, fixtures, packages, concurrency, timeout, model: values.model!, provider, run: values.run,
     skipExisting: values['skip-existing'], compute: !!values.compute,
     output: resolve(values.output ?? join(root, 'release/preset-acceptance', `run-${Date.now()}`)) };
 }
@@ -105,9 +108,10 @@ async function existingReports(input: NonNullable<Awaited<ReturnType<typeof prep
   try { return JSON.parse(await readFile(join(input.output, 'acceptance.json'), 'utf8')) as Record<string, unknown>; }
   catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {}; throw error; }
 }
-async function canSkip(preset: AgentPreset, fixture: Fixture, model: string, output: string, report: unknown) {
-  const item = report as { presetDigest?: string; fixtureDigest?: string; scope?: { model?: string } } | undefined;
-  if (item?.presetDigest !== presetDigest(preset) || item.fixtureDigest !== digest(fixture) || item.scope?.model !== model) return false;
+async function canSkip(preset: AgentPreset, fixture: Fixture, model: string, provider: string, output: string, report: unknown) {
+  const item = report as { presetDigest?: string; fixtureDigest?: string; scope?: { model?: string; provider?: string } } | undefined;
+  if (item?.presetDigest !== presetDigest(preset) || item.fixtureDigest !== digest(fixture)
+    || item.scope?.model !== model || item.scope.provider !== provider) return false;
   try {
     const run = JSON.parse(await readFile(join(output, preset.id, 'run.json'), 'utf8')) as {
       preset: AgentPreset; status: string; checks: Record<string, boolean>; toolOperations: { name: string; status: string; skillId?: string }[];
@@ -132,13 +136,13 @@ export async function main(args = process.argv.slice(2)) {
   const reports: Record<string, unknown> = await existingReports(input);
   try {
     await core.start(); server = await startHttp(core, false);
-    const saved = await core.entities.saveConnection({ name: '岗位验收', provider: 'qoder', authMode: 'local', concurrency: input.concurrency });
+    const saved = await core.entities.saveConnection({ name: '岗位验收', provider: input.provider, authMode: 'local', concurrency: input.concurrency });
     const connection = await core.request('connections.probe', { id: saved.id }) as Connection;
-    if (connection.status !== 'ready') throw new Error(connection.error ?? 'Qoder 官方本机连接未准备完成');
-    if (!connection.models.some(model => model.id === input.model)) throw new Error('所选模型不在 Qoder 当前可用目录中');
+    if (connection.status !== 'ready') throw new Error(connection.error ?? '官方本机连接未准备完成');
+    if (!connection.models.some(model => model.id === input.model)) throw new Error('所选模型不在当前连接可用目录中');
     const queue: AgentPreset[] = [];
     for (const preset of input.presets) {
-      if (input.skipExisting && await canSkip(preset, input.fixtures[preset.id], input.model, input.output, reports[preset.id]))
+      if (input.skipExisting && await canSkip(preset, input.fixtures[preset.id], input.model, input.provider, input.output, reports[preset.id]))
         console.log(`${preset.id}: existing evidence matches, review status retained`);
       else queue.push(preset);
     }

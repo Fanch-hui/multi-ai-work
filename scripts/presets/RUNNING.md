@@ -1,6 +1,6 @@
 # 岗位运行验收
 
-先生成本地资源包，再准备逐岗位模拟资料。运行器使用临时 Core、独立岗位成员和工作目录，以及 Qoder 官方本机登录；不会读取或复制凭据。
+先生成本地资源包，再准备逐岗位模拟资料。运行器使用临时 Core、独立岗位成员和工作目录，通过 Qoder 或 Antigravity 官方本机登录运行；不会读取或复制凭据。
 
 ```sh
 python3 scripts/presets/build.py --output release/presets
@@ -18,7 +18,9 @@ node --import tsx scripts/presets/run-acceptance.ts \
   --run --concurrency 2 --output release/preset-acceptance/review-batch
 ```
 
-默认模型为 `qmodel_38max`，并发为 2，每岗位超时 8 分钟。`--preset` 可重复；省略时选择目录全部岗位，并要求每个岗位都有 fixture。`--skip-existing` 可恢复同一输出目录，只有岗位、模拟资料和模型匹配，真实运行完成、成功读取绑定技能且可读成果摘要一致时才跳过；原审阅状态保留。
+默认连接为 `qoder`、模型为 `qmodel_38max`，并发为 2，每岗位超时 8 分钟。可用 `--provider antigravity --model <本机目录中的模型ID>` 切换原生通道；模型需显式来自该连接的实时目录，运行记录保存实际通道和模型。
+
+`--preset` 可重复；省略时选择目录全部岗位，并要求每个岗位都有 fixture。`--skip-existing` 可恢复同一输出目录，只有岗位、模拟资料、通道和模型匹配，真实运行完成、成功读取绑定技能且可读成果摘要一致时才跳过；原审阅状态保留。
 
 fixture 文件以岗位 ID 为键，内容结构如下。文件路径相对于岗位临时工作目录；素材应全部为模拟数据。
 
