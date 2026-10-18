@@ -17,6 +17,42 @@ function answer(context: RunContext) {
 }
 
 describe('手动上下文压缩', () => {
+  it('管家压缩沿用对话配置，保留任务安排且不访问后台任务的安排接口', async () => {
+    let summaries = 0, arranged = false;
+    let latestMessages: ModelMessage[] = [];
+    const { core, connection } = await setup(async context => {
+      if (context.runId.includes(':summary:')) {
+        summaries++;
+        expect(context.tools).toEqual([]);
+        return { text: '较早对话已整理为摘要' };
+      }
+      latestMessages = context.messages;
+      if (!arranged) {
+        arranged = true;
+        await context.executeTool('set_task_plan', { title: '整理资料', steps: [
+          { id: 'deliver', title: '交付资料', kind: 'work', memberIds: [context.bot.id], dependencyIds: [] },
+        ] }, 'arrange');
+        await context.executeTool('update_plan_step', { stepId: 'deliver', status: 'completed' }, 'deliver');
+      }
+      return answer(context);
+    });
+    await core.request('chief.configure', { input: { connectionId: connection.id, model: 'test',
+      contextWindow: 40000, memoryMode: 'off' } });
+    const roomId = core.state.settings().mainConversationId!;
+    await turn(core, roomId, '早期资料'.repeat(250)); await turn(core, roomId, '近期要求');
+    const plans = core.state.snapshot().taskPlans;
+    const compact = await core.request('conversations.compact', { id: roomId }) as Task;
+    await eventually(() => ['completed', 'failed'].includes(core.state.storage.get<Task>('tasks', compact.id)?.status ?? ''));
+    expect(core.state.storage.get<Task>('tasks', compact.id)).toMatchObject({ status: 'completed',
+      result: '上下文已压缩，完整聊天记录已保留' });
+    expect(summaries).toBe(1);
+    expect(core.state.snapshot().checkpoints).toHaveLength(1);
+    expect(core.state.snapshot().taskPlans).toEqual(plans);
+    expect(() => core.tools.plans.get(compact)).toThrow('只有管家可以管理任务安排');
+    await turn(core, roomId, '压缩后继续');
+    expect(JSON.stringify(latestMessages)).toContain('较早对话已整理为摘要');
+  });
+
   it('提前压缩并持久保存，保留聊天记录，压缩期间的新消息排队后使用摘要', async () => {
     let started = false, finish!: () => void;
     const ready = new Promise<void>(resolve => { finish = resolve; });

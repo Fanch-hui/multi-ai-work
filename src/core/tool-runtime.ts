@@ -65,7 +65,7 @@ export class ToolRuntime {
   }
   assertNativeSettled(runId: string) { this.qoderTools.get(runId)?.assertSettled(); }
   async prepare(context: ToolExecutionContext, bot: Bot) {
-    if ((context.task.kind && context.task.kind !== 'context-compaction') || !bot.toolNames.includes('call_mcp')) return;
+    if (context.task.kind || !bot.toolNames.includes('call_mcp')) return;
     const configurations = new Map(context.toolConnections.map(connection => [connection.id, toolConfiguration(connection)]));
     await this.registry.prepare?.(context);
     for (const connection of context.toolConnections) {
@@ -79,7 +79,6 @@ export class ToolRuntime {
 
   context(run: Run, task: Task, bot: Bot, room: Conversation, workspace: Workspace, signal: AbortSignal): ToolExecutionContext {
     const s = this.state.storage;
-    const conversationTools = !task.kind || task.kind === 'context-compaction';
     const context: ToolExecutionContext = { runId: run.id, task, botId: bot.id, conversation: room, workspace, signal,
       requestApproval: (name, summary, args) => this.approvals.request(run, name, summary, args, signal),
       listArtifacts: () => accessibleArtifacts(this.state, room, bot.id, s.get<Task>('tasks', task.id) ?? task).map(artifact => artifactRequirement(s, artifact)),
@@ -101,7 +100,7 @@ export class ToolRuntime {
       getObservedFileVersion: path => this.observations.get(run.id)?.get(path),
       observeFile: (path, version) => { const files = this.observations.get(run.id) ?? new Map<string, string>(); files.set(path, version); this.observations.set(run.id, files); },
       ownsFile: (path, version) => ownsTaskFile(this.state, task, path, version),
-      ...(conversationTools ? { askUser: (input: Parameters<QuestionService['create']>[0]) => {
+      ...(!task.kind ? { askUser: (input: Parameters<QuestionService['create']>[0]) => {
         if (this.processes.hasActiveRun(run.id)) throw new Error('请先完成或停止本任务的活跃命令');
         return this.questions.create(input, context);
       } } : {}),
@@ -130,7 +129,7 @@ export class ToolRuntime {
       },
       ...(bot.id === this.state.settings().mainBotId && room.chiefId === bot.id ? {
         listBots: () => this.team.catalog(), configureBot: (input: Record<string, unknown>) => this.team.configureMember(input),
-        ...(conversationTools ? { setTaskPlan: input => this.plans.set(task, input), getTaskPlan: () => this.plans.get(task),
+        ...(!task.kind ? { setTaskPlan: input => this.plans.set(task, input), getTaskPlan: () => this.plans.get(task),
           updatePlanStep: input => this.plans.update(task, input) } : {}),
         ...(room.purpose === 'chief' && room.kind === 'private' ? {
           createTaskGroup: (input: TaskGroupInput) => this.team.createTaskGroup(task, input),

@@ -245,7 +245,10 @@ export class Executor {
     const manualCompaction = task.kind === 'context-compaction';
     const archive = task.kind && !manualCompaction ? [] : s.messages(room.id).filter(message => message.status === 'committed'
       && (manualCompaction || (saved ? message.sequence <= saved.cutoff : message.sequence < draft.sequence)));
-    await this.tools.prepare(toolContext, bot);
+    // Match the next conversation request without granting tools to the summary request.
+    const catalogContext = manualCompaction
+      ? this.tools.context(run, { ...task, kind: undefined }, bot, room, toolContext.workspace, signal) : toolContext;
+    await this.tools.prepare(catalogContext, bot);
     const managed = connection.provider === 'chatgpt' || connection.provider === 'custom';
     const hasHistory = s.metadata<ModelHistoryEntry[]>(`history:${binding.id}`) !== undefined;
     const delivered = manualCompaction ? archive.at(-1)?.sequence ?? 0
@@ -264,7 +267,7 @@ export class Executor {
         .flatMap(artifactId => { const image = modelImage(toolContext.findArtifact(artifactId)); return image ? [image] : []; }),
       resolveImage: imageResolver(this.state, toolContext),
       isWaitingForInput: () => !!this.tools.questions.forRun(run.id), inputSignal: this.tools.inputSignal(run.id),
-      prompt: manualCompaction ? '' : prompt, messages: [], instructions, contextInstructions, runtimeContext, tools: this.tools.definitions(toolContext, bot)
+      prompt: manualCompaction ? '' : prompt, messages: [], instructions, contextInstructions, runtimeContext, tools: this.tools.definitions(catalogContext, bot)
         .sort((a, b) => managed ? (a.name < b.name ? -1 : a.name > b.name ? 1 : 0) : 0), signal,
       nativeMcp,
       parallelToolNames: ['read_file', 'list_directory', 'find_files', 'search_text', 'read_skill', 'read_messages', 'search_messages', 'read_artifact', 'fetch_web', 'search_web'],
