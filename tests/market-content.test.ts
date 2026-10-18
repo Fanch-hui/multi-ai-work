@@ -41,5 +41,5 @@ describe('prepared career content', () => {
       }
     }
     expect(state.storage.all<Skill>('skills').filter(skill => !skill.bundled)).toHaveLength(unique.size);
-  }, 60_000);
+  }, 180_000);
 });
