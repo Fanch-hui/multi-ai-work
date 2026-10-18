@@ -8,6 +8,7 @@ import type { Message, Run, SessionBinding, Task } from '../src/domain/types.js'
 import { Storage } from '../src/core/storage.js';
 import { loadManagedProgress, progressForRun, recoverManagedRuns, saveManagedProgress } from '../src/core/managed-progress.js';
 import { BackupService } from '../src/core/backup.js';
+import { ArtifactContents } from '../src/core/artifact-contents.js';
 import type { State } from '../src/core/state.js';
 
 const resources: { root: string; storage: Storage }[] = [];
@@ -113,7 +114,8 @@ describe('incremental managed checkpoints', () => {
 
   it.each([false, true])('restores backups with a delta table present: %s', async oldBackup => {
     const f = await fixture(); f.result('one');
-    const state = { storage: f.storage, dataDirectory: f.root, changed: () => {} } as unknown as State;
+    const state = { storage: f.storage, dataDirectory: f.root,
+      artifactContents: new ArtifactContents(f.storage, f.root), changed: () => {} } as unknown as State;
     const backup = new BackupService(state), created = await backup.create();
     if (oldBackup) {
       const source = new Database(join(created.path, 'team.sqlite')); source.exec('DROP TABLE managed_progress_deltas'); source.close();

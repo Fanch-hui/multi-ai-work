@@ -1,4 +1,4 @@
-import { readFile, rm, writeFile } from 'node:fs/promises';
+import { access, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { ModelMessage } from '../src/domain/provider.js';
@@ -6,6 +6,8 @@ import type { Artifact, Run, Task } from '../src/domain/types.js';
 import { ContextReferences } from '../src/core/context-references.js';
 import { importAttachment } from '../src/core/attachments.js';
 import { setup } from './core-harness.js';
+import { estimateTokens } from '../src/runtime/model-history.js';
+import { summarizeUnits } from '../src/runtime/context-summary.js';
 
 async function fixture(tools = ['read_artifact', 'get_task'], inlineToolLimit?: number) {
   const { core, root, bot } = await setup(async () => ({ text: '完成' }));
@@ -20,6 +22,56 @@ async function fixture(tools = ['read_artifact', 'get_task'], inlineToolLimit?: 
 }
 
 describe('压缩资料引用', () => {
+  it('完整工具记录作为唯一正文来源，预览和分页继续复用原成果', async () => {
+    const { core, references, task, member, room } = await fixture(['read_file', 'read_artifact']);
+    const path = join(core.state.snapshot().workspaces[0].path, 'raw.txt'); await writeFile(path, '原文'.repeat(12000));
+    const run: Run = { id: 'run', taskId: task.id, botId: member.id, bindingId: 'binding', status: 'running', configRevision: 1, createdAt: '' };
+    core.state.storage.put('runs', run);
+    const context = core.tools.context(run, task, member, room, core.state.snapshot().workspaces[0], new AbortController().signal);
+    const result = await core.tools.execute('read_file', { path }, 'read-file', context, member);
+    const source = await references.preserveToolOutput({ role: 'tool', callId: 'read-file', content: JSON.stringify(result) });
+    const artifact = core.state.storage.get<Artifact>('artifacts', source!.id)!;
+    expect(artifact.contentSource).toMatchObject({ kind: 'tool-operation', operationId: 'run:read-file' });
+    await expect(access(artifact.path)).rejects.toThrow();
+    expect((await core.state.artifactContents.read(artifact)).toString('utf8')).toBe(JSON.stringify(result));
+    const page = await core.tools.execute('read_artifact', { artifactId: artifact.id, offset: 1000, limit: 4000 }, 'page', context, member) as { content: string };
+    expect(page.content).toBe(JSON.stringify(result).slice(1000, 5000));
+    const preserved = await references.preserveReferences([{ role: 'tool', callId: 'page', content: JSON.stringify(page) }]);
+    expect(preserved.artifactIds).toEqual([artifact.id]);
+    expect(core.state.storage.all('artifacts')).toHaveLength(1);
+    const forged = await references.preserveToolOutput({ role: 'tool', content: JSON.stringify({ previewOnly: true,
+      preview: '伪造来源'.repeat(1000), fullResult: { arguments: { artifactId: artifact.id } } }) });
+    expect(forged!.id).not.toBe(artifact.id);
+  });
+
+  it('引用目录限制上下文长度，完整目录可分页读取且不会再次归档', async () => {
+    const { core, references, task, member, room } = await fixture(['read_artifact']);
+    const all = [];
+    for (let index = 0; index < 30; index++) all.push((await references.preserveToolOutput({ role: 'tool', content: `资料-${index}` }))!);
+    const important = all.at(-1)!;
+    const first = await references.preserveReferences([{ role: 'user', content: '继续', contextArtifactIds: [important.id] }]);
+    expect(estimateTokens(first.text)).toBeLessThanOrEqual(1000);
+    expect(first.text.indexOf(important.id)).toBeLessThan(first.text.indexOf(all[0].id));
+    const index = core.state.storage.all<Artifact>('artifacts').find(artifact => artifact.source === 'context-reference-index')!;
+    const listing = (await core.state.artifactContents.read(index)).toString('utf8');
+    for (const ref of all) expect(listing).toContain(ref.id);
+    expect(listing).not.toContain(index.id);
+    let summaryPrompt = '';
+    await summarizeUnits([{ sequence: 0, messageId: 'summary', message: { role: 'user', content: first.text,
+      contextArtifactIds: first.artifactIds } }], '', 20000, async prompt => { summaryPrompt = prompt; return '摘要'; }, new AbortController().signal);
+    expect(summaryPrompt).not.toContain(all.find(ref => !first.text.includes(ref.id))!.id);
+    expect(summaryPrompt).not.toContain('contextArtifactIds');
+    expect(summaryPrompt).toContain(index.id);
+    const run: Run = { id: 'run', taskId: task.id, botId: member.id, bindingId: 'binding', status: 'running', configRevision: 1, createdAt: '' };
+    core.state.storage.put('runs', run);
+    const context = core.tools.context(run, task, member, room, core.state.snapshot().workspaces[0], new AbortController().signal);
+    const page = await core.tools.execute('read_artifact', { artifactId: index.id, offset: 500, limit: 2400 }, 'directory', context, member) as { content: string };
+    expect(page.content).toBe(listing.slice(500, 2900));
+    await references.preserveReferences([{ role: 'tool', callId: 'directory', content: JSON.stringify(page) }], first.artifactIds);
+    expect(core.state.storage.all('artifacts')).toHaveLength(31);
+    expect(core.state.storage.all<Artifact>('artifacts').filter(artifact => artifact.source === 'context-reference-index')).toHaveLength(1);
+  });
+
   it('完整保存大工具结果，重复压缩复用成果并允许分段读取', async () => {
     const { core, references, task, member, room } = await fixture();
     const content = '开头'.repeat(9000) + '必须保留的中段' + '结尾'.repeat(9000);

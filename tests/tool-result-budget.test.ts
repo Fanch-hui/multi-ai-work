@@ -10,6 +10,7 @@ import { ManagedRunState } from '../src/providers/managed/progress.js';
 import { estimateModelMessageTokens, estimateModelMessagesTokens } from '../src/runtime/model-history.js';
 import { projectToolResult, toolResultBudgets } from '../src/runtime/tool-result-budget.js';
 import { setup } from './core-harness.js';
+import { projectSummaryToolMessage } from '../src/runtime/context-summary.js';
 
 async function fixture(tools = ['read_file', 'read_artifact'], budget = 20000) {
   const { core, root, bot, connection } = await setup(async () => ({ text: '完成' }));
@@ -37,6 +38,28 @@ function batch(contents: string[]): ModelMessage[] {
 }
 
 describe('工具结果 token 预算', () => {
+  it('再次压缩预览复用完整资料，摘要不将预览位置映射到原文', async () => {
+    const { core, context, references } = await fixture();
+    const messages = batch(['头部' + '完整资料'.repeat(10000) + '尾部']);
+    const projected = await context.prepareToolResults!(messages, 2);
+    const preview = projected![2], sourceId = preview.contextArtifactIds![0];
+    const sourceOffset = JSON.parse(preview.content).fullResult.arguments.offset;
+    const preserved = await references.preserveReferences([preview]);
+    expect(preserved.artifactIds).toEqual([sourceId]);
+    expect(core.state.storage.all('artifacts')).toHaveLength(1);
+    const summary = JSON.parse(projectSummaryToolMessage(preview, 1000).content);
+    expect(summary.previewOmission).toBeUndefined();
+    expect(summary.fullResult.arguments).toMatchObject({ artifactId: sourceId, offset: sourceOffset });
+    const smaller = await prepareToolResultBudget(context, references, 5000)(projected!, 2);
+    const result = JSON.parse(smaller![2].content);
+    expect(result.previewOmission).toBeUndefined();
+    expect(result.fullResult.arguments).toMatchObject({ artifactId: sourceId, offset: 0 });
+    expect(core.state.storage.all('artifacts')).toHaveLength(1);
+    core.state.storage.delete('artifacts', sourceId);
+    await references.preserveReferences([preview]);
+    expect(core.state.storage.all('artifacts')).toEqual([]);
+  });
+
   it('保留结构元数据、图像和首尾，中文按 token 而非字符分配', () => {
     const image = { artifactId: 'image', mimeType: 'image/png' };
     const original: ModelMessage = { role: 'tool', callId: 'read', images: [image], content: JSON.stringify({

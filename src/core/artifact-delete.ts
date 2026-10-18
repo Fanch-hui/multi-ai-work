@@ -7,13 +7,15 @@ import { required } from './errors.js';
 
 export async function deleteArtifact(state: State, artifactId: string, previews: ArtifactPreviews) {
   const artifact = required(state.storage.get<Artifact>('artifacts', artifactId), '成果不存在');
-  await previews.remove(artifactId);
-  const directory = path.resolve(state.dataDirectory, 'artifacts', artifact.id);
-  const root = path.resolve(state.dataDirectory, 'artifacts');
-  if (path.dirname(directory) === root && path.dirname(path.resolve(artifact.path)) === directory)
-    await rm(directory, { recursive: true, force: true });
-  else await removeRestoredCopy(state.dataDirectory, artifact);
-  state.storage.delete('artifacts', artifactId);
+  await state.artifactContents.remove(artifact, async () => {
+    await previews.remove(artifactId);
+    const directory = path.resolve(state.dataDirectory, 'artifacts', artifact.id);
+    const root = path.resolve(state.dataDirectory, 'artifacts');
+    if (path.dirname(directory) === root && path.dirname(path.resolve(artifact.path)) === directory)
+      await rm(directory, { recursive: true, force: true });
+    else await removeRestoredCopy(state.dataDirectory, artifact);
+    state.storage.delete('artifacts', artifactId);
+  });
   state.changed();
   return { ok: true };
 }

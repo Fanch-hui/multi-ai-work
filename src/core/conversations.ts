@@ -35,6 +35,7 @@ export class ConversationService {
     const room = this.room(conversationId);
     await this.modify(room, async () => {
       await this.cancelTasks(room.id);
+      await this.state.artifactContents.retainConversation(room.id);
       this.state.storage.transaction(() => {
         this.deleteRecords(room.id);
         this.state.storage.delete('conversations', room.id);
@@ -109,15 +110,15 @@ export class ConversationService {
     const db = this.state.storage.db;
     db.prepare('DELETE FROM metadata WHERE key = ?').run(`conversation-read:${conversationId}`);
     db.prepare('DELETE FROM metadata WHERE key = ?').run(`message-sequence:${conversationId}`);
-    const rows = db.prepare('SELECT key, value FROM metadata WHERE key LIKE ? OR key LIKE ? OR key LIKE ? OR key LIKE ? OR key LIKE ? OR key LIKE ? OR key LIKE ? OR key LIKE ?')
-      .all('send:%', 'task-group:%', 'history:%', 'history-validity:%', 'results:%', 'coordination:%', 'requirements:%', 'returned-artifacts:%') as { key: string; value: string }[];
+    const rows = db.prepare('SELECT key, value FROM metadata WHERE key LIKE ? OR key LIKE ? OR key LIKE ? OR key LIKE ? OR key LIKE ? OR key LIKE ? OR key LIKE ? OR key LIKE ? OR key LIKE ?')
+      .all('send:%', 'task-group:%', 'history:%', 'history-validity:%', 'results:%', 'coordination:%', 'requirements:%', 'returned-artifacts:%', 'context-projection:%') as { key: string; value: string }[];
     const remove = db.prepare('DELETE FROM metadata WHERE key = ?');
     for (const row of rows) {
       const value = JSON.parse(row.value) as { conversationId?: string; taskId?: string; taskIds?: string[] };
       const suffix = row.key.slice(row.key.indexOf(':') + 1);
       if (taskIds.has(suffix) || bindingIds.has(suffix) || value.conversationId === conversationId
         || taskIds.has(value.taskId ?? '') || value.taskIds?.some(taskId => taskIds.has(taskId))
-        || [...taskIds].some(taskId => row.key.startsWith(`task-group:${taskId}:`))) remove.run(row.key);
+        || [...taskIds].some(taskId => row.key.startsWith(`task-group:${taskId}:`) || row.key.startsWith(`context-projection:${taskId}:`))) remove.run(row.key);
       else if (row.key.startsWith('results:') && Array.isArray(value))
         this.state.storage.setMetadata(row.key, value.filter(item => !taskIds.has(item.taskId)));
     }

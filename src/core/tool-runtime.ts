@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
 import { toolConfiguration } from '../domain/tool-connection.js';
-import { mkdir, writeFile, rm } from 'node:fs/promises';
 import { mkdirSync, copyFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Artifact, Bot, Connection, Conversation, MemoryEntry, Run, Task, ToolConnection, Workspace, Skill } from '../domain/types.js';
@@ -32,6 +31,7 @@ import type { TaskControlService } from './task-control.js';
 import { assertUserMemorySources } from './memory-policy.js';
 import { prepareWebToolResult } from './web-tool-result.js';
 import { ToolTiming } from './tool-timing.js';
+import { ContextReferences } from './context-references.js';
 
 interface Operation { id: string; fingerprint: string; runId: string; name: string; status: 'prepared' | 'dispatched' | 'succeeded' | 'failed' | 'unknown'; result?: unknown; modelResult?: unknown; error?: string; errorCode?: string; requirementVersion?: number; }
 export class ToolRuntime {
@@ -85,6 +85,16 @@ export class ToolRuntime {
       findArtifact: artifactId => {
         const artifact = accessibleArtifacts(this.state, room, bot.id, s.get<Task>('tasks', task.id) ?? task).find(artifact => artifact.id === artifactId);
         return artifact && artifactRequirement(s, artifact);
+      },
+      readArtifact: async artifactId => {
+        signal.throwIfAborted();
+        const currentBot = s.get<Bot>('bots', bot.id);
+        if (!currentBot || currentBot.archived || !currentBot.toolNames.includes('read_artifact')) throw new Error('资料不存在或未授权');
+        const currentRoom = s.get<Conversation>('conversations', room.id);
+        const artifact = currentRoom && accessibleArtifacts(this.state, currentRoom, bot.id, s.get<Task>('tasks', task.id) ?? task)
+          .find(item => item.id === artifactId);
+        if (!artifact) throw new Error('资料不存在或未授权');
+        return this.state.artifactContents.read(artifact);
       },
       ...messageTools(this.state, room.id),
       getObservedFileVersion: path => this.observations.get(run.id)?.get(path),
@@ -286,8 +296,9 @@ export class ToolRuntime {
       s.event({ id: id(), runId: context.runId, type: 'tool', data: { name, callId, summary, status: 'completed', source: 'app', ...command }, createdAt: now() });
       const provider = s.get<Connection>('connections', currentBot.connectionId)?.provider;
       const modelResult = await timing.measureAsync('processingMs', async () => {
-        const preview = await prepareWebToolResult(this.state, context, currentBot, name, args, result);
-        return provider === 'chatgpt' || provider === 'custom' ? preview : this.compactResult(preview, context, name);
+        const resultContext = { ...context, callId };
+        const preview = await prepareWebToolResult(this.state, resultContext, currentBot, name, args, result);
+        return provider === 'chatgpt' || provider === 'custom' ? preview : this.compactResult(preview, resultContext, currentBot, name);
       });
       timing.measure('saveMs', () => s.put('tool_operations', { ...operation, status: 'succeeded', result, modelResult }));
       timing.status = 'succeeded';
@@ -324,17 +335,14 @@ export class ToolRuntime {
     void current.finally(() => { if (this.writeLocks.get(key) === current) this.writeLocks.delete(key); }).catch(() => {});
     return waitOperation(current, signal);
   }
-  private async compactResult(result: unknown, context: ToolExecutionContext, name: string): Promise<unknown> {
+  private async compactResult(result: unknown, context: ToolExecutionContext, bot: Bot, name: string): Promise<unknown> {
     const text = typeof result === 'string' ? result : JSON.stringify(result);
     if (!text || text.length <= 32000 || name === 'read_artifact') return result;
-    const directory = join(this.state.dataDirectory, 'tool-results');
-    await mkdir(directory, { recursive: true });
-    const path = join(directory, `${id()}.json`); await writeFile(path, text, { mode: 0o600 });
-    const artifact = context.registerArtifact({ name: `${name}完整结果.json`, path, mimeType: 'application/json',
-      sha256: createHash('sha256').update(text).digest('hex'), size: Buffer.byteLength(text),
-      taskId: context.task.id, botId: context.botId, conversationId: context.conversation.id, source: name, purpose: 'intermediate' });
-    await rm(path);
-    return { content: text.slice(0, 12000), truncated: true, artifactId: artifact.id,
+    const references = new ContextReferences(this.state, { runId: context.runId, task: context.task, bot,
+      room: context.conversation, toolNames: bot.toolNames, signal: context.signal });
+    const reference = await references.preserveToolOutput({ role: 'tool', callId: context.callId, content: text });
+    if (!reference) return result;
+    return { content: text.slice(0, 12000), truncated: true, artifactId: reference.id,
       totalLength: text.length, instruction: '完整结果已保存，可用 read_artifact 的 offset 分段读取。' };
   }
 }

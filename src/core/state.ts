@@ -22,6 +22,7 @@ import { SnapshotSync, publicProcess } from './snapshot-sync.js';
 import { unreadConversationCounts } from './conversation-read.js';
 import type { Message } from '../domain/types.js';
 import { SnapshotCache } from './snapshot-cache.js';
+import { ArtifactContents } from './artifact-contents.js';
 
 export const now = () => new Date().toISOString();
 export const id = () => randomUUID();
@@ -29,6 +30,7 @@ export { defaultSettings } from './work-settings.js';
 export type StateChange = 'state' | 'content';
 export class State {
   readonly storage: Storage;
+  readonly artifactContents: ArtifactContents;
   private readonly snapshotCache: SnapshotCache;
   readonly sync = new SnapshotSync(this);
   private listeners = new Set<(kind: StateChange) => void>();
@@ -36,6 +38,7 @@ export class State {
   constructor(readonly dataDirectory: string) {
     mkdirSync(dataDirectory, { recursive: true, mode: 0o700 });
     this.storage = new Storage(join(dataDirectory, 'team.sqlite'));
+    this.artifactContents = new ArtifactContents(this.storage, dataDirectory);
     this.snapshotCache = new SnapshotCache(this.storage);
     ensureMemoryContentHashes(this.storage);
     migrateRunMetrics(this.storage);

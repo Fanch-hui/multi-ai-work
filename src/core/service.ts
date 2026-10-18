@@ -88,8 +88,12 @@ export class CoreService {
     this.previews = new ArtifactPreviews(this.state);
     this.admission = new MaintenanceAdmission(this.state, this.tasks, this.scheduler, this.tools.processes);
   }
-  async start() { await this.vault.load(); this.tools.processes.recover(); this.scheduler.start(); this.memories.start(); this.questionDecisions.start(); }
+  async start() {
+    await this.vault.load(); this.tools.processes.recover(); this.scheduler.start(); this.memories.start(); this.questionDecisions.start();
+    this.state.artifactContents.start(() => !this.maintenance && !this.scheduler.hasActive(), () => this.state.changed('content'));
+  }
   async close() {
+    await this.state.artifactContents.close();
     this.logins.close(); await this.toolConnections.close();
     this.questionDecisions.close(); this.memories.close(); this.oauth.close();
     await this.market.quiesce(); await this.previews.close(); await this.scheduler.close();
@@ -286,11 +290,13 @@ export class CoreService {
       case 'artifacts.read': {
         const artifact = required(s.get<Artifact>('artifacts', objectId()), '成果不存在');
         if (!['text/plain', 'text/markdown', 'application/json'].includes(artifact.mimeType)) return { path: artifact.path, binary: true };
-        const content = await readFile(artifact.path, 'utf8'); return { content: content.slice(0, 100000), path: artifact.path };
+        const content = (await this.state.artifactContents.read(artifact)).toString('utf8');
+        return { content: content.slice(0, 100000), path: artifact.path };
       }
       case 'artifacts.open': {
         const artifact = required(s.get<Artifact>('artifacts', objectId()), '成果不存在');
-        return this.host ? this.host('openPath', { path: artifact.path }) : { path: artifact.path };
+        const path = await this.state.artifactContents.materialize(artifact, true);
+        return this.host ? this.host('openPath', { path }) : { path };
       }
       case 'artifacts.delete': return deleteArtifact(this.state, objectId(), this.previews);
       case 'artifacts.previewDocument': return this.previews.describe(objectId());

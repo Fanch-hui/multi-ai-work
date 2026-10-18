@@ -101,7 +101,7 @@ export function createBuiltins(mcp: McpConnections): Record<string, Builtin> {
       execute: async (args, context) => {
         const artifact = context.findArtifact(args.artifactId);
         if (!artifact) throw new Error('成果不存在或未授权');
-        if ((await stat(artifact.path)).size > 25 * 1024 * 1024) throw new Error('成果超过 25 MiB 读取限制');
+        if ((artifact.contentSource ? artifact.size : (await stat(artifact.path)).size) > 25 * 1024 * 1024) throw new Error('成果超过 25 MiB 读取限制');
         if (imageMimeTypes.has(artifact.mimeType)) {
           const image = await normalizeArtifactImage(artifact);
           return { content: [{ type: 'text', text: `图片 ${artifact.name} (${artifact.id})` },
@@ -110,8 +110,10 @@ export function createBuiltins(mcp: McpConnections): Record<string, Builtin> {
         if (artifact.mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation')
           return { artifactId: artifact.id, name: artifact.name, path: artifact.path, format: 'pptx',
             contentAvailable: false, instruction: '通过 Office 技能与随包 python-pptx 读取、修改此文件；源成果按只读资料处理，修改另存到工作目录并登记。' };
-        const document = ['text/markdown', 'text/plain', 'application/json'].includes(artifact.mimeType)
-          ? await readFile(artifact.path, 'utf8') : JSON.stringify(await readDocument(artifact.path));
+        const bytes = ['text/markdown', 'text/plain', 'application/json'].includes(artifact.mimeType)
+          ? context.readArtifact ? Buffer.from(await context.readArtifact(artifact.id)) : await readFile(artifact.path) : undefined;
+        if (bytes && bytes.length > 25 * 1024 * 1024) throw new Error('成果超过 25 MiB 读取限制');
+        const document = bytes ? bytes.toString('utf8') : JSON.stringify(await readDocument(artifact.path));
         return { artifactId: artifact.id, name: artifact.name, path: artifact.path, requirementVersion: artifact.requirementVersion,
           superseded: artifact.superseded, content: document.slice(args.offset, args.offset + args.limit),
           offset: args.offset, nextOffset: args.offset + args.limit < document.length ? args.offset + args.limit : null, totalLength: document.length };

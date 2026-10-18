@@ -1,12 +1,14 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { constants } from 'node:fs';
-import { access, mkdir, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ModelMessage } from '../domain/provider.js';
 import type { Artifact, Bot, Conversation, Run, Task } from '../domain/types.js';
 import type { State } from './state.js';
 import { scopedTask } from './task-access.js';
 import { accessibleArtifacts } from './tool-access.js';
+import { contextProjectionId, registerContextProjection } from './context-reference-projection.js';
+import { formatContextReferences, needsReferenceIndex, referenceIndexSource, saveReferenceIndex } from './context-reference-index.js';
+export { formatContextReferences } from './context-reference-index.js';
 
 export interface ContextReference { kind: 'artifact' | 'task'; id: string; name: string; }
 interface ReferenceScope { runId: string; task: Task; bot: Bot; room: Conversation; toolNames: readonly string[]; signal: AbortSignal; inlineToolLimit?: number; }
@@ -31,7 +33,10 @@ export class ContextReferences {
       this.previous.push(reference);
     }
     this.previous = await this.collect(messages, [...this.previous, ...previous]);
-    return { text: formatContextReferences(this.previous), artifactIds: this.previous.filter(ref => ref.kind === 'artifact').map(ref => ref.id) };
+    const directory = needsReferenceIndex(this.previous) && this.allowed('read_artifact')
+      ? saveReferenceIndex(this.state, this.scope.task, this.previous) : undefined;
+    return { text: formatContextReferences(this.previous, directory),
+      artifactIds: [...new Set([...this.previous.filter(ref => ref.kind === 'artifact').map(ref => ref.id), ...(directory ? [directory.id] : [])])] };
   }
 
   async collect(messages: readonly ModelMessage[], previous: readonly ContextReference[] = []): Promise<ContextReference[]> {
@@ -41,7 +46,10 @@ export class ContextReferences {
     if (this.allowed('read_artifact')) {
       const ids = new Set(previous.filter(ref => ref.kind === 'artifact').map(ref => ref.id));
       for (const id of task?.artifactIds ?? []) ids.add(id);
-      for (const message of messages) for (const image of message.images ?? []) ids.add(image.artifactId);
+      for (const message of messages) {
+        for (const id of message.contextArtifactIds ?? []) ids.add(id);
+        for (const image of message.images ?? []) ids.add(image.artifactId);
+      }
       const sources = new Set(messages.flatMap(message => message.sourceMessageId ? [message.sourceMessageId] : []));
       for (const message of s.messages(this.scope.room.id)) {
         if (!sources.has(message.id)) continue;
@@ -51,7 +59,7 @@ export class ContextReferences {
         for (const id of sourceTask?.artifactIds ?? []) ids.add(id);
       }
       for (const artifact of this.artifacts()) {
-        if (ids.has(artifact.id) && await readable(artifact)) refs.push(artifactReference(artifact));
+        if (artifact.source !== referenceIndexSource && ids.has(artifact.id) && await this.readable(artifact)) refs.push(artifactReference(artifact));
       }
     }
     if (this.allowed('get_task')) {
@@ -61,30 +69,38 @@ export class ContextReferences {
         if (task) refs.push({ kind: 'task', id: task.id, name: task.goal });
       }
     }
-    return refs;
+    const important = new Set(messages.flatMap(message => [...message.contextArtifactIds ?? [], ...(message.images ?? []).map(image => image.artifactId)]));
+    return refs.sort((a, b) => Number(important.has(b.id)) - Number(important.has(a.id)));
   }
 
   async preserveToolOutput(message: ModelMessage): Promise<ContextReference | undefined> {
     this.scope.signal.throwIfAborted();
     if (message.role !== 'tool' || !this.allowed('read_artifact')) return;
+    const projection = contextProjectionId(this.state, this.scope.task.id, this.scope.runId, message);
+    if (projection) {
+      const reference = await this.readableArtifact(projection);
+      if (reference) this.registerProjection(message, reference);
+      return reference;
+    }
     const size = Buffer.byteLength(message.content);
     if (!size || size > maxReadableBytes) return;
     const sha256 = createHash('sha256').update(message.content).digest('hex');
     const existing = this.artifacts().find(artifact => artifact.taskId === this.scope.task.id
       && artifact.source === 'context-compaction' && artifact.sha256 === sha256);
-    if (existing && await readable(existing)) return artifactReference(existing);
+    if (existing && await this.readable(existing)) return artifactReference(existing);
     const s = this.state.storage, task = s.get<Task>('tasks', this.scope.task.id);
     if (!task || task.conversationId !== this.scope.room.id || task.botId !== this.scope.bot.id) return;
     const id = randomUUID(), directory = join(this.state.dataDirectory, 'artifacts', id);
     const path = join(directory, 'tool-output.txt');
-    await mkdir(directory, { recursive: true });
+    const contentSource = this.state.artifactContents.findSource(task.id, message.content, { runId: this.scope.runId, callId: message.callId });
+    if (!contentSource) await mkdir(directory, { recursive: true });
     try {
-      await writeFile(path, message.content, { mode: 0o600 });
+      if (!contentSource) await writeFile(path, message.content, { mode: 0o600 });
       this.scope.signal.throwIfAborted();
       if (!this.allowed('read_artifact')) { await rm(directory, { recursive: true, force: true }); return; }
-      const artifact: Artifact = { id, name: '压缩前完整工具结果.txt', path, mimeType: 'text/plain', sha256, size,
+      const artifact: Artifact = { id, name: '工具完整结果.txt', path, mimeType: 'text/plain', sha256, size,
         taskId: task.id, botId: task.botId, conversationId: task.conversationId, createdAt: new Date().toISOString(),
-        source: 'context-compaction', purpose: 'intermediate' };
+        source: 'context-compaction', purpose: 'intermediate', ...(contentSource ? { contentSource } : {}) };
       s.transaction(() => {
         const current = s.get<Task>('tasks', task.id)!;
         s.put('artifacts', artifact);
@@ -102,7 +118,20 @@ export class ContextReferences {
     this.scope.signal.throwIfAborted();
     if (!this.allowed('read_artifact')) return;
     const artifact = this.artifacts().find(artifact => artifact.id === id);
-    return artifact && await readable(artifact) ? artifactReference(artifact) : undefined;
+    return artifact && await this.readable(artifact) ? artifactReference(artifact) : undefined;
+  }
+
+  isProjection(message: ModelMessage): boolean {
+    return !!contextProjectionId(this.state, this.scope.task.id, this.scope.runId, message);
+  }
+
+  registerProjection(message: ModelMessage, reference: ContextReference): void {
+    registerContextProjection(this.state, this.scope.task.id, message.content, reference.id);
+  }
+
+  private readable(artifact: Artifact): Promise<boolean> {
+    if (artifact.mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') return Promise.resolve(false);
+    return this.state.artifactContents.canRead(artifact);
   }
 
   private allowed(name: string): boolean {
@@ -116,19 +145,4 @@ export class ContextReferences {
 
 function artifactReference(artifact: Artifact): ContextReference {
   return { kind: 'artifact', id: artifact.id, name: artifact.name };
-}
-async function readable(artifact: Artifact): Promise<boolean> {
-  try {
-    const file = await stat(artifact.path);
-    await access(artifact.path, constants.R_OK);
-    return file.isFile() && file.size <= maxReadableBytes
-      && artifact.mimeType !== 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
-  } catch { return false; }
-}
-export function formatContextReferences(references: readonly ContextReference[]): string {
-  const refs = [...new Map(references.map(ref => [`${ref.kind}:${ref.id}`, ref])).values()];
-  if (!refs.length) return '';
-  return `可按当前权限读取的资料：\n${refs.map(ref => JSON.stringify({ name: ref.name.slice(0, 200),
-    tool: ref.kind === 'artifact' ? 'read_artifact' : 'get_task',
-    arguments: ref.kind === 'artifact' ? { artifactId: ref.id } : { taskId: ref.id } })).join('\n')}`;
 }

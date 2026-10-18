@@ -55,8 +55,14 @@ export function projectSummaryToolMessage(message: ModelMessage, budget: number,
     ?? (typeof callArgs?.path === 'string' ? callArgs.path : undefined)
     ?? (typeof callArgs?.workingPath === 'string' ? callArgs.workingPath : undefined);
   const metadata = parsed ? retainedMetadata(parsed) : {};
-  // Core archives the complete result text, so previews and offsets share that exact coordinate space.
-  const source = rawContent;
+  const projectedSource = alreadyProjected || parsed?.previewOnly === true;
+  const page = call?.name === 'read_artifact' && parsed?.artifactId === artifactId && typeof parsed.content === 'string';
+  const source = page ? parsed.content as string : rawContent;
+  const offset = page && typeof parsed.offset === 'number' ? parsed.offset : 0;
+  const existingFullResult = projectedSource && parsed?.fullResult && typeof parsed.fullResult === 'object'
+    ? parsed.fullResult as { arguments?: { artifactId?: string; offset?: number; limit?: number } } : undefined;
+  const sourceOffset = existingFullResult?.arguments?.artifactId === artifactId
+    ? existingFullResult.arguments.offset ?? 0 : 0;
   const maxPreviewChars = Math.min(900, Math.max(160, Math.floor(source.length * 0.5)));
   const build = (characters: number): ModelMessage => {
     const head = safeHead(source, Math.ceil(characters / 2));
@@ -71,11 +77,12 @@ export function projectSummaryToolMessage(message: ModelMessage, budget: number,
         ...(pathRef && !metadata.path && !metadata.workingPath ? { path: pathRef } : {}),
         preview: `${head}\n[…中间内容已省略，请按完整结果引用读取…]\n${tail}`,
         truncated: true,
-        previewOmission: { offset: head.length, endOffset: source.length - tail.length, totalLength: source.length },
+        ...(!projectedSource ? { previewOmission: { offset: offset + head.length, endOffset: offset + source.length - tail.length,
+          totalLength: page && typeof parsed.totalLength === 'number' ? parsed.totalLength : source.length } } : {}),
         ...(artifactId ? {
           fullResult: {
             tool: 'read_artifact',
-            arguments: { artifactId, offset: head.length, limit: Math.max(1, Math.min(24000, Math.floor(toolBudget / 2))) },
+            arguments: { artifactId, offset: projectedSource ? sourceOffset : offset + head.length, limit: Math.max(1, Math.min(24000, Math.floor(toolBudget / 2))) },
           },
         } : {}),
       }),
@@ -128,7 +135,11 @@ export async function summarizeUnits(
   const units = balancedHistoryUnits(history);
   if (units.some(unit => !toolsPaired(unit))) throw new Error('历史工具调用与结果未配对');
   const projectedUnits = units.map(unit => projectUnitForSummary(unit, budget));
-  const records = projectedUnits.map(unit => JSON.stringify(unit.map(entry => summaryMessageProjection(entry.message))));
+  const records = projectedUnits.map(unit => JSON.stringify(unit.map(entry => {
+    const record = summaryMessageProjection(entry.message) as Record<string, unknown>;
+    if (entry.message.role !== 'tool') delete record.contextArtifactIds;
+    return record;
+  })));
   const weights = records.map(record => estimateTokens(record) + 1);
   let content = previous;
   const merge = async (text: string) => {

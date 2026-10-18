@@ -9,6 +9,7 @@ import { entityTables } from './storage.js';
 import { projectStreamMessage } from './message-stream.js';
 import { backupFile, collectBackupResources, restoreBackupResources, type BackupResource, type RestoredResources } from './backup-resources.js';
 import { rebuildMemorySearch } from './memory-storage.js';
+import { readArtifactBytes } from './artifact-content-source.js';
 
 interface BackupManifest {
   version: 1 | 2; artifacts: { id: string; file: string }[];
@@ -18,6 +19,10 @@ interface BackupManifest {
 export class BackupService {
   constructor(private state: State) {}
   async create() {
+    const resume = await this.state.artifactContents.pauseMaintenance();
+    try { return await this.createBackup(); } finally { resume(); }
+  }
+  private async createBackup() {
     const directory = join(this.state.dataDirectory, 'backups', `${new Date().toISOString().replace(/[:.]/g, '-')}-${id()}`);
     await mkdir(join(directory, 'artifacts'), { recursive: true });
     await this.state.storage.backup(join(directory, 'team.sqlite'));
@@ -25,11 +30,27 @@ export class BackupService {
     const snapshot = new Database(join(directory, 'team.sqlite'), { readonly: true });
     let resources: BackupResource[] = [];
     try {
+      const operation = snapshot.prepare('SELECT payload FROM tool_operations WHERE id = ?');
+      const text = snapshot.prepare('SELECT value FROM metadata WHERE key = ?');
+      const lookup = {
+        operation: (operationId: string) => {
+          const row = operation.get(operationId) as { payload: string } | undefined;
+          return row ? JSON.parse(row.payload) : undefined;
+        },
+        text: (key: string) => {
+          const row = text.get(key) as { value: string } | undefined;
+          return row ? JSON.parse(row.value) : undefined;
+        },
+      };
       const rows = snapshot.prepare('SELECT payload FROM artifacts').all() as { payload: string }[];
       for (const row of rows) {
         const artifact = JSON.parse(row.payload) as Artifact;
         const file = `artifacts/${artifact.id}`;
-        await copyFile(artifact.path, join(directory, file)); records.push({ id: artifact.id, file });
+        await this.state.artifactContents.withPinned(artifact, async () => {
+          if (artifact.contentSource) await writeFile(join(directory, file), await readArtifactBytes(artifact, lookup));
+          else await copyFile(artifact.path, join(directory, file));
+        });
+        records.push({ id: artifact.id, file });
       }
       resources = await collectBackupResources(snapshot, this.state.dataDirectory, directory);
     } catch (error) { snapshot.close(); await rm(directory, { recursive: true, force: true }); throw error; }
@@ -39,6 +60,10 @@ export class BackupService {
     return { path: directory };
   }
   async restore(path: string) {
+    const resume = await this.state.artifactContents.pauseMaintenance();
+    try { return await this.restoreBackup(path); } finally { resume(); }
+  }
+  private async restoreBackup(path: string) {
     if (!isAbsolute(path)) throw new Error('备份路径必须为绝对路径');
     const root = await realpath(path);
     const manifest = JSON.parse(await readFile(await backupFile(root, 'manifest.json'), 'utf8')) as BackupManifest;
@@ -56,9 +81,10 @@ export class BackupService {
       for (const record of manifest.artifacts) {
         const file = await backupFile(root, manifest.version === 1 ? record.file.replaceAll('\\', '/') : record.file);
         const row = source.prepare('SELECT payload FROM artifacts WHERE id = ?').get(record.id) as { payload: string } | undefined;
-        if (!row || createHash('sha256').update(await readFile(file)).digest('hex') !== (JSON.parse(row.payload) as Artifact).sha256) throw new Error('备份成果校验失败');
-        const name = (JSON.parse(row.payload) as Artifact).name;
-        const destination = join(restoreDirectory, `${id()}${extname(name)}`); await copyFile(file, destination); paths.set(record.id, destination);
+        if (!row) throw new Error('备份成果校验失败');
+        const artifact = JSON.parse(row.payload) as Artifact, bytes = await readFile(file);
+        if (bytes.length !== artifact.size || createHash('sha256').update(bytes).digest('hex') !== artifact.sha256) throw new Error('备份成果校验失败');
+        const destination = join(restoreDirectory, `${id()}${extname(artifact.name)}`); await writeFile(destination, bytes); paths.set(record.id, destination);
       }
       const hasStreamCursor = (source.prepare('PRAGMA table_info(messages)').all() as { name: string }[])
         .some(column => column.name === 'stream_sequence');
@@ -94,6 +120,7 @@ export class BackupService {
       const artifact = value as Artifact;
       const path = paths.get(artifact.id); if (!path) throw new Error('备份缺少成果文件');
       artifact.path = path; artifact.workingPath = undefined;
+      delete artifact.contentSource;
     }
     if (table === 'connections') { const connection = value as Connection; connection.status = 'untested'; connection.secretRef = undefined; }
     if (table === 'tool_connections') { const connection = value as ToolConnection; connection.status = 'untested'; connection.secretRef = undefined; }

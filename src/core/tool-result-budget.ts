@@ -28,10 +28,21 @@ export function prepareToolResultBudget(input: RunContext, references: ContextRe
           const args = page ? JSON.parse(call.arguments) as { artifactId?: string; offset?: number } : undefined;
           const reference = page ? typeof args?.artifactId === 'string' ? await references.readableArtifact(args.artifactId) : undefined
             : await references.preserveToolOutput(message);
-          if (reference) next = projectToolResult(message, { id: reference.id, ...(page ? { offset: args?.offset ?? 0 } : {}) }, limit, protocol, page);
+          if (reference) {
+            next = projectToolResult(message, { id: reference.id, ...(page ? { offset: args?.offset ?? 0 } : {}) }, limit, protocol, page);
+            if (next && !page && references.isProjection(message)) {
+              const value = JSON.parse(next.content);
+              delete value.previewOmission;
+              value.fullResult.arguments.offset = 0;
+              next = { ...next, content: JSON.stringify(value) };
+            }
+            if (next) references.registerProjection(next, reference);
+          }
         } catch { input.signal.throwIfAborted(); }
       }
-      if (next) { projected[batchStart + index] = next; changed = true; }
+      if (next) {
+        projected[batchStart + index] = next; changed = true;
+      }
       remaining = Math.max(0, remaining - (next ? estimateModelMessageTokens(next, protocol) : original));
     }
     return changed ? projected : undefined;

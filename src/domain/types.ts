@@ -104,6 +104,7 @@ export interface RunEvent {
 export interface RunEventPage { events: RunEvent[]; nextCursor?: number; }
 export interface ImageMetadata { mimeType: string; width: number; height: number; path: string; }
 export interface Artifact {
+  contentSource?: import('./artifact-content.js').ArtifactContentSource;
   id: string; name: string; path: string; mimeType: string; sha256: string; size: number;
   taskId?: string; botId?: string; conversationId: string; createdAt: string; source?: string;
   workingPath?: string;
