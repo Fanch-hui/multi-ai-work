@@ -1,5 +1,5 @@
 import type OpenAI from 'openai';
-import type { Response, ResponseOutputItem, ResponseOutputMessage, ResponseStreamEvent } from 'openai/resources/responses/responses';
+import type { Response, ResponseCreateParamsStreaming, ResponseOutputItem, ResponseOutputMessage, ResponseStreamEvent } from 'openai/resources/responses/responses';
 import type { ModelMessage, RunContext } from '../../domain/provider.js';
 import type { Usage } from '../../domain/types.js';
 import { responsesInput } from './messages.js';
@@ -7,6 +7,7 @@ import { markPartialOutput } from './retry.js';
 import { resolveMessageImages } from '../images.js';
 import { ModelRequest } from './request.js';
 import { InterruptedModelStreamError } from './request-errors.js';
+import type { ResponsesCacheDiagnostics } from './cache-diagnostics.js';
 
 export interface Turn { message: ModelMessage; usage?: Usage; }
 export class ResponsesAccumulator {
@@ -90,29 +91,35 @@ export class ResponsesAccumulator {
     });
   }
 }
-export async function responsesTurn(client: OpenAI, context: RunContext, messages: ModelMessage[]): Promise<Turn> {
+export async function responsesTurn(client: OpenAI, context: RunContext, messages: ModelMessage[],
+  diagnostics?: ResponsesCacheDiagnostics, requestId = context.runId): Promise<Turn> {
   const request = new ModelRequest(context);
   let partialOutput = false;
   try {
     const images = await resolveMessageImages({ ...context, signal: request.signal }, messages);
     request.signal.throwIfAborted();
-    const stream = await client.responses.create({
+    const body: ResponseCreateParamsStreaming = {
       model: context.bot.model, instructions: context.instructions, input: responsesInput(messages, images), store: false, stream: true,
       include: ['reasoning.encrypted_content'],
       ...(context.bot.reasoning ? { reasoning: { effort: context.bot.reasoning as 'low' | 'medium' | 'high' } } : {}),
       tools: context.tools.map(tool => ({ type: 'function', name: tool.name, description: tool.description, parameters: tool.inputSchema, strict: false })),
-    }, { signal: request.signal });
+    };
+    const trace = diagnostics?.begin(context, requestId, body);
+    const stream = await client.responses.create({ ...body, ...trace?.options }, { signal: request.signal });
     const accumulator = new ResponsesAccumulator(context.emit);
+    let completed: Response | undefined;
     for await (const event of stream) {
       if (event.type.startsWith('response.output_') || event.type.startsWith('response.content_part.')
         || event.type.startsWith('response.function_call_arguments.') || event.type.startsWith('response.reasoning_')
         || ('response' in event && event.response.output.length > 0)) partialOutput = true;
       request.activity(event.type, partialOutput);
       accumulator.accept(event);
-      if (event.type === 'response.completed') break;
+      if (event.type === 'response.completed') { completed = event.response; break; }
     }
     request.signal.throwIfAborted();
-    return accumulator.finish();
+    const turn = accumulator.finish();
+    if (completed) trace?.complete(completed);
+    return turn;
   } catch (error) { throw markPartialOutput(request.error(error), partialOutput); }
   finally { request.close(); }
 }

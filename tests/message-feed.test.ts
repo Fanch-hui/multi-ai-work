@@ -227,6 +227,14 @@ describe('conversation message feed', () => {
 });
 
 describe('working member activity', () => {
+  it('keeps cache diagnostics out of the visible working status', () => {
+    const owner = task('member'), current = run('member');
+    const diagnostics = event('cache', { type: 'status', data: { phase: 'model-cache-response' } });
+    expect(agentActivity(owner, current, [event('text', { type: 'text' }), diagnostics], true)).toBe('正在为你整理答复');
+    expect(agentActivity(owner, current, [event('retry', { type: 'status', data: { phase: 'model-retry' } }), diagnostics]))
+      .toBe('正在恢复连接');
+  });
+
   it('follows the current real process and tool state rather than an old start event', () => {
     const owner = task('member'), current = run('member');
     const process: ProcessRecord = { id: 'process', taskId: 'member', runId: 'member', botId: 'member',

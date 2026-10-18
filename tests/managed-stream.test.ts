@@ -20,6 +20,33 @@ const delta = (text = answer) => ({ type: 'response.output_text.delta', output_i
 const done = (item: unknown, index: number) => ({ type: 'response.output_item.done', output_index: index, item });
 
 describe('managed protocol completion and retained answers', () => {
+  it('compares completed Responses requests across a tool round and a failed retry', async () => {
+    const call = { type: 'function_call', id: 'function1', call_id: 'call1', name: 'read', arguments: '{}', status: 'completed' };
+    const server = await fixture((_request, index) => {
+      if (index === 1) return [terminal([], 'response.failed', 'failed')];
+      const event = terminal(index === 0 ? [call] : [output()]);
+      return [{ ...event, response: { ...event.response, id: `resp_${index}`, model: 'gpt-6.1-sol',
+        prompt_cache_diagnostics: index === 0 ? undefined : { type: 'cache_hit' },
+        usage: { ...event.response.usage, input_tokens_details: { cached_tokens: index === 0 ? 0 : 1024 } } } }];
+    });
+    const events: ProviderEvent[] = [];
+    const result = await runManaged(createClient(server.url), { ...context(events),
+      connection: { provider: 'chatgpt' } as RunContext['connection'], bot: { model: 'gpt-6.1-sol' } as RunContext['bot'],
+      tools: [{ name: 'read', description: 'Read', inputSchema: { type: 'object' } }] }, 'responses', [0]);
+    expect(server.requests[0]).not.toHaveProperty('prompt_cache_options');
+    expect(server.requests.slice(1).map(request => request.prompt_cache_options)).toEqual([
+      { comparison_response_id: 'resp_0' }, { comparison_response_id: 'resp_0' },
+    ]);
+    const requests = events.filter(event => event.data.phase === 'model-cache-request');
+    expect(requests.map(event => event.data.requestId)).toEqual(['run:1', 'run:2', 'run:3']);
+    expect(requests[2].data).toMatchObject({ baselineRequestId: 'run:1', inputPrefixUnchanged: true, changedFields: [] });
+    const responses = events.filter(event => event.data.phase === 'model-cache-response');
+    expect(responses.map(event => event.data.responseId)).toEqual(['resp_0', 'resp_2']);
+    expect(responses[1].data.diagnostics).toEqual({ type: 'cache_hit' });
+    expect(result.usage).toMatchObject({ inputTokens: 2228, cachedInputTokens: 1024 });
+    expect(events.filter(event => event.data.phase === 'model-response')).toHaveLength(2);
+  });
+
   it('uses official completed output without a convenience output_text property', async () => {
     const server = await fixture(() => [delta(), terminal([output()])]);
     const events: ProviderEvent[] = [];

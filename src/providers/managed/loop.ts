@@ -6,6 +6,7 @@ import { SupplementalInputError } from './request.js';
 import { ManagedRunState } from './progress.js';
 import { completeToolBatch } from './loop-tools.js';
 import { requestManagedTurn } from './loop-request.js';
+import { ResponsesCacheDiagnostics } from './cache-diagnostics.js';
 
 export async function runManaged(client: OpenAI, context: RunContext, protocol: Protocol,
   retryDelays?: readonly number[]): Promise<ProviderResult> {
@@ -13,7 +14,7 @@ export async function runManaged(client: OpenAI, context: RunContext, protocol: 
   let usage: Usage | undefined;
   let modelDurationMs = 0;
   let requestStep = 0;
-  const requestOptions = { retryDelays, recovered: false, nextStep: () => ++requestStep,
+  const requestOptions = { retryDelays, recovered: false, cacheDiagnostics: new ResponsesCacheDiagnostics(), nextStep: () => ++requestStep,
     recordDuration: (durationMs: number) => { modelDurationMs += durationMs; } };
   const result = (waiting = false): ProviderResult => ({ text: state.text, usage, messages: state.archiveMessages(), contextMessages: state.messages, modelDurationMs,
     ...(waiting ? { outcome: 'waiting_input' } : {}) });

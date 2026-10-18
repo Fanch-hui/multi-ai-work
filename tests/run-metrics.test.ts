@@ -90,6 +90,10 @@ describe('persisted run records', () => {
       const first = event('first', 'a', 'status', { phase: 'model-response', requestId: 'a:1', step: 1, durationMs: 1000,
         usage: { source: 'reported', inputTokens: 100, outputTokens: 20, cachedInputTokens: 80 } });
       request('a:1', 1); recordRunEvent(storage, first); recordRunEvent(storage, { ...first, id: 'repeated' });
+      recordRunEvent(storage, event('cache-request', 'a', 'status', { phase: 'model-cache-request', requestId: 'a:1' }));
+      recordRunEvent(storage, event('cache-response', 'a', 'status', { phase: 'model-cache-response', requestId: 'a:1',
+        inputTokens: 100, cachedInputTokens: 80, diagnostics: { type: 'cache_hit' } }));
+      expect(storage.runEvents('a').events.some(event => event.data.phase === 'model-cache-response')).toBe(true);
       request('a:2', 2);
       recordRunEvent(storage, event('failed', 'a', 'status', { phase: 'model-error', requestId: 'a:2', step: 2, durationMs: 500 }));
       request('summary:1', 1, 'compaction');
@@ -104,7 +108,7 @@ describe('persisted run records', () => {
           usage: { inputTokens: 160, outputTokens: 32, source: 'reported' },
           cache: { inputTokens: 150, cachedInputTokens: 80, requests: 2 },
           rate: { outputTokens: 30, durationMs: 1500, requests: 2, source: 'reported' } } });
-      expect(storage.runEvents('a').events).toHaveLength(9);
+      expect(storage.runEvents('a').events).toHaveLength(11);
     } finally { storage.close(); }
   });
 
