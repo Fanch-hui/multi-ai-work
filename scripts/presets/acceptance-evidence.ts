@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { copyFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readdir, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { z } from 'zod';
 import type { AgentPreset } from '../../src/domain/market.js';
@@ -42,13 +42,13 @@ export async function saveWorkspace(source: string, destination: string) {
     else if (entry.isFile()) await copyFile(from, to);
   }
 }
-async function collectArtifacts(core: CoreService, task: Task, output: string) {
+async function collectArtifacts(core: Pick<CoreService, 'state'>, task: Task, output: string) {
   const artifacts = core.state.storage.all<Artifact>('artifacts').filter(item => item.taskId === task.id);
   const result = [];
   for (const [index, artifact] of artifacts.entries()) {
     const name = `${index + 1}-${basename(artifact.name)}`;
-    await copyFile(artifact.path, join(output, name));
-    const bytes = await readFile(join(output, name));
+    const bytes = await core.state.artifactContents.read(artifact);
+    await writeFile(join(output, name), bytes, { mode: 0o600 });
     const readable = ['text/plain', 'text/markdown', 'application/json'].includes(artifact.mimeType)
       && bytes.length > 0 && !bytes.includes(0);
     result.push({ name, mimeType: artifact.mimeType, bytes: bytes.length,
@@ -56,7 +56,7 @@ async function collectArtifacts(core: CoreService, task: Task, output: string) {
   }
   return result;
 }
-export async function saveEvidence(core: CoreService, preset: AgentPreset, fixture: Fixture,
+export async function saveEvidence(core: Pick<CoreService, 'state'>, preset: AgentPreset, fixture: Fixture,
   task: Task, output: string, model: string, durationMs: number, provider: ProviderKind = 'qoder') {
   await mkdir(output, { recursive: true });
   const operations = core.state.storage.all<Operation>('tool_operations').filter(item => task.runIds.includes(item.runId));
