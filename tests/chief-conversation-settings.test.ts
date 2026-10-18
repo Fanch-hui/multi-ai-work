@@ -6,15 +6,15 @@ import { eventually, setup } from './core-harness.js';
 afterEach(() => configureProviderFetch((input, init) => fetch(input, init)));
 
 describe('主管会话模型与推理设置', () => {
-  it('旧目录没有档位时不继承隐藏的旧推理设置，显式默认覆盖 Chief 档位', async () => {
+  it.each(['custom', 'chatgpt'] as const)('%s 主对话按连接能力继承推理设置，显式默认覆盖 Chief 档位', async provider => {
     const { core, connection } = await setup(async () => ({ text: '完成' }));
     core.scheduler.pause();
-    core.state.storage.put('connections', { ...connection, status: 'ready', models: [{ id: 'test', name: '测试' }] });
+    core.state.storage.put('connections', { ...connection, provider, status: 'ready', models: [{ id: 'test', name: '测试' }] });
     const chief = core.state.storage.get<Bot>('bots', core.state.settings().mainBotId!)!;
     core.state.storage.put('bots', { ...chief, connectionId: connection.id, model: 'test', reasoning: 'high' });
     const legacy = await core.request('chief.conversations.create', { name: '旧配置' }) as Conversation;
-    expect(legacy.reasoning).toBeUndefined();
-    core.state.storage.put('connections', { ...connection, status: 'ready', models: [{ id: 'test', name: '测试', reasoning: ['high'] }] });
+    expect(legacy.reasoning).toBe(provider === 'custom' ? 'high' : undefined);
+    core.state.storage.put('connections', { ...connection, provider, status: 'ready', models: [{ id: 'test', name: '测试', reasoning: ['high'] }] });
     const inherited = await core.request('chief.conversations.create', { name: '继承支持的档位' }) as Conversation;
     expect(inherited.reasoning).toBe('high');
     const automatic = await core.request('chief.conversations.create', { name: '显式默认', reasoning: '' }) as Conversation;

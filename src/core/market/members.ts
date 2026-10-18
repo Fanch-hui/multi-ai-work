@@ -7,8 +7,12 @@ import { required, publicError } from '../errors.js';
 import { loadWorkspaceDependencies } from '../../tools/office-runtime.js';
 import { combinedInstructions, requireIdleBot, validateBotSkills } from './bot-policy.js';
 import { qoderServiceNames } from '../../domain/qoder-services.js';
+import { avatarSchema } from '../avatars.js';
 
 const configurationSchema = z.object({ name: z.string().trim().min(1).max(120).optional(),
+  role: z.string().max(200).optional(), avatar: avatarSchema.optional(), color: z.string().optional(),
+  contextWindow: z.number().int().min(1024).optional(), compactionThreshold: z.number().int().min(10).max(95).optional(),
+  memoryMode: z.enum(['off', 'manual', 'propose']).optional(), skillIds: z.array(z.string()).max(100).optional(),
   connectionId: z.string().min(1), model: z.string().trim().min(1), reasoning: z.string().optional(),
   toolNames: z.array(z.string()).max(100), approvalMode: z.enum(['ask', 'auto']),
   qoderServices: z.array(z.enum(qoderServiceNames)).max(5).optional(),
@@ -46,8 +50,9 @@ export class PresetMembers {
     this.installation(installation.id);
     const bot = s.transaction(() => {
       const saved = this.entities.saveBot({ ...config, name: config.name ?? installation.preset.name,
-        role: installation.preset.role, instructions: combinedInstructions(installation.preset.instructions, config.personalInstructions),
-        color: '#2563eb', avatar: 'cat', memoryMode: 'propose', skillIds: installation.skillIds }, installation.skillIds);
+        role: config.role ?? installation.preset.role, instructions: combinedInstructions(installation.preset.instructions, config.personalInstructions),
+        color: config.color ?? '#2563eb', avatar: config.avatar ?? 'cat', memoryMode: config.memoryMode ?? 'propose',
+        skillIds: [...new Set([...installation.skillIds, ...config.skillIds ?? []])] }, installation.skillIds);
       const member: Bot = { ...saved, personalInstructions: config.personalInstructions,
         preset: { installationId: installation.id, presetId: installation.preset.id, version: installation.preset.version,
           source: installation.source, baseInstructions: installation.preset.instructions, managedSkillIds: installation.skillIds } };

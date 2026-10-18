@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { Bot, Connection, Conversation, Settings } from '../domain/types.js';
 import { isChiefProvider } from '../domain/chief-provider.js';
+import { isReasoningSupported } from '../domain/model-reasoning.js';
 import type { State } from './state.js';
 import type { TeamService } from './team.js';
 import type { Storage } from './storage.js';
@@ -34,7 +35,7 @@ export function completeOnboarding(state: State, team: TeamService, input: unkno
     const { workspaceId, ...config } = fields;
     const connection = required(s.get<Connection>('connections', config.connectionId), '连接不存在');
     if (!isChiefProvider(connection.provider)) throw new Error('管家请选择 ChatGPT 或自定义 API 连接');
-    if (config.reasoning && !connection.models.find(model => model.id === config.model)?.reasoning?.includes(config.reasoning))
+    if (!isReasoningSupported(connection.provider, connection.models.find(model => model.id === config.model), config.reasoning ?? ''))
       throw new Error('所选模型不支持此推理强度');
     required(s.get('workspaces', workspaceId), '工作目录不存在');
     const chief = team.configureChief({ ...config, reasoning: config.reasoning || undefined });

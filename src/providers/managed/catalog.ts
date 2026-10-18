@@ -22,8 +22,10 @@ function record(value: unknown): CatalogRecord | undefined {
 }
 
 function reasoningOptions(model: CatalogRecord): string[] | undefined {
+  const reasoning = record(model.reasoning);
+  const effort = record(model.effort);
   const options = [model.supported_reasoning_levels, model.supported_reasoning_efforts,
-    model.supportedReasoningEfforts, model.reasoning_efforts];
+    model.supportedReasoningEfforts, model.reasoning_efforts, reasoning?.supported_efforts, effort?.supported_levels];
   if (!options.some(Array.isArray)) return undefined;
   const values = options.flatMap(options => Array.isArray(options) ? options : []).map(option => {
     const item = record(option);

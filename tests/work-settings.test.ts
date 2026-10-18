@@ -58,6 +58,23 @@ describe('工作设置和权限迁移', () => {
       connectionId: connection.id, model: 'test', toolNames, approvalMode: 'ask' });
     expect(permissionPreset(member.toolNames, member.approvalMode ?? 'ask', false)).toBe('read');
   });
+  it('新建与管家创建成员默认完整自主执行，编辑保留用户权限', async () => {
+    const { core, connection } = await setup(async () => ({ text: '完成' }));
+    const member = core.entities.saveBot({ name: '新成员', role: '工作', instructions: '',
+      connectionId: connection.id, model: 'test' });
+    const delegated = core.team.configureMember({ name: '管家创建成员', connectionId: connection.id, model: 'test' });
+    for (const bot of [member, delegated]) {
+      expect(permissionPreset(bot.toolNames, bot.approvalMode!, false)).toBe('full');
+      expect(bot.toolConnectionIds).toEqual([]);
+    }
+    const limited = core.entities.saveBot({ ...member, toolNames: readOnlyToolNames(false), approvalMode: 'ask' });
+    const { toolNames: _, approvalMode: __, ...fields } = limited;
+    const updated = core.entities.saveBot({ ...fields, name: '改名' });
+    expect(permissionPreset(updated.toolNames, updated.approvalMode!, false)).toBe('read');
+    expect(core.team.configureMember({ id: limited.id, role: '新职责' })).toMatchObject({
+      toolNames: limited.toolNames, approvalMode: 'ask',
+    });
+  });
   it('原有完整工具授权使用自主执行，自定义权限和后续审批选择保持有效', async () => {
     const { core, bot } = await setup(async () => ({ text: '完成' }));
     const complete = bot('完整成员', fullToolNames(false)), limited = bot('限定成员', ['read_file']);

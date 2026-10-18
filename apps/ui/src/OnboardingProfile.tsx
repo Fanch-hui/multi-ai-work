@@ -6,6 +6,8 @@ import type { Mutate } from './store.js';
 import { Button, ErrorNote, Field, inputClass } from './components.js';
 import { choosePath, errorMessage } from './api.js';
 import { ContextBudgetFields } from './ContextBudgetFields.js';
+import { ReasoningField } from './ReasoningField.js';
+import { isReasoningSupported } from '../../../src/domain/model-reasoning.js';
 
 export function OnboardingProfile({ data, connection, mutate, busy, onSubmit }: {
   data: Snapshot; connection: Connection; mutate: Mutate; busy: boolean;
@@ -20,7 +22,8 @@ export function OnboardingProfile({ data, connection, mutate, busy, onSubmit }: 
   const [workspaceId, setWorkspace] = useState(data.workspaces[0]?.id || '');
   const [choosing, setChoosing] = useState(false);
   const [error, setError] = useState('');
-  const options = connection.models.find(item => item.id === model)?.reasoning || [];
+  const modelInfo = connection.models.find(item => item.id === model);
+  const selectedReasoning = isReasoningSupported(connection.provider, modelInfo, reasoning) ? reasoning : '';
   async function addDirectory() {
     setChoosing(true); setError('');
     try {
@@ -35,7 +38,7 @@ export function OnboardingProfile({ data, connection, mutate, busy, onSubmit }: 
   }
   function submit(event: FormEvent) {
     event.preventDefault();
-    void onSubmit({ name, connectionId: connection.id, model, reasoning, workspaceId,
+    void onSubmit({ name, connectionId: connection.id, model, reasoning: selectedReasoning, workspaceId,
       contextWindow: contextWindow ? Number(contextWindow) : undefined, compactionThreshold: Number(compactionThreshold) });
   }
   return <form onSubmit={submit} className="grid gap-4">
@@ -43,12 +46,10 @@ export function OnboardingProfile({ data, connection, mutate, busy, onSubmit }: 
       <Field label="管家的名字"><input autoComplete="off" className={inputClass} required maxLength={120} value={name} onChange={event => setName(event.target.value)} /></Field>
       <Field label="模型">{connection.models.length ? <select className={inputClass} required value={model} onChange={event => { setModel(event.target.value); setReasoning(''); }}>
         <option value="">选择一个模型</option>{connection.models.map(item => <option key={item.id} value={item.id}>{item.name || item.id}</option>)}
-      </select> : <input className={inputClass} required placeholder="输入服务支持的模型 ID" value={model} onChange={event => setModel(event.target.value)} />}</Field>
-      {!!options.length && <Field label="推理强度"><select className={inputClass} value={reasoning} onChange={event => setReasoning(event.target.value)}>
-        <option value="">默认</option>{options.map(value => <option key={value} value={value}>{value}</option>)}
-      </select></Field>}
+      </select> : <input className={inputClass} required placeholder="输入服务支持的模型 ID" value={model} onChange={event => { setModel(event.target.value); setReasoning(''); }} />}</Field>
+      <ReasoningField provider={connection.provider} model={modelInfo} value={reasoning} onChange={setReasoning} />
       <div className="grid items-start gap-4 sm:grid-cols-2"><ContextBudgetFields provider={connection.provider}
-        model={connection.models.find(item => item.id === model)} contextWindow={contextWindow} onContextWindowChange={setContextWindow}
+        model={modelInfo} contextWindow={contextWindow} onContextWindowChange={setContextWindow}
         compactionThreshold={compactionThreshold} onCompactionThresholdChange={setCompactionThreshold} /></div>
       <Field label="工作目录" hint="管家在这里处理资料并保存成果。"><div className="flex gap-2">
         <select className={inputClass} required value={workspaceId} onChange={event => setWorkspace(event.target.value)}>

@@ -5,6 +5,8 @@ import type { Mutate } from "./store.js";
 import { choosePath, errorMessage } from "./api.js";
 import { Button, ErrorNote, Field, Modal, activeTask, inputClass } from "./components.js";
 import { isChiefProvider } from "../../../src/domain/chief-provider.js";
+import { isReasoningSupported } from "../../../src/domain/model-reasoning.js";
+import { ReasoningField } from "./ReasoningField.js";
 
 export function ChiefConversationEditor({ data, mutate, close, created, configureChief, conversation }: {
   data: Snapshot; mutate: Mutate; close: () => void; created?: (id: string) => void; configureChief: () => void; conversation?: Conversation;
@@ -19,8 +21,7 @@ export function ChiefConversationEditor({ data, mutate, close, created, configur
   const [loadingCatalog, setLoadingCatalog] = useState(!!conversation);
   const [error, setError] = useState("");
   const modelInfo = connection?.models.find((item) => item.id === model);
-  const reasoningOptions = modelInfo?.reasoning || [];
-  const selectedReasoning = reasoningOptions.includes(reasoning) ? reasoning : "";
+  const selectedReasoning = isReasoningSupported(connection?.provider, modelInfo, reasoning) ? reasoning : "";
   const ready = !!chief && (!!conversation || !!chief.model?.trim()) && connection?.status === "ready" && isChiefProvider(connection.provider);
   const running = !!conversation && data.tasks.some((task) => task.conversationId === conversation.id && task.kind !== "memory-review" && activeTask(task.status));
   const editing = !!conversation;
@@ -65,12 +66,7 @@ export function ChiefConversationEditor({ data, mutate, close, created, configur
             <option value="">选择模型</option>{connection.models.map((item) => <option key={item.id} value={item.id}>{item.name || item.id}</option>)}
           </select> : <input required className={inputClass} value={model} onChange={(event) => { setModel(event.target.value); setReasoning(""); }} placeholder="模型 ID" />}
         </Field>
-        <Field label="推理强度"><select className={inputClass} value={selectedReasoning} disabled={loadingCatalog || !reasoningOptions.length}
-          title={modelInfo?.reasoningSource === "official-catalog" ? "选项来自 OpenAI 官方模型目录" : "选项来自连接返回的模型目录"}
-          onChange={(event) => setReasoning(event.target.value)}>
-          <option value="">{loadingCatalog ? "正在读取模型目录…" : reasoningOptions.length ? "默认" : "默认（模型未提供可选档位）"}</option>
-          {reasoningOptions.map((level) => <option key={level} value={level}>{level}</option>)}
-        </select></Field></>}
+        <ReasoningField provider={connection.provider} model={modelInfo} value={reasoning} onChange={setReasoning} disabled={loadingCatalog} /></>}
         {!conversation && <><Field label="工作区"><div className="flex gap-2"><select required className={inputClass} value={workspaceId} onChange={(event) => setWorkspace(event.target.value)}>
           <option value="">选择目录</option>{data.workspaces.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
         </select><Button type="button" disabled={busy} onClick={() => void addDirectory()} aria-label="添加工作目录" title="添加工作目录"><FolderPlus size={17} /></Button></div></Field>

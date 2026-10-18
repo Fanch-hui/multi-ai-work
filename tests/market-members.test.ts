@@ -25,6 +25,31 @@ async function prepare(preset = fixturePreset()) {
 }
 
 describe('preset members', () => {
+  it('persists the complete hiring configuration and combines only authorized extra skills', async () => {
+    const { core, root, installed, configuration } = await prepare();
+    const source = join(root, 'hiring-skill'); await mkdir(source);
+    await writeFile(join(source, 'SKILL.md'), '---\nname: extra\ndescription: 额外技能\n---\n保留原始出处。');
+    const extra = await importSkillPackage(core.state, join(source, 'SKILL.md'));
+    const [result] = await core.request('market.members.create', { items: [{ requestId: 'full-config', installationId: installed.id,
+      configuration: { ...configuration, name: '我的助手', role: '定制职责', avatar: 'owl', color: '#047857',
+        contextWindow: 64000, compactionThreshold: 70, memoryMode: 'off', skillIds: [extra.id], approvalMode: 'auto' } }] }) as PresetMemberResult[];
+    expect(result?.error).toBeUndefined();
+    const member = core.state.storage.get<Bot>('bots', result!.botId!)!;
+    expect(member).toMatchObject({ name: '我的助手', role: '定制职责', avatar: 'owl', color: '#047857',
+      contextWindow: 64000, compactionThreshold: 70, memoryMode: 'off', approvalMode: 'auto', personalInstructions: '以中文回答' });
+    expect(member.skillIds).toEqual([...installed.skillIds, extra.id]);
+    expect(member.preset?.managedSkillIds).toEqual(installed.skillIds);
+    expect(member.instructions).toContain(installed.preset.instructions);
+    expect(member.instructions).toContain('以中文回答');
+
+    for (const fields of [{ contextWindow: 512 }, { compactionThreshold: 96 }, { skillIds: ['missing-skill'] }]) {
+      const [invalid] = await core.request('market.members.create', { items: [{ requestId: JSON.stringify(fields), installationId: installed.id,
+        configuration: { ...configuration, ...fields } }] }) as PresetMemberResult[];
+      expect(invalid?.error).toBeTruthy();
+      expect(invalid?.botId).toBeUndefined();
+    }
+  });
+
   it('keeps preset skills with bound members and permits separately imported shared skills', async () => {
     const { core, root, installed, add, bot } = await prepare();
     const skillId = installed.skillIds[0]!;

@@ -1,4 +1,4 @@
-import type { ApprovalMode, QoderService } from './types.js';
+import type { ApprovalMode, Bot, QoderService } from './types.js';
 
 export interface Profession { id: string; name: string; }
 export const professions: Profession[] = [
@@ -47,7 +47,9 @@ export interface MarketState {
   preferences: CareerPreferences; catalogConfigured: boolean; refreshedAt?: string;
 }
 export interface PresetMemberConfiguration {
-  name?: string; connectionId: string; model: string; reasoning?: string;
+  name?: string; role?: string; avatar?: string; color?: string;
+  connectionId: string; model: string; reasoning?: string;
+  contextWindow?: number; compactionThreshold?: number; memoryMode?: Bot['memoryMode']; skillIds?: string[];
   toolNames: string[]; approvalMode: ApprovalMode; toolConnectionIds: string[];
   qoderServices?: QoderService[];
   personalInstructions?: string;

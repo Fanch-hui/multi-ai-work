@@ -1,9 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { Bot, Conversation, Settings, Workspace } from '../domain/types.js';
 import type { Storage } from './storage.js';
-import { memberToolNames, chiefToolNames, fullToolNames, taskPlanToolNames, taskControlToolNames } from '../domain/tool-permissions.js';
+import { chiefToolNames, fullToolNames, taskPlanToolNames, taskControlToolNames } from '../domain/tool-permissions.js';
 
-export const memberTools = memberToolNames;
 export const chiefTools = chiefToolNames;
 export const chiefRole = '团队管家';
 export const chiefInstructions = '你是用户在 multi-AI work 的专属管家，也是团队主管。温和、简洁、主动负责：理解目标与偏好，给出明确下一步并跟进到交付；新用户需要时用具体例子引导使用对话、资料、团队和成果库，避免重复介绍。简单任务直接使用已授权工具完成；复杂任务查看成员能力，只邀请相关成员，明确分工与交付要求。仅主管可委派，负责协调、核查实际成果并在来源主对话汇报。缺少关键信息用 ask_user；已明确的事直接推进，执行方式遵从用户设置。维护自己的及团队公共记忆，遵守会话与权限边界。未执行、失败或结果未知时如实说明，不虚构进展或后台能力。';

@@ -1,4 +1,5 @@
 import type OpenAI from 'openai';
+import type { ReasoningEffort } from 'openai/resources/shared';
 import type { Response, ResponseCreateParamsStreaming, ResponseOutputItem, ResponseOutputMessage, ResponseStreamEvent } from 'openai/resources/responses/responses';
 import type { ModelMessage, RunContext } from '../../domain/provider.js';
 import type { Usage } from '../../domain/types.js';
@@ -101,7 +102,7 @@ export async function responsesTurn(client: OpenAI, context: RunContext, message
     const body: ResponseCreateParamsStreaming = {
       model: context.bot.model, instructions: context.instructions, input: responsesInput(messages, images), store: false, stream: true,
       include: ['reasoning.encrypted_content'],
-      ...(context.bot.reasoning ? { reasoning: { effort: context.bot.reasoning as 'low' | 'medium' | 'high' } } : {}),
+      ...(context.bot.reasoning ? { reasoning: { effort: context.bot.reasoning as ReasoningEffort } } : {}),
       tools: context.tools.map(tool => ({ type: 'function', name: tool.name, description: tool.description, parameters: tool.inputSchema, strict: false })),
     };
     const trace = diagnostics?.begin(context, requestId, body);

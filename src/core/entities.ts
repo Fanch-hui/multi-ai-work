@@ -7,8 +7,8 @@ import { Vault } from '../security/vault.js';
 import { detectNativeSetup } from '../providers/native/setup.js';
 import { required } from './errors.js';
 import { avatarSchema } from './avatars.js';
-import { chiefInstructions, chiefRole, memberTools } from './chief.js';
-import { chiefOnlyTools } from '../domain/tool-permissions.js';
+import { chiefInstructions, chiefRole } from './chief.js';
+import { chiefOnlyTools, fullToolNames } from '../domain/tool-permissions.js';
 import { qoderServiceNames } from '../domain/qoder-services.js';
 import { assertSkillAssignment, importSkillPackage } from './skills.js';
 import { isChiefProvider } from '../domain/chief-provider.js';
@@ -82,7 +82,7 @@ export class EntityService {
     const maximum = model?.maxContextWindow ?? (connection.provider === 'chatgpt' ? undefined : model?.contextWindow);
     if (!native && parsed.contextWindow && maximum && parsed.contextWindow > maximum)
       throw new Error('上下文窗口不能超过模型支持的范围');
-    if (parsed.reasoning && model?.reasoning?.length && !model.reasoning.includes(parsed.reasoning)) throw new Error('所选模型不支持此推理强度');
+    if (parsed.reasoning && model?.reasoning !== undefined && !model.reasoning.includes(parsed.reasoning)) throw new Error('所选模型不支持此推理强度');
     const window = parsed.contextWindow ?? defaultContextWindow(connection.provider, model);
     const reserve = parsed.outputReserve;
     if (!native && window && reserve !== undefined && reserve >= window) throw new Error('回复预留须小于上下文窗口');
@@ -92,8 +92,8 @@ export class EntityService {
     validateBotSkills(this.state, parsed);
     assertSkillAssignment(this.state, parsed.skillIds, [...old?.skillIds ?? [], ...presetSkillIds]);
     const chief = botId === this.state.settings().mainBotId;
-    const toolNames = [...new Set(parsed.toolNames ?? old?.toolNames ?? memberTools)].filter(name => chief || !chiefOnlyTools.includes(name));
-    const bot: Bot = { ...parsed, preset: old?.preset, toolNames, approvalMode: parsed.approvalMode ?? old?.approvalMode ?? 'ask',
+    const toolNames = [...new Set(parsed.toolNames ?? old?.toolNames ?? fullToolNames(chief))].filter(name => chief || !chiefOnlyTools.includes(name));
+    const bot: Bot = { ...parsed, preset: old?.preset, toolNames, approvalMode: parsed.approvalMode ?? old?.approvalMode ?? 'auto',
       qoderServices: parsed.qoderServices ?? old?.qoderServices,
       id: botId, revision: (old?.revision ?? 0) + 1, archived: false };
     this.state.storage.put('bots', bot); this.state.syncMainTeam(); this.state.changed(); return bot;

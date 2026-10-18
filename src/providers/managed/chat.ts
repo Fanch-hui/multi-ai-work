@@ -1,4 +1,5 @@
 import type OpenAI from 'openai';
+import type { ReasoningEffort } from 'openai/resources/shared';
 import type { ChatCompletionChunk } from 'openai/resources/chat/completions/completions';
 import type { RunContext, ModelMessage } from '../../domain/provider.js';
 import type { Usage } from '../../domain/types.js';
@@ -52,7 +53,7 @@ export async function chatTurn(client: OpenAI, context: RunContext, messages: Mo
     request.signal.throwIfAborted();
     const stream = await client.chat.completions.create({ model: context.bot.model,
       messages: chatInput(messages, context.instructions, images), stream: true, stream_options: { include_usage: true },
-      ...(context.bot.reasoning ? { reasoning_effort: context.bot.reasoning as 'low' | 'medium' | 'high' } : {}),
+      ...(context.bot.reasoning ? { reasoning_effort: context.bot.reasoning as ReasoningEffort } : {}),
       tools: context.tools.map(tool => ({ type: 'function', function: { name: tool.name, description: tool.description, parameters: tool.inputSchema } })),
     }, { signal: request.signal });
     for await (const chunk of stream) {

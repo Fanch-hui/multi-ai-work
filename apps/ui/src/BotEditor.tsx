@@ -5,15 +5,16 @@ import type { Mutate } from "./store.js";
 import { errorMessage } from "./api.js";
 import { Button, Confirm, ErrorNote, Field, Modal, cn, inputClass } from "./components.js";
 import { BotTools } from "./BotTools.js";
-import { defaultToolNames } from "../../../src/domain/tool-permissions.js";
+import { fullToolNames } from "../../../src/domain/tool-permissions.js";
 import { enabledQoderServices } from "../../../src/domain/qoder-services.js";
 import { AntigravityPermissionsGuide, NativeContextGuide } from "./NativeContextGuide.js";
 import { AvatarPicker } from "./AvatarPicker.js";
 import { isChiefProvider } from "../../../src/domain/chief-provider.js";
 import { DEFAULT_COMPACTION_THRESHOLD } from "../../../src/domain/context-settings.js";
 import { ContextBudgetFields } from "./ContextBudgetFields.js";
-import { skillsForMember } from "./skill-lists.js";
-const colors = ["#047857", "#2563eb", "#d97706", "#dc2626", "#475569"];
+import { ReasoningField } from "./ReasoningField.js";
+import { isReasoningSupported } from "../../../src/domain/model-reasoning.js";
+import { MemoryModeField, MemberColorField, MemberSkillsField } from "./BotSettingsFields.js";
 export function BotEditor({
   bot,
   data,
@@ -41,10 +42,10 @@ export function BotEditor({
   const [contextWindow, setContextWindow] = useState(bot?.contextWindow?.toString() || "");
   const [compactionThreshold, setCompactionThreshold] = useState(String(bot?.compactionThreshold ?? DEFAULT_COMPACTION_THRESHOLD));
   const [avatar, setAvatar] = useState(bot?.avatar || (main ? "owl" : "cat"));
-  const [color, setColor] = useState(bot?.color || colors[0]);
+  const [color, setColor] = useState(bot?.color || "#047857");
   const [memoryMode, setMemory] = useState<Bot["memoryMode"]>(bot?.memoryMode === "off" ? "off" : "propose");
-  const [toolNames, setTools] = useState(bot?.toolNames || defaultToolNames(main));
-  const [approvalMode, setApprovalMode] = useState<NonNullable<Bot["approvalMode"]>>(bot?.approvalMode || "ask");
+  const [toolNames, setTools] = useState(bot?.toolNames || fullToolNames(main));
+  const [approvalMode, setApprovalMode] = useState<NonNullable<Bot["approvalMode"]>>(bot?.approvalMode || "auto");
   const [toolConnectionIds, setToolConnections] = useState(bot?.toolConnectionIds || []);
   const [qoderServices, setQoderServices] = useState(bot?.qoderServices);
   const [skillIds, setSkills] = useState(bot?.skillIds || []);
@@ -53,9 +54,7 @@ export function BotEditor({
   const connection = readyConnections.find((item) => item.id === connectionId);
   const native = connection?.provider === "antigravity" || connection?.provider === "qoder";
   const selectedModel = connection?.models.find((item) => item.id === model);
-  const reasoningOptions = selectedModel?.reasoning || [];
-  const selectedReasoning = reasoningOptions.includes(reasoning) ? reasoning : "";
-  const availableSkills = skillsForMember(data.skills);
+  const selectedReasoning = isReasoningSupported(connection?.provider, selectedModel, reasoning) ? reasoning : "";
   async function save(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
@@ -88,8 +87,6 @@ export function BotEditor({
       setBusy(false);
     }
   }
-  const toggle = (items: string[], value: string) =>
-    items.includes(value) ? items.filter((item) => item !== value) : [...items, value];
   return (
     <Modal open onOpenChange={(open) => !open && close()} title={main ? "配置主智能体" : bot ? `编辑 ${bot.name}` : "新建智能体"} wide>
       <form className="grid gap-4" onSubmit={(event) => void save(event)}>
@@ -168,31 +165,8 @@ export function BotEditor({
             </select> : <input className={inputClass} required value={model} placeholder="输入服务支持的模型 ID"
               onChange={(event) => { setModel(event.target.value); setReasoning(""); }} />}
           </Field>
-          {reasoningOptions.length > 0 && <Field label="推理强度">
-            <select
-              className={inputClass}
-              title={selectedModel?.reasoningSource === "official-catalog" ? "选项来自 OpenAI 官方模型目录" : "选项来自连接返回的模型目录"}
-              value={selectedReasoning}
-              onChange={(event) => setReasoning(event.target.value)}
-            >
-              <option value="">默认</option>
-              {reasoningOptions.map((value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ))}
-            </select>
-          </Field>}
-          <Field label="记忆">
-            <select
-              className={inputClass}
-              value={memoryMode}
-              onChange={(event) => setMemory(event.target.value as Bot["memoryMode"])}
-            >
-              <option value="propose">自主管理</option>
-              <option value="off">关闭</option>
-            </select>
-          </Field>
+          <ReasoningField provider={connection?.provider} model={selectedModel} value={reasoning} onChange={setReasoning} />
+          <MemoryModeField value={memoryMode} change={setMemory} />
           {!native && <ContextBudgetFields provider={connection?.provider} model={selectedModel}
             contextWindow={contextWindow} onContextWindowChange={setContextWindow}
             compactionThreshold={compactionThreshold} onCompactionThresholdChange={setCompactionThreshold}
@@ -203,22 +177,7 @@ export function BotEditor({
           <p className="text-sm text-slate-500">先连接并登录模型供应商。</p>
           {configureConnection && <Button type="button" onClick={() => { close(); configureConnection(); }}>添加连接</Button>}
         </div>}
-        <fieldset>
-          <legend className="mb-2 text-sm font-medium text-slate-700">成员颜色</legend>
-          <div className="flex gap-2">
-            {colors.map((value) => (
-              <button
-                key={value}
-                type="button"
-                className={`size-7 rounded-full border-2 ${value === color ? "border-slate-900" : "border-transparent"}`}
-                style={{ backgroundColor: value }}
-                aria-label={`颜色 ${value}`}
-                aria-pressed={value === color}
-                onClick={() => setColor(value)}
-              />
-            ))}
-          </div>
-        </fieldset>
+        <MemberColorField value={color} change={setColor} />
         {connection?.provider === "antigravity" && <AntigravityPermissionsGuide />}
         <BotTools
           chief={main}
@@ -231,23 +190,7 @@ export function BotEditor({
           qoderServices={qoderServices}
           onQoderServicesChange={!main && connection?.provider === "qoder" ? setQoderServices : undefined}
         />
-        <fieldset>
-            <legend className="mb-2 text-sm font-medium text-slate-700">Skills</legend>
-            <p className="mb-3 text-xs text-slate-500">内置 Word、Excel、PPT、PDF 技能默认可用。勾选此成员需要使用的已导入技能；市场配套技能随成员保留。</p>
-            <div className="flex flex-wrap gap-4">
-              {!availableSkills.length && <p className="text-xs text-slate-400">尚未导入技能，可在设置中导入。</p>}
-              {availableSkills.map((item) => (
-                <label key={item.id} className="flex items-center gap-2 text-sm text-slate-600">
-                  <input
-                    type="checkbox"
-                    checked={skillIds.includes(item.id)}
-                    onChange={() => setSkills(toggle(skillIds, item.id))}
-                  />
-                  {item.name}{item.missing ? '（资源缺失，请重新导入）' : ''}
-                </label>
-              ))}
-            </div>
-        </fieldset>
+        <MemberSkillsField data={data} value={skillIds} change={setSkills} />
         <ErrorNote error={error} />
         <div className="mt-2 flex justify-between gap-3">
           {bot && !bot.archived && !main ? (

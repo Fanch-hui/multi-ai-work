@@ -3,11 +3,11 @@ import { createHash } from 'node:crypto';
 import type { Bot, Connection, Conversation, Task, Workspace } from '../domain/types.js';
 import type { TaskGroupInput } from '../domain/tools.js';
 import { EntityService } from './entities.js';
-import { memberTools } from './chief.js';
 import { required } from './errors.js';
 import { State, id, now } from './state.js';
 import { TaskService, terminal } from './tasks.js';
 import { isChiefProvider } from '../domain/chief-provider.js';
+import { isReasoningSupported } from '../domain/model-reasoning.js';
 
 const memberSchema = z.object({ id: z.string().optional(), name: z.string().optional(), role: z.string().optional(),
   instructions: z.string().optional(), connectionId: z.string().optional(), model: z.string().optional(),
@@ -54,9 +54,9 @@ export class TeamService {
     if (connection.status !== 'ready') throw new Error('请先完成主管连接');
     const catalog = connection.models.find(item => item.id === model);
     if (connection.models.length && !catalog) throw new Error('当前连接不提供所选模型');
-    const inherited = model === defaults.model && catalog?.reasoning?.includes(defaults.reasoning ?? '') ? defaults.reasoning : undefined;
-    const reasoning = options.reasoning === undefined ? inherited : options.reasoning || undefined;
-    if (reasoning && !catalog?.reasoning?.includes(reasoning)) throw new Error('所选模型不支持此推理强度');
+    const inherited = model === defaults.model && isReasoningSupported(connection.provider, catalog, defaults.reasoning ?? '') ? defaults.reasoning : undefined;
+    const reasoning = options.reasoning === undefined ? inherited : options.reasoning.trim() || undefined;
+    if (!isReasoningSupported(connection.provider, catalog, reasoning ?? '')) throw new Error('所选模型不支持此推理强度');
     return { model, reasoning };
   }
 
@@ -122,7 +122,7 @@ export class TeamService {
     const old = fields.id ? required(this.state.storage.get<Bot>('bots', fields.id), '智能体不存在') : undefined;
     const bot = this.entities.saveBot({ ...old, ...fields,
       role: fields.role ?? old?.role ?? '', instructions: fields.instructions ?? old?.instructions ?? '',
-      model: fields.model ?? old?.model ?? '', toolNames: old?.toolNames ?? memberTools,
+      model: fields.model ?? old?.model ?? '', toolNames: old?.toolNames,
       skillIds: old?.skillIds ?? [], toolConnectionIds: old?.toolConnectionIds ?? [], memoryMode: old?.memoryMode ?? 'propose' });
     return bot;
   }

@@ -1,21 +1,19 @@
 import { useState, type FormEvent } from 'react';
 import type { Snapshot } from '../../../../src/domain/types.js';
-import type { PresetInstallation, PresetMemberConfiguration, PresetMemberResult } from '../../../../src/domain/market.js';
-import { defaultToolNames } from '../../../../src/domain/tool-permissions.js';
+import type { PresetInstallation, PresetMemberResult } from '../../../../src/domain/market.js';
 import type { Mutate } from '../store.js';
 import { errorMessage } from '../api.js';
 import { Button, ErrorNote, Modal, cn } from '../components.js';
 import { MemberConfiguration } from './MemberConfiguration.js';
-import { shareMemberSettings } from './memberSettings.js';
+import { initialMemberSettings, memberRequestConfiguration, shareMemberSettings, type PresetMemberDraft } from './memberSettings.js';
 
 export function ConfigurePresets({ installations, data, mutate, close, created, configureConnection }: {
   installations: PresetInstallation[]; data: Snapshot; mutate: Mutate; close: () => void;
   created: () => void; configureConnection: () => void;
 }) {
   const [ids] = useState(() => Object.fromEntries(installations.map(item => [item.id, crypto.randomUUID()])));
-  const [configurations, setConfigurations] = useState<Record<string, PresetMemberConfiguration>>(() => Object.fromEntries(
-    installations.map(item => [item.id, { name: item.preset.name, connectionId: '', model: '',
-      toolNames: defaultToolNames(false), approvalMode: 'ask', toolConnectionIds: [], personalInstructions: '' }])));
+  const [configurations, setConfigurations] = useState<Record<string, PresetMemberDraft>>(() => Object.fromEntries(
+    installations.map(item => [item.id, initialMemberSettings(item.preset)])));
   const [activeId, setActiveId] = useState(installations[0]?.id);
   const [results, setResults] = useState<PresetMemberResult[]>([]);
   const [busy, setBusy] = useState(false);
@@ -26,14 +24,15 @@ export function ConfigurePresets({ installations, data, mutate, close, created, 
   const valid = remaining.every(item => {
     const value = configurations[item.id];
     const connection = data.connections.find(entry => entry.id === value.connectionId && entry.status === 'ready');
-    return !!value.name?.trim() && !!connection && !!value.model.trim() && (!connection.models.length || connection.models.some(model => model.id === value.model));
+    return !!value.name?.trim() && !!value.role?.trim() && !!connection && !!value.model.trim()
+      && (!connection.models.length || connection.models.some(model => model.id === value.model));
   });
   async function submit(event: FormEvent) {
     event.preventDefault(); if (!valid || busy || !remaining.length) return;
     setBusy(true); setError('');
     try {
       const next = await mutate<PresetMemberResult[]>('market.members.create', { items: remaining.map(item => ({
-        requestId: ids[item.id], installationId: item.id, configuration: configurations[item.id] })) });
+        requestId: ids[item.id], installationId: item.id, configuration: memberRequestConfiguration(configurations[item.id]) })) });
       setResults(values => [...values.filter(value => !next.some(item => item.requestId === value.requestId)), ...next]);
       created();
       if (next.every(item => item.botId)) close();
@@ -47,8 +46,8 @@ export function ConfigurePresets({ installations, data, mutate, close, created, 
           className={cn(active?.id === item.id && 'border-blue-200 bg-blue-50 text-blue-700')} onClick={() => setActiveId(item.id)}>{item.preset.name}</Button>)}
       </div>}
       {active && <fieldset disabled={busy} className="grid min-w-0 gap-4">
-        <MemberConfiguration key={active.id} data={data} value={configurations[active.id]} includeName
-          change={value => setConfigurations(values => ({ ...values, [active.id]: value }))} />
+        <MemberConfiguration key={active.id} data={data} value={configurations[active.id]} includeName mutate={mutate} preset={active.preset}
+          change={fields => setConfigurations(values => ({ ...values, [active.id]: { ...values[active.id], ...fields } }))} />
         {remaining.length > 1 && <Button type="button" className="justify-self-start" onClick={() => setConfigurations(values =>
           Object.fromEntries(Object.entries(values).map(([id, value]) => [id, remaining.some(item => item.id === id)
             ? shareMemberSettings(value, values[active.id]) : value])))}>将当前模型与权限用于其他成员</Button>}
