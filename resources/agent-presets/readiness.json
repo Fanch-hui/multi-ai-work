@@ -1758,5 +1758,1389 @@
       "model": "qfmodel",
       "scenario": "真实经历JD匹配与面试练习"
     }
+  },
+  "construction-document-controller": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "ada7c38d955c41283a2bf75223f19073d55efa2b51fc71d144008c4431526f4f",
+    "skillDigests": {
+      "wave2-eng-submittals": "c7381461643145ba9806f3af3323b9e54114dd54d95a2cc2d963195e83a33999",
+      "wave2-eng-rfi": "5a008067d8b157e269049d22326749ff309f7d2b13d69732a74ddfbda62a37ab",
+      "wave2-eng-asbuilt": "7af7e4c958d6370b34d82a07849ccfa22f43fbaeba7046e4219a7dd8feff5d94"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qmodel_38max",
+      "scenario": "报审资料版本与缺口核对"
+    }
+  },
+  "construction-schedule-planner": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "3c1378caf0143c231b9f1595101c17c159f817d61c1992d13ad817f88c15c070",
+    "skillDigests": {
+      "wave2-eng-cpm": "ad2b5ba97868cc6d5c3ea98aa6ca1c404ad460868954e3de13137b03954250ab",
+      "wave2-eng-delay": "3e7e2a0611efa9286ff959e7d4a0409cda839db4e5a53d566ffd94278ba21bb9",
+      "wave2-eng-lookahead": "98928be020647e09e932393520480876b07f512a6ead284bf83f67e52440ae6f"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qmodel_38max",
+      "scenario": "施工网络关键路径和滚动约束"
+    }
+  },
+  "construction-meeting-coordinator": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "27e97e7ed9002eab465c8b3c38fe132a27c2720f8594bc4f74bb350afe26fe0f",
+    "skillDigests": {
+      "wave2-eng-minutes": "b5927c7963df6633294015876cac437dda9276887c4db1527de4faeaa44d0411",
+      "wave2-eng-rfi": "5a008067d8b157e269049d22326749ff309f7d2b13d69732a74ddfbda62a37ab",
+      "wave2-eng-lookahead": "98928be020647e09e932393520480876b07f512a6ead284bf83f67e52440ae6f"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qmodel_38max",
+      "scenario": "施工协调会议决议边界"
+    }
+  },
+  "construction-change-coordinator": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "e4b21c6de9cc5171a091e91d77ba918fc23c86ace3cfbddd34f4498c699eeda2",
+    "skillDigests": {
+      "wave2-eng-change": "76dce99a0390ed168a67637599d53865cd2ee34f6f10a318384e8c3f6c1d7640",
+      "wave2-eng-claims": "8e834598ae329936d207f877a7955512605d3b00e143cada7b880404d7abfa03",
+      "wave2-eng-contract": "c5d23af68b603b036be5997ca558adeb57616c6a2a3031f322f996f128ab3138"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "工程变更金额与批准状态"
+    }
+  },
+  "construction-commercial-contract-assistant": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "7fafeb77a2fd75055cff5892e6235fa1487762de778cb34a6a6c84ac3534569a",
+    "skillDigests": {
+      "wave2-eng-contract": "c5d23af68b603b036be5997ca558adeb57616c6a2a3031f322f996f128ab3138",
+      "wave2-eng-payment": "9ce62f65436db780270fee8fb0fcbf6d12f00a0e375862d0e11b7f1eba367f77",
+      "wave2-eng-claims": "8e834598ae329936d207f877a7955512605d3b00e143cada7b880404d7abfa03"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "累计计量付款核对"
+    }
+  },
+  "construction-quality-records-assistant": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "f68dbf8b0c54895ba832db4d4f66456cf75f5f73c8423910237a9af2e88c4b99",
+    "skillDigests": {
+      "wave2-eng-qc": "b356b18de24824ba9cf25480a5475df80f57eae3b1cec84c681469c4b16cd48f",
+      "wave2-eng-punch": "c9929c0109d22a9234b28670f080a603518c423fafc92240d12d89fe8d66d03c",
+      "wave2-eng-submittals": "c7381461643145ba9806f3af3323b9e54114dd54d95a2cc2d963195e83a33999"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qmodel_38max",
+      "scenario": "实测值与整改复核分离"
+    }
+  },
+  "construction-handover-coordinator": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "3708b4f574a912e05aeec8043c2a502196dc6c4765a572a65d3d4bd30702161d",
+    "skillDigests": {
+      "wave2-eng-closeout": "6cfd3424c340a4887f9b1e463ba6ffbb265b49614eed3f6f92a272947f764f82",
+      "wave2-eng-asbuilt": "7af7e4c958d6370b34d82a07849ccfa22f43fbaeba7046e4219a7dd8feff5d94",
+      "wave2-eng-warranty": "28771cf9ad0ab6dc6a8f1d730503c551f5e9398207c399385a104738ab228487"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qmodel_38max",
+      "scenario": "竣工并图和质保起算缺口"
+    }
+  },
+  "manufacturing-process-documentation": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "59116553c9cdd1830977ea07a87b049eafbc741d1c19a56e4fa24f5714d18677",
+    "skillDigests": {
+      "wave2-eng-doccontrol": "9fc910196470e881f23136a3905757f9750f06956a9681a7ecdf6bb8e7bb809a",
+      "wave2-eng-qc": "b356b18de24824ba9cf25480a5475df80f57eae3b1cec84c681469c4b16cd48f",
+      "wave2-eng-capa": "e857fabbd10f4784cf6bf05847e048e5247316e07ef2b93f7e0ec345bc0c996d"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qmodel_38max",
+      "scenario": "工艺受控参数与未批改动"
+    }
+  },
+  "manufacturing-production-planning": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "aa69bf3a8a6fa4ca2d1fa863492864c04c7d3565ead67f7bbfcaf228443202fb",
+    "skillDigests": {
+      "wave2-eng-prefab": "6bda28ea56f70afa1e2b29045a13ea96ca471137fea9a7d1042499ae039cd6f6",
+      "wave2-eng-capacity": "8f82951e0eb0c58f7e47eb11aa547d23b4d39d03fe0701d41b3627985fae25b4",
+      "wave2-eng-doccontrol": "9fc910196470e881f23136a3905757f9750f06956a9681a7ecdf6bb8e7bb809a"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qmodel_38max",
+      "scenario": "单工位制造排程与容量缺口"
+    }
+  },
+  "manufacturing-inspection-record-analyst": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "5477937bfeae17e8ff42a48b9d6d986371e8c4c1ed10bb9ad1dfb8acc62ae54e",
+    "skillDigests": {
+      "wave2-eng-qualitymetrics": "3cb5cf306c832add53fa6b89a5e70c7e5fb817008edd7c950094928fd4cc1ea5",
+      "wave2-eng-qc": "b356b18de24824ba9cf25480a5475df80f57eae3b1cec84c681469c4b16cd48f",
+      "wave2-eng-doccontrol": "9fc910196470e881f23136a3905757f9750f06956a9681a7ecdf6bb8e7bb809a"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qmodel_38max",
+      "scenario": "整批生产记录加权合格率"
+    }
+  },
+  "manufacturing-quality-problem-analyst": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "2a37f246a9676a10eeebfa824a56df49648a4faea8443977c2f421d23a37ecb4",
+    "skillDigests": {
+      "wave2-eng-capa": "e857fabbd10f4784cf6bf05847e048e5247316e07ef2b93f7e0ec345bc0c996d",
+      "wave2-eng-qualitymetrics": "3cb5cf306c832add53fa6b89a5e70c7e5fb817008edd7c950094928fd4cc1ea5",
+      "wave2-eng-qc": "b356b18de24824ba9cf25480a5475df80f57eae3b1cec84c681469c4b16cd48f"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "装配质量异常根因证据不足"
+    }
+  },
+  "manufacturing-corrective-action-coordinator": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "1d2152148a26558010a3a1dbc3a322a106389b06a233e9170086dbd2301838f3",
+    "skillDigests": {
+      "wave2-eng-capa": "e857fabbd10f4784cf6bf05847e048e5247316e07ef2b93f7e0ec345bc0c996d",
+      "wave2-eng-qualitymetrics": "3cb5cf306c832add53fa6b89a5e70c7e5fb817008edd7c950094928fd4cc1ea5",
+      "wave2-eng-doccontrol": "9fc910196470e881f23136a3905757f9750f06956a9681a7ecdf6bb8e7bb809a"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "antigravity",
+      "model": "gemini-3.8-flash-high",
+      "scenario": "整改实施与有效性样本不足"
+    }
+  },
+  "manufacturing-quality-document-controller": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "4125248d972e0bf7d00af4b7142ea3047bb3d7a9a84f0ab3cfa1bd64d5fc3ee4",
+    "skillDigests": {
+      "wave2-eng-doccontrol": "9fc910196470e881f23136a3905757f9750f06956a9681a7ecdf6bb8e7bb809a",
+      "wave2-eng-capa": "e857fabbd10f4784cf6bf05847e048e5247316e07ef2b93f7e0ec345bc0c996d",
+      "wave2-eng-qualitymetrics": "3cb5cf306c832add53fa6b89a5e70c7e5fb817008edd7c950094928fd4cc1ea5"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "新版已批未生效与旧版使用"
+    }
+  },
+  "manufacturing-maintenance-records": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "93d3b8bbdcd78ed666e5478b37b5a96b11dc8a670cf3ebaa3d22ea006e7a4f79",
+    "skillDigests": {
+      "wave2-eng-equipment": "0c5ea5ae3a7ab679b64694b06b4079cc25086d1ed98bf6690bf8d6551ad6a6cd",
+      "wave2-eng-doccontrol": "9fc910196470e881f23136a3905757f9750f06956a9681a7ecdf6bb8e7bb809a",
+      "wave2-eng-capa": "e857fabbd10f4784cf6bf05847e048e5247316e07ef2b93f7e0ec345bc0c996d"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "设备表时与维护记录到期核对"
+    }
+  },
+  "author-novel-planner": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "680c2cb7f0b574dc06d5939078bd56026f90fc59f31fddca150af62b8ef565e6",
+    "skillDigests": {
+      "wave2-lit-planning": "c12680c65b09ec5c22c7a37dd0aeb40a31aac5064b8eab8adbb73e5984aebbd6",
+      "wave2-lit-memory": "a20261a0a47a32f2ef3b660a3a324ad1628e2bdab649537469521ee9c8bf20a2",
+      "wave2-lit-research": "b0c4e32eeb470526a8f38cac64d105f29908ee55e32b287be007f0c99794466e"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "有限设定下的六章悬疑小说策划"
+    }
+  },
+  "author-fiction-writer": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "9938cb12c87a2635ee34f8e63f28dac49f054e275ddd7d69d41cc6bbbe0f5f3b",
+    "skillDigests": {
+      "wave2-lit-craft": "d72176741509e09983b7478083782e60ea2f46d66a47431710a5bbaa251ed04b",
+      "wave2-lit-planning": "c12680c65b09ec5c22c7a37dd0aeb40a31aac5064b8eab8adbb73e5984aebbd6",
+      "wave2-lit-memory": "a20261a0a47a32f2ef3b660a3a324ad1628e2bdab649537469521ee9c8bf20a2"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "限知视角小说场景草稿"
+    }
+  },
+  "author-serial-editor": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "43955422e31a5f6a8688df5807bc7fbec362c50350fa1770f5e9cbbc8d962f71",
+    "skillDigests": {
+      "wave2-lit-memory": "a20261a0a47a32f2ef3b660a3a324ad1628e2bdab649537469521ee9c8bf20a2",
+      "wave2-lit-review": "f4ec483bf5a63ae79de398689247fa48ba026b3aebb0d6dd16dd7cf6c7c3ef8e",
+      "wave2-lit-planning": "c12680c65b09ec5c22c7a37dd0aeb40a31aac5064b8eab8adbb73e5984aebbd6"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "antigravity",
+      "model": "gemini-3.8-flash-high",
+      "scenario": "跨章人物知识与时间线冲突"
+    }
+  },
+  "author-writing-researcher": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "488f2ec2e5454dee9e6ce425b2f3b97879343d0d947d1f858b18ec6bb6bb9ef7",
+    "skillDigests": {
+      "wave2-lit-research": "b0c4e32eeb470526a8f38cac64d105f29908ee55e32b287be007f0c99794466e"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "antigravity",
+      "model": "gemini-3.8-flash-high",
+      "scenario": "模拟口述与档案冲突资料整理"
+    }
+  },
+  "author-nonfiction-writer": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "574448585d41da129acfe2dd03fd238ee234dce55dede75d08070c9e9033315a",
+    "skillDigests": {
+      "wave2-lit-nonfiction": "b3f86c173f6e4aa816eac4c9a89b336a9c320bcce8c0854482de6ebf89391e3d",
+      "wave2-lit-research": "b0c4e32eeb470526a8f38cac64d105f29908ee55e32b287be007f0c99794466e",
+      "wave2-lit-review": "f4ec483bf5a63ae79de398689247fa48ba026b3aebb0d6dd16dd7cf6c7c3ef8e"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "口述采访非虚构草稿与事实表"
+    }
+  },
+  "author-copyeditor": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "9b0721f4300d27aef6c081c93f62866102154933d4ca7a85c0f997e74e236223",
+    "skillDigests": {
+      "wave2-lit-review": "f4ec483bf5a63ae79de398689247fa48ba026b3aebb0d6dd16dd7cf6c7c3ef8e",
+      "wave2-lit-craft": "d72176741509e09983b7478083782e60ea2f46d66a47431710a5bbaa251ed04b",
+      "wave2-lit-memory": "a20261a0a47a32f2ef3b660a3a324ad1628e2bdab649537469521ee9c8bf20a2"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "有意口语与确定性错漏的审校"
+    }
+  },
+  "author-publishing-planner": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "518d7c704089f4f0e9c1d4382c999443f63c16196651d98ce66e45c449a5dc52",
+    "skillDigests": {
+      "wave2-lit-positioning": "6d00c421b7c857f1a2a08dadd66bd38ac8fc80fb5722813b0192e92e6b830ddf",
+      "wave2-lit-research": "b0c4e32eeb470526a8f38cac64d105f29908ee55e32b287be007f0c99794466e",
+      "wave2-lit-planning": "c12680c65b09ec5c22c7a37dd0aeb40a31aac5064b8eab8adbb73e5984aebbd6"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "有资料边界的图书出版提案"
+    }
+  },
+  "translation-business": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "45cbd97fb2f94933cbc82830ae2262d27848bbf019f6ac3595191a977a5c4bd1",
+    "skillDigests": {
+      "wave2-lit-paragraph-translation": "68f55652087325eecf65833e90003f1a2b34b60476cd9df71f5de4d9e50f6266",
+      "wave2-lit-glossary": "3be5788bc9c6e5d8136cf2f5a0a1cc3c5e05a8fe1dc9609764fc1760e485eb1d",
+      "wave2-lit-bilingual-qa": "e3b86d7739b92d252921a7ec24d2d9dc3a5de3d2beb4d4f26c68e2d747833bc8"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "antigravity",
+      "model": "gemini-3.8-flash-high",
+      "scenario": "条件与承诺程度的商务翻译"
+    }
+  },
+  "translation-technical": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "f6eded3bb696bbbf0fbc35d058a3d0efada680615dd51625c6ac30e0d9c0e037",
+    "skillDigests": {
+      "wave2-lit-paragraph-translation": "68f55652087325eecf65833e90003f1a2b34b60476cd9df71f5de4d9e50f6266",
+      "wave2-lit-glossary": "3be5788bc9c6e5d8136cf2f5a0a1cc3c5e05a8fe1dc9609764fc1760e485eb1d",
+      "wave2-lit-bilingual-qa": "e3b86d7739b92d252921a7ec24d2d9dc3a5de3d2beb4d4f26c68e2d747833bc8"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "保留代码公式的技术说明翻译"
+    }
+  },
+  "translation-literary": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "288d7309b4439433e8cfe8179edd7532dd2da28b06a99bcb64ad9c710c7c18d1",
+    "skillDigests": {
+      "wave2-lit-paragraph-translation": "68f55652087325eecf65833e90003f1a2b34b60476cd9df71f5de4d9e50f6266",
+      "wave2-lit-craft": "d72176741509e09983b7478083782e60ea2f46d66a47431710a5bbaa251ed04b",
+      "wave2-lit-glossary": "3be5788bc9c6e5d8136cf2f5a0a1cc3c5e05a8fe1dc9609764fc1760e485eb1d"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "英文限知叙述的文学翻译"
+    }
+  },
+  "translation-terminologist": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "8af76a759163c061ea727140a78055ad8ef659df3f50b3ddbf38dd4100f8b5d5",
+    "skillDigests": {
+      "wave2-lit-glossary": "3be5788bc9c6e5d8136cf2f5a0a1cc3c5e05a8fe1dc9609764fc1760e485eb1d",
+      "wave2-lit-bilingual-qa": "e3b86d7739b92d252921a7ec24d2d9dc3a5de3d2beb4d4f26c68e2d747833bc8",
+      "wave2-lit-paragraph-translation": "68f55652087325eecf65833e90003f1a2b34b60476cd9df71f5de4d9e50f6266"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "同形异义与手工批准术语保护"
+    }
+  },
+  "translation-localization-editor": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "0e34d6291309a0278a2535bd310691df63b85746cfdbb351db6f1b1725903c03",
+    "skillDigests": {
+      "wave2-lit-localization": "a34ccc699b1fb0523b33ab92f665c43870b27dcc4033275f7122cc0a4711abcc",
+      "wave2-lit-glossary": "3be5788bc9c6e5d8136cf2f5a0a1cc3c5e05a8fe1dc9609764fc1760e485eb1d",
+      "wave2-lit-bilingual-qa": "e3b86d7739b92d252921a7ec24d2d9dc3a5de3d2beb4d4f26c68e2d747833bc8"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "JSON界面本地化与变量保持"
+    }
+  },
+  "translation-bilingual-reviewer": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "1f8daebc17e9711febf2250576b5f3fc28ed94fc08c7a554a65775825479dd5d",
+    "skillDigests": {
+      "wave2-lit-bilingual-qa": "e3b86d7739b92d252921a7ec24d2d9dc3a5de3d2beb4d4f26c68e2d747833bc8",
+      "wave2-lit-glossary": "3be5788bc9c6e5d8136cf2f5a0a1cc3c5e05a8fe1dc9609764fc1760e485eb1d",
+      "wave2-lit-paragraph-translation": "68f55652087325eecf65833e90003f1a2b34b60476cd9df71f5de4d9e50f6266"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "明确误译与漏译的双语审校"
+    }
+  },
+  "translation-subtitle-translator": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "3b518f240e80f7e44a9a5bb60debe9cd368b52113e1b5e6a611265d5ca95e9ba",
+    "skillDigests": {
+      "wave2-lit-subtitles": "32813c15d2dfa091fb4feab15eb36ac377ec7a8c3f5bb5ae24df80e13240432a",
+      "wave2-lit-glossary": "3be5788bc9c6e5d8136cf2f5a0a1cc3c5e05a8fe1dc9609764fc1760e485eb1d",
+      "wave2-lit-bilingual-qa": "e3b86d7739b92d252921a7ec24d2d9dc3a5de3d2beb4d4f26c68e2d747833bc8"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "antigravity",
+      "model": "gemini-3.8-flash-high",
+      "scenario": "SRT边界、时码与跨段指代"
+    }
+  },
+  "administration-assistant": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "6888702b5e95bda064aee3ee83183b9e3c41809284a9f00fb537468d1462a5ad",
+    "skillDigests": {
+      "wave2-ops-administration-assistant": "9508d22b71569e99cdc007444a3e8ad7d8619b3b13f0b21d4448014e59b3720e",
+      "wave2-ops-support-meeting": "d4526af444ed91e037b237ae1ce4b107e7cb01a9649ee4b7035baeca60a58b7a",
+      "wave2-ops-support-evidence": "39ad6c22869e89e3d9d0e0d88e416d1bbe520e9827cdffe13f933db4e7491a4b"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qmodel_38max",
+      "scenario": "合成资料：行政来件与承诺"
+    }
+  },
+  "administration-meeting-coordinator": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "898934d936156e3a6a37d4b6846931500e36152298785a8bf08eec16a48b8b22",
+    "skillDigests": {
+      "wave2-ops-administration-meeting-coordinator": "a0bb2255db84b619f823a3a0aac0c38923e722cff054f9ddd47bab07ba359c64",
+      "wave2-ops-support-inbox": "027e8791820d93ffab020a47e45255d8dce69e9e2c1e34b2d00e8b4cb4e57053",
+      "wave2-ops-support-evidence": "39ad6c22869e89e3d9d0e0d88e416d1bbe520e9827cdffe13f933db4e7491a4b"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qmodel_38max",
+      "scenario": "合成资料：例会准备与真实决策"
+    }
+  },
+  "administration-policy-process": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "39c40d64625a5d2b40c3726f3b5d649601e078f53aea215b547f332e11541a78",
+    "skillDigests": {
+      "wave2-ops-administration-policy-process": "2b2dcb5a46e1a134bf41723cf550022067de4f3cf10569d82fd6dc081b9bc3a7",
+      "wave2-ops-support-knowledge": "50e9e06c5255294ec9c1c5a5881f3b3fe46d211d40756bdf127b53c1a7527391",
+      "wave2-ops-support-comms": "a7535f6339be7946350382935a00c0aaad5df3360b1a757fdd722edd7d147a5e"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qmodel_38max",
+      "scenario": "合成资料：采购审批制度整理"
+    }
+  },
+  "administration-asset-register": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "968d92c3045cd9b56438c46fe4a30344c2c6d2280cae8025ab573f789d427c4f",
+    "skillDigests": {
+      "wave2-ops-administration-asset-register": "434a319053d71c687ab54b8b2a037f2c2951eff971f377451853860754d2a0fc",
+      "wave2-ops-support-match": "f688b52f223357a63bd742db3987d71c1c1db59e4d378f3a0dc725e6e999fd78",
+      "wave2-ops-support-process": "f727f6b049968b1503ba2b4912ecc6717bd95b2c327b3c758421edf91924f7cf"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qmodel_38max",
+      "scenario": "合成资料：资产主档与变动"
+    }
+  },
+  "administration-travel-coordinator": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "bcba3551cae26421641710b16790b7f727b68677e0955a00bf254a3b5230cd5a",
+    "skillDigests": {
+      "wave2-ops-administration-travel-coordinator": "890792d35e42cf289162bd80bc24e6349e8df317817fdc1fe4185d963a8e6874",
+      "wave2-ops-support-meeting": "d4526af444ed91e037b237ae1ce4b107e7cb01a9649ee4b7035baeca60a58b7a",
+      "wave2-ops-support-inbox": "027e8791820d93ffab020a47e45255d8dce69e9e2c1e34b2d00e8b4cb4e57053"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qmodel_38max",
+      "scenario": "合成资料：差旅行程与报价"
+    }
+  },
+  "administration-official-writing": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "501c82664783b440256e86073787098f001d36dd773da071cc7a2451b937a95d",
+    "skillDigests": {
+      "wave2-ops-administration-official-writing": "985fd5ab5732aead14a267c924855f45877128f7f372996ebe112d73efd57f88",
+      "wave2-ops-support-process": "f727f6b049968b1503ba2b4912ecc6717bd95b2c327b3c758421edf91924f7cf",
+      "wave2-ops-support-evidence": "39ad6c22869e89e3d9d0e0d88e416d1bbe520e9827cdffe13f933db4e7491a4b"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qmodel_38max",
+      "scenario": "合成资料：制度通知草拟"
+    }
+  },
+  "administration-archive-manager": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "7ab4c2b30c4553655cec3d4bf7c7a7d03ba9b817e8e8707a93eab6525f572f34",
+    "skillDigests": {
+      "wave2-ops-administration-archive-manager": "d49c50e260f7e257a8c2d30c6c80708830784e649fb730c81d1e92649ebc1405",
+      "wave2-ops-support-evidence": "39ad6c22869e89e3d9d0e0d88e416d1bbe520e9827cdffe13f933db4e7491a4b",
+      "wave2-ops-support-process": "f727f6b049968b1503ba2b4912ecc6717bd95b2c327b3c758421edf91924f7cf"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qmodel_38max",
+      "scenario": "合成资料：档案版本与附件"
+    }
+  },
+  "procurement-supplier-research": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "32c79f9b9cf601c9a96da23b0e4629998c16508dedfed2f57fa4cf835bcc9d24",
+    "skillDigests": {
+      "wave2-ops-procurement-supplier-research": "94b6e9aff3e24fb823bab523daeb9b5c674f2e1767a48719cdf3130efb7af9a5",
+      "wave2-ops-support-agreement": "579fe29fac98bdb5bd02c654427d80bd9737da8e628b0447dd11c779b05a7cd2",
+      "wave2-ops-support-evidence": "39ad6c22869e89e3d9d0e0d88e416d1bbe520e9827cdffe13f933db4e7491a4b"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qmodel_38max",
+      "scenario": "合成资料：供应商材料研究"
+    }
+  },
+  "procurement-rfq-specialist": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "9c7e7786287ac0568ce2cb7c2bd3557c971ca2ea99546a78ec686ed939084406",
+    "skillDigests": {
+      "wave2-ops-procurement-rfq-specialist": "97e377438764daef47101f0d3baf769f92c16e3470e63f22b47b26e892bd8b67",
+      "wave2-ops-support-vendor": "8b6a47c4f548b7078267502cb5932d07338856679dbae06807d80be1b145a53b",
+      "wave2-ops-support-process": "f727f6b049968b1503ba2b4912ecc6717bd95b2c327b3c758421edf91924f7cf"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qmodel_38max",
+      "scenario": "合成资料：已批准需求转询价"
+    }
+  },
+  "procurement-quote-analyst": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "e40ba9cbea50dbd77922e5fa92c4678b646282a73aa2c82c7a85319d2fd50c17",
+    "skillDigests": {
+      "wave2-ops-procurement-quote-analyst": "7ba6a201981d79c1771992d75434c46a8b5e9ebc221f5ea4dacfd27ba8c2ebae",
+      "wave2-ops-support-procurement": "9515037ebf205755b0fd924e1fb7c8cd220792b85b35f1b93cd72a34c0c462f5",
+      "wave2-ops-support-risk": "49eaf008f7cb30b9fcaf3c3a6536f279d219f40ed7e47dc4bfd2ada24b63c8ed"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qmodel_38max",
+      "scenario": "合成资料：含税落地成本与交期"
+    }
+  },
+  "procurement-order-followup": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "f927ca7e2473249ffc08de624a5714b11ccabd994e4cfbaeb8b019cf3a348583",
+    "skillDigests": {
+      "wave2-ops-procurement-order-followup": "0266cc402e48341a45675a8d1b1a53b0a2d225a0e607763395df74b26795a297",
+      "wave2-ops-support-agreement": "579fe29fac98bdb5bd02c654427d80bd9737da8e628b0447dd11c779b05a7cd2",
+      "wave2-ops-support-inbox": "027e8791820d93ffab020a47e45255d8dce69e9e2c1e34b2d00e8b4cb4e57053"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qmodel_38max",
+      "scenario": "合成资料：部分到货拒收与未验收量"
+    }
+  },
+  "procurement-supplier-performance": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "df0282f5a5ae45fb604667a77e7380a68407e08eaa90566b0c1ac992272cd693",
+    "skillDigests": {
+      "wave2-ops-procurement-supplier-performance": "07b185369bcd4e3ef05f1b5c5f5ad673fe15803eba13793492eb91b77690f772",
+      "wave2-ops-support-vendor": "8b6a47c4f548b7078267502cb5932d07338856679dbae06807d80be1b145a53b",
+      "wave2-ops-support-evidence": "39ad6c22869e89e3d9d0e0d88e416d1bbe520e9827cdffe13f933db4e7491a4b"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qmodel_38max",
+      "scenario": "合成资料：有样本和权重的绩效"
+    }
+  },
+  "procurement-material-planner": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "5af29c25788e711291dd56bddd598d307ba170e4b3323bb1ef8ff3d4cecdc7fd",
+    "skillDigests": {
+      "wave2-ops-procurement-material-planner": "b02ed0687078f170decf379aed5057080ef26fe080dfadd0adb2a8d0545611bc",
+      "wave2-ops-support-procurement": "9515037ebf205755b0fd924e1fb7c8cd220792b85b35f1b93cd72a34c0c462f5",
+      "wave2-ops-support-match": "f688b52f223357a63bd742db3987d71c1c1db59e4d378f3a0dc725e6e999fd78"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qmodel_38max",
+      "scenario": "合成资料：BOM需求与晚到在途"
+    }
+  },
+  "procurement-contract-followup": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "0a426d3767cebf8ba3aa6306ee35a8c0dd89f65fe923769fb5d0f7bebcd0cd90",
+    "skillDigests": {
+      "wave2-ops-procurement-contract-followup": "9bb7f2f58405234ddbdf23d4f62585903f62bd961b976018fec9d3771679f75c",
+      "wave2-ops-support-match": "f688b52f223357a63bd742db3987d71c1c1db59e4d378f3a0dc725e6e999fd78",
+      "wave2-ops-support-evidence": "39ad6c22869e89e3d9d0e0d88e416d1bbe520e9827cdffe13f933db4e7491a4b"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qmodel_38max",
+      "scenario": "合成资料：验收后付款与补充协议"
+    }
+  },
+  "logistics-inventory-analyst": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "c80ca09570b11c1173970a518bc21ceeb411825f60ce6ffec5204b2024fa84e5",
+    "skillDigests": {
+      "wave2-ops-logistics-inventory-analyst": "a5133b1c73b2420e8ef8f7a0be27ef1063229a1259ab779ff0e4ac124023aa54",
+      "wave2-ops-support-match": "f688b52f223357a63bd742db3987d71c1c1db59e4d378f3a0dc725e6e999fd78",
+      "wave2-ops-support-risk": "49eaf008f7cb30b9fcaf3c3a6536f279d219f40ed7e47dc4bfd2ada24b63c8ed"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "antigravity",
+      "model": "gemini-3.8-flash-high",
+      "scenario": "合成资料：分仓库存和零速度"
+    }
+  },
+  "logistics-replenishment-planner": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "0629c226878d03d6d547f07fd577478e931bb2fb6f7df0fef8c2c2070628e4eb",
+    "skillDigests": {
+      "wave2-ops-logistics-replenishment-planner": "d2b31e8b242f150256cbf15ea02648183ddcea720e65dccd0c22ea052b3b0bb5",
+      "wave2-ops-support-procurement": "9515037ebf205755b0fd924e1fb7c8cd220792b85b35f1b93cd72a34c0c462f5",
+      "wave2-ops-support-vendor": "8b6a47c4f548b7078267502cb5932d07338856679dbae06807d80be1b145a53b"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "antigravity",
+      "model": "gemini-3.8-flash-high",
+      "scenario": "合成资料：包装取整与晚到风险（审阅修订）"
+    }
+  },
+  "logistics-stocktake-specialist": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "3d83a557e88b4d63bfc0acaa46d1cedfc074990a1a1ccb8917e66816b4b51770",
+    "skillDigests": {
+      "wave2-ops-logistics-stocktake-specialist": "c26d4f2d3062e478bde3746ce7497e63841dafa9574daf98e0273291f9902402",
+      "wave2-ops-support-inventory": "b580096193506c6555a58db9276919a3a7c2ec477f22539bd0fb8da622684eba",
+      "wave2-ops-support-process": "f727f6b049968b1503ba2b4912ecc6717bd95b2c327b3c758421edf91924f7cf"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "合成资料：盘点截点与补记收发"
+    }
+  },
+  "logistics-warehouse-documents": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "accf4c0757840b5af4a3464d047db7fb623bca2ef2562fb28ad2743e53102006",
+    "skillDigests": {
+      "wave2-ops-logistics-warehouse-documents": "4e49d59bf35ccd2e49e7d3b727184729f6e33b5557000ce1645ffd16f505c679",
+      "wave2-ops-support-agreement": "579fe29fac98bdb5bd02c654427d80bd9737da8e628b0447dd11c779b05a7cd2",
+      "wave2-ops-support-evidence": "39ad6c22869e89e3d9d0e0d88e416d1bbe520e9827cdffe13f933db4e7491a4b"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "合成资料：分批到货和重复回单"
+    }
+  },
+  "logistics-freight-quote": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "793bcb83fc7b2ac2329fb736d51a8c5a102728378327e5323047fd25a10ff86d",
+    "skillDigests": {
+      "wave2-ops-logistics-freight-quote": "d190666190b55db023ebc547da851bc2e9603a0874085853d87ceedf8e6eea1a",
+      "wave2-ops-support-procurement": "9515037ebf205755b0fd924e1fb7c8cd220792b85b35f1b93cd72a34c0c462f5",
+      "wave2-ops-support-risk": "49eaf008f7cb30b9fcaf3c3a6536f279d219f40ed7e47dc4bfd2ada24b63c8ed"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "antigravity",
+      "model": "gemini-3.8-flash-high",
+      "scenario": "合成资料：体积重计费与附加费"
+    }
+  },
+  "logistics-exception-handler": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "75889594bf112912cf9b0378000f892a4b8903210364cf10fc35f324ba2255e9",
+    "skillDigests": {
+      "wave2-ops-logistics-exception-handler": "66ecf0606785775145595ca20db001ccbdc02705b482d8ab67ca1ad6003309aa",
+      "wave2-ops-support-inbox": "027e8791820d93ffab020a47e45255d8dce69e9e2c1e34b2d00e8b4cb4e57053",
+      "wave2-ops-support-evidence": "39ad6c22869e89e3d9d0e0d88e416d1bbe520e9827cdffe13f933db4e7491a4b"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "合成资料：延误与签收矛盾（审阅修订）"
+    }
+  },
+  "logistics-warehouse-sop": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "28649c06c19196ab35aa0ddd743bf4390d1e40c5221dd7a65c5c5029c456ec57",
+    "skillDigests": {
+      "wave2-ops-logistics-warehouse-sop": "f6009acf7999b6fea78dc18d445b2c93b407cc5adc4e4c778214b537dd02766b",
+      "wave2-ops-support-process": "f727f6b049968b1503ba2b4912ecc6717bd95b2c327b3c758421edf91924f7cf",
+      "wave2-ops-support-runbook": "3d785cfa871f64b89866258e670888d0a6249a84da9e7ecabbb55fb1364e5b5a"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "antigravity",
+      "model": "gemini-3.8-flash-high",
+      "scenario": "合成资料：现场确认的仓储流程（超时后接续审阅修订）"
+    }
+  },
+  "customer-service-ticket-triage": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "84f9dd7f2e7c227d24e50a97e1dd0ad8c9c8cabc568f0316f5db457ff470e2bc",
+    "skillDigests": {
+      "wave2-service-triage": "9b3dcb33fa1ee09790102976699896327aa68cef2a14be09174be5da3f27817c",
+      "wave2-service-escalation": "a3ed61bb7c9d7a810dbf45a46ff19d99bc05e112d5864d8cc94b372fb5dd5f96",
+      "wave2-service-account-research": "620878a95fe5d1316253bd7b5ad87c493c6c1160f15856630fbb22c675a7532e"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "antigravity",
+      "model": "gemini-3.8-flash-high",
+      "scenario": "多类工单与重复关联、未知根因"
+    }
+  },
+  "customer-service-quality-review": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "33a98ac999b63c84beef31d9018bac1d5f471bd53b55201542622a91dc37b33e",
+    "skillDigests": {
+      "wave2-service-quality": "94732cd719d9fe3b53fc3f397b171e26aceb68fcd329c9e148082b2fa5c4a5df",
+      "wave2-service-response": "34c2eb8745159548610b97e2628b56445e535a114125306bd86c913b9c7f04ee",
+      "wave2-service-account-research": "620878a95fe5d1316253bd7b5ad87c493c6c1160f15856630fbb22c675a7532e"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "客服承诺与政策逐句质检（审阅修订）"
+    }
+  },
+  "customer-service-complaint-assistant": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "255f26ac6a0e824c0ccb2237b00e9e88c0facfa7f4c9303e94a67d9f53e8a9ef",
+    "skillDigests": {
+      "wave2-service-escalation": "a3ed61bb7c9d7a810dbf45a46ff19d99bc05e112d5864d8cc94b372fb5dd5f96",
+      "wave2-service-response": "34c2eb8745159548610b97e2628b56445e535a114125306bd86c913b9c7f04ee",
+      "wave2-service-account-research": "620878a95fe5d1316253bd7b5ad87c493c6c1160f15856630fbb22c675a7532e"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "收费投诉与批准补救边界（审阅修订）"
+    }
+  },
+  "customer-service-after-sales": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "399b406ac09eebb27a7aca85fc51b2f735590751b06cfcb98645746539f834e2",
+    "skillDigests": {
+      "wave2-service-triage": "9b3dcb33fa1ee09790102976699896327aa68cef2a14be09174be5da3f27817c",
+      "wave2-service-response": "34c2eb8745159548610b97e2628b56445e535a114125306bd86c913b9c7f04ee",
+      "wave2-service-knowledge": "954a23a8c451114172fcecbb0432dd646df7834c0a9ba9d0c6ca01650a474a70"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "antigravity",
+      "model": "gemini-3.8-flash-high",
+      "scenario": "退换修资格与未验证排障"
+    }
+  },
+  "customer-service-implementation": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "e208ce178f636ffd62081e64ae9a49390cc74e5314ae035939896297bfbd4802",
+    "skillDigests": {
+      "wave2-service-onboarding": "44684a780fe51cdbeea7617ec48a50ef9fa5bca320dd65550cd847f578cabc69",
+      "wave2-service-planning": "4dd0e43fdab9579c336de9421e09121b33aec94d8daf36c3f14d7c7a4df02441",
+      "wave2-service-acceptance": "a676c8ac4acf08f3365d1d57180273dd199042a58463efdca29def73b4065414"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "实施范围与验收、客户依赖"
+    }
+  },
+  "customer-service-training": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "ffea9f3a36c0ac7beb55d1d3b330566f85c73b86630705631130eeddea3e398c",
+    "skillDigests": {
+      "wave2-service-training": "94b1d77acb9e7ebc8db190684d976701786a016bf635095d81a64b783f1ac413",
+      "wave2-service-knowledge": "954a23a8c451114172fcecbb0432dd646df7834c0a9ba9d0c6ca01650a474a70",
+      "wave2-service-onboarding": "44684a780fe51cdbeea7617ec48a50ef9fa5bca320dd65550cd847f578cabc69"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "分角色培训与能力证据（审阅修订）"
+    }
+  },
+  "customer-service-health-analyst": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "0448153b3f5db4366d51962b1a5f38aa1085f8e99c5a17531a3a53a44b7ddae8",
+    "skillDigests": {
+      "wave2-service-health": "0413190687d3c7c9b12a90859c6a180cd66e8de4f6fe8e77e39651d321b8adf3",
+      "wave2-service-account-research": "620878a95fe5d1316253bd7b5ad87c493c6c1160f15856630fbb22c675a7532e",
+      "wave2-service-escalation": "a3ed61bb7c9d7a810dbf45a46ff19d99bc05e112d5864d8cc94b372fb5dd5f96"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "健康分缺失与分母变化（审阅修订）"
+    }
+  },
+  "project-management-planner": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "018d80bac401fe84aafbcfb8bc27cc30e89de395231bee99df3cd249f56f9f90",
+    "skillDigests": {
+      "wave2-service-planning": "4dd0e43fdab9579c336de9421e09121b33aec94d8daf36c3f14d7c7a4df02441",
+      "wave2-service-capacity": "b965654d9473354f24cdfca5f2831831a8f647cba567a1e257f0c5e24b785dfd",
+      "wave2-service-risk": "029767263e8b9cdfa3c247024b8849672fea3235884a5d469af4cd954d45d729"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "范围、依赖及逐人容量计划"
+    }
+  },
+  "project-management-progress": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "72cbc1875486811613d75b0aee18d62024216c2109492743c27ca217ce587593",
+    "skillDigests": {
+      "wave2-service-progress": "0406e173b9c70a33e3f19a00106da85233432cc33b50933265adfe41a3b233cc",
+      "wave2-service-reporting": "f248cb13f38f850f0ff64dde78aa5a56d5d90234e9b2c0221434779bca05e0b1",
+      "wave2-service-risk": "029767263e8b9cdfa3c247024b8849672fea3235884a5d469af4cd954d45d729"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "antigravity",
+      "model": "gemini-3.8-flash-high",
+      "scenario": "阻塞传播与统一进度分母"
+    }
+  },
+  "project-management-resource": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "8f1a592aa8adaf0b6ad39e5ed3d665fa28a2fd0106ff3f872156d427d3264b57",
+    "skillDigests": {
+      "wave2-service-capacity": "b965654d9473354f24cdfca5f2831831a8f647cba567a1e257f0c5e24b785dfd",
+      "wave2-service-planning": "4dd0e43fdab9579c336de9421e09121b33aec94d8daf36c3f14d7c7a4df02441",
+      "wave2-service-risk": "029767263e8b9cdfa3c247024b8849672fea3235884a5d469af4cd954d45d729"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "antigravity",
+      "model": "gemini-3.8-flash-high",
+      "scenario": "逐人超载与可行重排"
+    }
+  },
+  "project-management-risk": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "c302d4151f0582e4b19d594b1ec5001a692bf7fa8111d21355e7d017d0255983",
+    "skillDigests": {
+      "wave2-service-risk": "029767263e8b9cdfa3c247024b8849672fea3235884a5d469af4cd954d45d729",
+      "wave2-service-progress": "0406e173b9c70a33e3f19a00106da85233432cc33b50933265adfe41a3b233cc",
+      "wave2-service-escalation": "a3ed61bb7c9d7a810dbf45a46ff19d99bc05e112d5864d8cc94b372fb5dd5f96"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "已发生问题与风险等级概率分离"
+    }
+  },
+  "project-management-change": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "7ff9ab9b922d81d158bd5ff13b3369b363c5b56fe16434e9d00c20bba6a62118",
+    "skillDigests": {
+      "wave2-service-change": "69d80a154bc28925a906d9b53ed58c1ad605214c7965d802588fd0412fd23145",
+      "wave2-service-planning": "4dd0e43fdab9579c336de9421e09121b33aec94d8daf36c3f14d7c7a4df02441",
+      "wave2-service-risk": "029767263e8b9cdfa3c247024b8849672fea3235884a5d469af4cd954d45d729"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "antigravity",
+      "model": "gemini-3.8-flash-high",
+      "scenario": "变更范围、期限和未知费用"
+    }
+  },
+  "project-management-reporting": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "ee9b00addb46a75e7c585d561aa77a08bf856588f31fa29e3ba655c466a01c71",
+    "skillDigests": {
+      "wave2-service-reporting": "f248cb13f38f850f0ff64dde78aa5a56d5d90234e9b2c0221434779bca05e0b1",
+      "wave2-service-progress": "0406e173b9c70a33e3f19a00106da85233432cc33b50933265adfe41a3b233cc",
+      "wave2-service-risk": "029767263e8b9cdfa3c247024b8849672fea3235884a5d469af4cd954d45d729"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "精简内部与客户项目周报"
+    }
+  },
+  "project-management-acceptance": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "33ec1d1ede6b238ebae0ffa6692b45d619e6a944101304a71ead8f3425529bc7",
+    "skillDigests": {
+      "wave2-service-acceptance": "a676c8ac4acf08f3365d1d57180273dd199042a58463efdca29def73b4065414",
+      "wave2-service-planning": "4dd0e43fdab9579c336de9421e09121b33aec94d8daf36c3f14d7c7a4df02441",
+      "wave2-service-change": "69d80a154bc28925a906d9b53ed58c1ad605214c7965d802588fd0412fd23145"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "验收证据与豁免审批（审阅修订）"
+    }
+  },
+  "software-frontend": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "8bd8c901ca0c20dc74b61025d467311ffda37ffe098b9b3729cff480e896a2fb",
+    "skillDigests": {
+      "wave2-tech-frontend": "ba8d308365e60925b23468a67cf107f0c4eaf2191f448163e341dbedfcb7f485",
+      "wave2-tech-testing": "7b2e6691ce839370ee7a0569623e51fa34fc6b2167708fdd5a175c28dff7f54f",
+      "wave2-tech-review": "761834ed2dce140de41178ddf48f2f28c46a67ee60e4c1d316e842581060276c"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qmodel_38max",
+      "scenario": "离线任务列表前端实现"
+    }
+  },
+  "software-backend": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "917a4f7c88492950c9dad928abf2a6785537071ea76f5f94a8069acf6e5f67a3",
+    "skillDigests": {
+      "wave2-tech-backend": "6d6d13f158618d8bdcfd621ba87b59d7e23410f12c98f05770c9c731c0100858",
+      "wave2-tech-python": "c0fcdaaddf59f1a8140ae3dee75da46f1625264888b025e11b4d3e0a4414eb4b",
+      "wave2-tech-testing": "7b2e6691ce839370ee7a0569623e51fa34fc6b2167708fdd5a175c28dff7f54f"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qmodel_38max",
+      "scenario": "工单接口最小实现与测试"
+    }
+  },
+  "software-testing": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "1782080ce1b84d396a949c165a433078de649d14e4d54cd1e4cabc66bc97bf6d",
+    "skillDigests": {
+      "wave2-tech-testing": "7b2e6691ce839370ee7a0569623e51fa34fc6b2167708fdd5a175c28dff7f54f",
+      "wave2-tech-debug": "63827ae9b2337085229bb807fc15e642cd14a2fa5feb61e544a651928506ebdf",
+      "wave2-tech-review": "761834ed2dce140de41178ddf48f2f28c46a67ee60e4c1d316e842581060276c"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qmodel_38max",
+      "scenario": "价格计算测试发现已知缺陷"
+    }
+  },
+  "software-code-review": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "232be5c94e061752c15638d2620dfbe734ea5fe47261062d3c68aee662c539b3",
+    "skillDigests": {
+      "wave2-tech-review": "761834ed2dce140de41178ddf48f2f28c46a67ee60e4c1d316e842581060276c",
+      "wave2-tech-testing": "7b2e6691ce839370ee7a0569623e51fa34fc6b2167708fdd5a175c28dff7f54f",
+      "wave2-tech-python": "c0fcdaaddf59f1a8140ae3dee75da46f1625264888b025e11b4d3e0a4414eb4b"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qmodel_38max",
+      "scenario": "SQL注入与连接范围代码审查"
+    }
+  },
+  "software-debugging": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "726aa3eda50ef222e009746700ea3aaccf618350816821b58315f725e5f52a76",
+    "skillDigests": {
+      "wave2-tech-debug": "63827ae9b2337085229bb807fc15e642cd14a2fa5feb61e544a651928506ebdf",
+      "wave2-tech-testing": "7b2e6691ce839370ee7a0569623e51fa34fc6b2167708fdd5a175c28dff7f54f",
+      "wave2-tech-python": "c0fcdaaddf59f1a8140ae3dee75da46f1625264888b025e11b4d3e0a4414eb4b"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qmodel_38max",
+      "scenario": "共享默认列表导致跨请求污染"
+    }
+  },
+  "software-build-release": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "4e6a92626a3f025bbdf9256b51010c46495d1037c8c3843d5818362f8beaadbf",
+    "skillDigests": {
+      "wave2-tech-release": "a5ffbafba96bd2d9c141e267c75f43a39bfbed6586de1b6e3b17c3f54baae224",
+      "wave2-tech-testing": "7b2e6691ce839370ee7a0569623e51fa34fc6b2167708fdd5a175c28dff7f54f",
+      "wave2-tech-docs": "1573ac0e8181e356e340c2d308048135b5cffce14d82b6060020e20f47431786"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qmodel_38max",
+      "scenario": "标准库可重复发布包准备"
+    }
+  },
+  "software-technical-docs": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "1674f8832dbaee00fd0fb3d76e7fbcd56d7f17d310f5929fda9705ab697d798c",
+    "skillDigests": {
+      "wave2-tech-docs": "1573ac0e8181e356e340c2d308048135b5cffce14d82b6060020e20f47431786",
+      "wave2-tech-python": "c0fcdaaddf59f1a8140ae3dee75da46f1625264888b025e11b4d3e0a4414eb4b",
+      "wave2-tech-testing": "7b2e6691ce839370ee7a0569623e51fa34fc6b2167708fdd5a175c28dff7f54f"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qmodel_38max",
+      "scenario": "CSV汇总工具准确文档与执行示例"
+    }
+  },
+  "data-analysis-cleaning": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "b8e0d2c22ef8482f8a89e9a8213a9fe3fba3e455dc67320aa2f9b6cb19a9239d",
+    "skillDigests": {
+      "wave2-tech-clean": "d60357e8d38b8d0550a5c626f3ef32f209335f3fc7cc810b481c14a3d89a1468",
+      "wave2-tech-profile": "d2c8f923cb6fe849fb41cc846197faebf4176516186de31c293f82b6df8c2cc1",
+      "wave2-tech-validate": "4f888160fe51e37fcc62fe23819ab7dab8c9c7a845d6fe43c4ec5f233b39ce95"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qmodel_38max",
+      "scenario": "缺失重复退款与币种数据清理"
+    }
+  },
+  "data-analysis-quality": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "3eec790a007ca5875e728ca685ac6f344119ec5c47bc60603bacc45780d3f636",
+    "skillDigests": {
+      "wave2-tech-profile": "d2c8f923cb6fe849fb41cc846197faebf4176516186de31c293f82b6df8c2cc1",
+      "wave2-tech-validate": "4f888160fe51e37fcc62fe23819ab7dab8c9c7a845d6fe43c4ec5f233b39ce95",
+      "wave2-tech-analysis": "bff475efea6d97bce952b71a5512f227a3ca26343d074419fecadf660a88aec4"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "antigravity",
+      "model": "gemini-3.8-flash-high",
+      "scenario": "数据质量档案与错误经营报告核验"
+    }
+  },
+  "data-analysis-sql": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "cda083d474451621d1d75dadd63eb90f9f45de5744a2516ba082028da9124b47",
+    "skillDigests": {
+      "wave2-tech-sql": "b27e1a8177bdc64f401d33f02823cb249a2a97f6d79448ad2af2582eb43bc7e6",
+      "wave2-tech-validate": "4f888160fe51e37fcc62fe23819ab7dab8c9c7a845d6fe43c4ec5f233b39ce95",
+      "wave2-tech-analysis": "bff475efea6d97bce952b71a5512f227a3ca26343d074419fecadf660a88aec4"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qmodel_38max",
+      "scenario": "订单明细连接避免金额翻倍"
+    }
+  },
+  "data-analysis-statistics": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "c9aeccbc7d0c57975f32b73a1537c1257c7bfb07667904a32de4c80ed2b150fa",
+    "skillDigests": {
+      "wave2-tech-statistics": "d68891d6d095fc61da2a515a8bd160986a626c251adda8ac52e4e3cbc20803d0",
+      "wave2-tech-profile": "d2c8f923cb6fe849fb41cc846197faebf4176516186de31c293f82b6df8c2cc1",
+      "wave2-tech-validate": "4f888160fe51e37fcc62fe23819ab7dab8c9c7a845d6fe43c4ec5f233b39ce95"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "配对样本与缺失数据统计"
+    }
+  },
+  "data-analysis-experiment": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "3b751eacad9faba8e9abad8ffc2573a38b98d2e82403b38aa6f28031019aae83",
+    "skillDigests": {
+      "wave2-tech-statistics": "d68891d6d095fc61da2a515a8bd160986a626c251adda8ac52e4e3cbc20803d0",
+      "wave2-tech-validate": "4f888160fe51e37fcc62fe23819ab7dab8c9c7a845d6fe43c4ec5f233b39ce95",
+      "wave2-tech-analysis": "bff475efea6d97bce952b71a5512f227a3ca26343d074419fecadf660a88aec4"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "A/B实验中期分析与固定时点决策"
+    }
+  },
+  "data-analysis-bi": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "dfeb25981bae0c3aa3ecdb59495eb0b524db9c21add9da5b8c59ff7bb2dff7e8",
+    "skillDigests": {
+      "wave2-tech-dashboard": "cef36468427385e2cad399b8469e6d8c629d7a85f4e223ebcbbbf128716ffad0",
+      "wave2-tech-sql": "b27e1a8177bdc64f401d33f02823cb249a2a97f6d79448ad2af2582eb43bc7e6",
+      "wave2-tech-validate": "4f888160fe51e37fcc62fe23819ab7dab8c9c7a845d6fe43c4ec5f233b39ce95"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "antigravity",
+      "model": "gemini-3.8-flash-high",
+      "scenario": "离线经营BI看板（超时后接续审阅修订）"
+    }
+  },
+  "data-analysis-visualization": {
+    "version": "1.0.0",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "ec6d3e18d568e299a21a3cec1199b12e999d1b5d486dd431cf2b0ab7cf9227a5",
+    "skillDigests": {
+      "wave2-tech-visual": "6e5593aefca5e5e66d02c438ae1f574325221f90730a050b303804c3c456d0b3",
+      "wave2-tech-validate": "4f888160fe51e37fcc62fe23819ab7dab8c9c7a845d6fe43c4ec5f233b39ce95",
+      "wave2-tech-statistics": "d68891d6d095fc61da2a515a8bd160986a626c251adda8ac52e4e3cbc20803d0"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "含亏损月份的数据可视化"
+    }
   }
 }

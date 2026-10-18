@@ -1,0 +1,7 @@
+Adapted from affaan-m/ECC
+Commit: 76aaa77df6adc5b889e689007bf99b9a4f74af34
+Source: skills/backend-patterns/SKILL.md
+License: MIT (see LICENSE)
+Upstream author: Affaan Mustafa / ECC
+Verified: 2026-10-18T18:21:20.285545Z
+Adaptation: Chinese task workflow, App tools, self-contained references, standard-library execution and deliverable validation. Original skill and supporting resources retained under upstream/.

@@ -1,0 +1,5 @@
+Source: https://github.com/anthropics/knowledge-work-plugins/blob/33eeda1e8fd856455b05479d13a0f85b5f803744/operations/skills/change-request/SKILL.md
+Upstream project: Anthropic knowledge-work-plugins
+Upstream license: Apache-2.0; original license retained in LICENSE.
+Upstream SKILL.md and CONNECTORS.md are preserved without changes in upstream/.
+Local changes: Chinese engineering workflow, contract/source evidence states, App tool names, and output templates by multi-AI work contributors (2026), under Apache-2.0.

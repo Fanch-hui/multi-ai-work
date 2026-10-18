@@ -1,0 +1,4 @@
+Adapted from https://github.com/alirezarezvani/claude-skills/tree/19392f7a08264ed00486a251f5b2098321771f94/ra-qm-team/skills/capa-officer
+Upstream license: MIT; upstream copyright and license retained in LICENSE.
+Local adaptation: Chinese workflow, project/enterprise applicability, evidence states, tool names and output checks by multi-AI work contributors (2026).
+Original complete skill resources are preserved in upstream/. Local entry instructions govern this preset; upstream examples and numeric defaults are reference material.

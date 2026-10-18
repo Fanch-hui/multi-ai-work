@@ -1,0 +1,298 @@
+{
+  "software-frontend": {
+    "scenario": "离线任务列表前端实现",
+    "prompt": "根据需求完成能直接打开的离线任务列表页面及纯业务逻辑模块，用 Node 原生 node:test 执行逻辑测试。不要只写建议；需要 HTML/CSS/JS 源文件、测试与交付说明，界面无需自动点击。 读取全部模拟资料，先按需读取配套技能及参考。用中文说明，实际生成可复用交付文件并用 App 成果工具登记。执行先调用 load_workspace_dependencies，用实际返回的 Python/Node 绝对路径；使用标准库，不安装依赖，不访问真实外部服务，不进行 UI 自动化。命令检查结果写入报告。",
+    "files": [
+      {
+        "path": "requirements.md",
+        "content": "模拟小型前端任务，不使用 React 或构建依赖。页面展示资料中的任务，可按状态（全部/未完成/完成）与标题关键词共同筛选，展示筛选后任务数量，点击完成可切换当前任务状态；不需要新增删除和永久存储。\n控件有中文标签，任务标题作为文本呈现，不把用户内容作为 HTML 执行。布局适应窄窗口；提供空结果提示。使用内嵌 CSS 或相对本地资源，禁止 CDN/远程字体。\n将筛选与切换状态逻辑放在可导入的 .mjs 纯模块，页面调用同一实现；测试基于真实原始任务、组合筛选、空结果、切换及原输入未被意外修改。测试不需要 DOM 库或浏览器。\n"
+      },
+      {
+        "path": "tasks.json",
+        "content": "[{\"id\": \"t1\", \"title\": \"整理会议纪要\", \"done\": false}, {\"id\": \"t2\", \"title\": \"核对付款清单\", \"done\": true}, {\"id\": \"t3\", \"title\": \"<img src=x onerror=alert(1)>\", \"done\": false}]"
+      }
+    ],
+    "reviewChecks": [
+      "可直接打开的实际离线页面，提供状态及关键词组合筛选、切换完成、数量及空态",
+      "逻辑模块被实际页面引用；Node 测试运行覆盖组合筛选和切换，非仅语法检查",
+      "用户标题经 textContent 或等效转义，无 innerHTML 注入；无 CDN 或浏览器自动操作",
+      "交付源文件、测试、真实命令结果及手动使用说明"
+    ]
+  },
+  "software-backend": {
+    "scenario": "工单接口最小实现与测试",
+    "prompt": "实现 requirements.md 中的工单接口，交付 Python 标准库代码与 unittest。可以将 HTTP 方法/路径/请求体交给 handle_request 函数返回状态码和 JSON，再提供 http.server 启动适配；验收直接运行请求处理测试，不必启动监听端口。 读取全部模拟资料，先按需读取配套技能及参考。用中文说明，实际生成可复用交付文件并用 App 成果工具登记。执行先调用 load_workspace_dependencies，用实际返回的 Python/Node 绝对路径；使用标准库，不安装依赖，不访问真实外部服务，不进行 UI 自动化。命令检查结果写入报告。",
+    "files": [
+      {
+        "path": "requirements.md",
+        "content": "实现内存工单接口，测试与演示只使用合成数据。\n初始数据：id=1,title=修复登录,state=open；id=2,title=补充文档,state=closed。\nGET /tickets 返回当前全部工单；GET /tickets?state=open 或 closed 仅返回匹配工单，其他 state 返回400。\nPOST /tickets 请求 JSON 必须包含非空去空格标题（字符串），状态默认open，分配从当前最大 ID+1 的唯一整数 ID，返回201和新工单。不能让请求体指定 ID 覆盖已有工单；空标题、非字符串、非法 JSON 返回400且不改变数据。\nGET /tickets/<id> 存在返回200，未找到404；其他路径404，已存在路径的未支持方法405。\n单进程内存演示，不要求认证、多实例或持久数据库。提供函数接口与启动说明，勿声称生产部署就绪。\n"
+      }
+    ],
+    "reviewChecks": [
+      "真实代码实现 GET/POST/按状态过滤和单条读取，ID不覆盖既有工单",
+      "至少运行正常创建、标题非法、JSON非法、过滤非法、404/405与失败不改变数据的测试",
+      "HTTP适配与实际处理使用同一实现，无外部包、真实外部接口或监听依赖",
+      "文档明确内存演示范围，状态码及响应可由实际测试验证"
+    ]
+  },
+  "software-testing": {
+    "scenario": "价格计算测试发现已知缺陷",
+    "prompt": "只做测试和缺陷报告，不修改 pricing.py。按已批准需求写 unittest，运行后保存真实失败证据；可以用外层脚本捕获预期失败并汇总，不能把失败测试改为接受错误结果。 读取全部模拟资料，先按需读取配套技能及参考。用中文说明，实际生成可复用交付文件并用 App 成果工具登记。执行先调用 load_workspace_dependencies，用实际返回的 Python/Node 绝对路径；使用标准库，不安装依赖，不访问真实外部服务，不进行 UI 自动化。命令检查结果写入报告。",
+    "files": [
+      {
+        "path": "requirements.md",
+        "content": "calculate_total(price_cents, quantity, member=False) 返回总价，单位分。price_cents和quantity均须为整数；price_cents>=0，quantity>=1，否则ValueError。member=True时按总价打9折，小数分采用四舍五入（正数恰好半分向上）。例如105分×1会员应95分；100分×3会员270分。数量不能被忽略，布尔值不能充当合法的金额或数量。不要修改实现，只交付测试与缺陷报告。"
+      },
+      {
+        "path": "pricing.py",
+        "content": "def calculate_total(price_cents, quantity, member=False):\n    if price_cents < 0:\n        raise ValueError(\"negative price\")\n    total = price_cents\n    return int(total * 0.9) if member else total\n"
+      }
+    ],
+    "reviewChecks": [
+      "测试期望来自需求，覆盖数量、半分向上、非法整数/布尔值/数量和正常计算",
+      "实际运行保留失败断言与退出结果，不为测试绿而修改 pricing.py",
+      "报告准确定位忽略数量、舍入、缺少输入校验等已复现问题",
+      "交付测试与可复现失败结果，报告不把测试失败当环境故障"
+    ]
+  },
+  "software-code-review": {
+    "scenario": "SQL注入与连接范围代码审查",
+    "prompt": "审查 search.py 是否满足需求。保存独立最小复现脚本并执行，给具体行号、触发输入、影响和修复建议；保持原文件不变。 读取全部模拟资料，先按需读取配套技能及参考。用中文说明，实际生成可复用交付文件并用 App 成果工具登记。执行先调用 load_workspace_dependencies，用实际返回的 Python/Node 绝对路径；使用标准库，不安装依赖，不访问真实外部服务，不进行 UI 自动化。命令检查结果写入报告。",
+    "files": [
+      {
+        "path": "requirements.md",
+        "content": "接口只允许返回指定 owner_id 的订单，搜索 term 在 title 中按文本包含匹配，单引号是普通字符。不得让搜索文本或 owner_id 改变 SQL 结构。返回[order_id,title,amount_cents]，金额为分。只做审查，不修改 search.py。"
+      },
+      {
+        "path": "search.py",
+        "content": "def search_orders(conn, owner_id, term):\n    sql = f\"SELECT order_id,title,amount_cents FROM orders WHERE owner_id = '{owner_id}' AND title LIKE '%{term}%'\"\n    return conn.execute(sql).fetchall()\n"
+      },
+      {
+        "path": "seed.sql",
+        "content": "CREATE TABLE orders(order_id INTEGER PRIMARY KEY, owner_id TEXT, title TEXT, amount_cents INTEGER);\nINSERT INTO orders VALUES (1,'alice','设计服务',10000),(2,'bob','咨询服务',20000),(3,'alice','咨询服务',30000);\n"
+      }
+    ],
+    "reviewChecks": [
+      "使用隔离SQLite真实执行复现，普通alice搜索咨询仅订单3",
+      "注入搜索或owner输入实际越过owner范围；指出具体 SQL 字符串插值行和数据泄露影响",
+      "修复建议使用参数化同时保留owner过滤，不把参数化等同业务授权",
+      "原始search.py保留，报告区分已确认缺陷和未测试事项"
+    ]
+  },
+  "software-debugging": {
+    "scenario": "共享默认列表导致跨请求污染",
+    "prompt": "复现两次独立 add_tag 调用互相污染的问题，定位根因，最小修复并执行同一回归用例和既有列表行为。交付修复代码、测试和前后运行证据。 读取全部模拟资料，先按需读取配套技能及参考。用中文说明，实际生成可复用交付文件并用 App 成果工具登记。执行先调用 load_workspace_dependencies，用实际返回的 Python/Node 绝对路径；使用标准库，不安装依赖，不访问真实外部服务，不进行 UI 自动化。命令检查结果写入报告。",
+    "files": [
+      {
+        "path": "issue.md",
+        "content": "用户报告 add_tag('甲') 应返回['甲']，随后独立 add_tag('乙') 应返回['乙']；当前第二次出现['甲','乙']。当显式传入已有列表时，约定返回新增标签后的新列表，不修改调用方原列表；重复标签不增加。保持函数名和参数名兼容。"
+      },
+      {
+        "path": "tags.py",
+        "content": "def add_tag(tag, tags=[]):\n    if tag not in tags:\n        tags.append(tag)\n    return tags\n"
+      }
+    ],
+    "reviewChecks": [
+      "先实际复现独立调用的共享状态和显式列表被修改问题",
+      "修复可变默认参数，同时显式列表做复制，不吞异常或硬编码标签",
+      "同一回归测试验证独立调用、显式列表不变、重复标签以及正常新增",
+      "交付修复源文件和真实前后证据"
+    ]
+  },
+  "software-build-release": {
+    "scenario": "标准库可重复发布包准备",
+    "prompt": "为给定命令行项目实现本地构建与校验脚本：先测试，生成固定版本 ZIP、SHA256SUMS和发布说明，再从包解压到隔离目录运行入口。只准备本地产物，不上传或提交远程。 读取全部模拟资料，先按需读取配套技能及参考。用中文说明，实际生成可复用交付文件并用 App 成果工具登记。执行先调用 load_workspace_dependencies，用实际返回的 Python/Node 绝对路径；使用标准库，不安装依赖，不访问真实外部服务，不进行 UI 自动化。命令检查结果写入报告。",
+    "files": [
+      {
+        "path": "requirements.md",
+        "content": "项目版本1.2.0，Python标准库CLI。源码入口calc.py，接受两个整数参数并输出和。tests.py是已有基础测试。\n产物仅含calc.py、README.md、VERSION，不含tests.py、测试输入、缓存、凭据或临时输出。文件内容和顺序相同时重建ZIP字节一致，使用固定时间戳、稳定文件顺序。摘要清单记录实际ZIP SHA256和文件名；构建脚本读取VERSION作为唯一版本来源。\n提供一条本地build命令；校验解压后VERSION、文件列表、实际CLI运行 2 3 得5。版本、产物名与发布说明一致，远程上传作为未来授权步骤，不执行。\n"
+      },
+      {
+        "path": "VERSION",
+        "content": "1.2.0\n"
+      },
+      {
+        "path": "calc.py",
+        "content": "import argparse\n\ndef add(a: int, b: int) -> int:\n    return a + b\n\nif __name__ == '__main__':\n    parser = argparse.ArgumentParser()\n    parser.add_argument('a', type=int)\n    parser.add_argument('b', type=int)\n    args = parser.parse_args()\n    print(add(args.a, args.b))\n"
+      },
+      {
+        "path": "tests.py",
+        "content": "import unittest\nfrom calc import add\n\nclass CalculationTest(unittest.TestCase):\n    def test_add(self):\n        self.assertEqual(add(2, 3), 5)\n    def test_negative(self):\n        self.assertEqual(add(-2, 3), 1)\n\nif __name__ == '__main__':\n    unittest.main()\n"
+      },
+      {
+        "path": "README.md",
+        "content": "# calc 1.2.0\n运行：python calc.py 2 3，输出5。\n"
+      }
+    ],
+    "reviewChecks": [
+      "真实运行既有测试、构建ZIP、计算SHA256并从隔离解压目录执行CLI得到5",
+      "VERSION为唯一版本来源；文件列表恰为calc.py README.md VERSION",
+      "两次相同输入重建ZIP摘要一致，不包含测试、缓存或绝对本机路径",
+      "交付构建脚本、ZIP、摘要清单及发布/回退说明，不进行远程发布"
+    ]
+  },
+  "software-technical-docs": {
+    "scenario": "CSV汇总工具准确文档与执行示例",
+    "prompt": "根据实际 summary.py 写中文README、函数接口和故障排查，保留实现行为。创建合成正常/错误示例并运行验证，交付可复制的 CLI 命令和验证脚本。 读取全部模拟资料，先按需读取配套技能及参考。用中文说明，实际生成可复用交付文件并用 App 成果工具登记。执行先调用 load_workspace_dependencies，用实际返回的 Python/Node 绝对路径；使用标准库，不安装依赖，不访问真实外部服务，不进行 UI 自动化。命令检查结果写入报告。",
+    "files": [
+      {
+        "path": "summary.py",
+        "content": "import argparse\nimport csv\nfrom decimal import Decimal\nfrom pathlib import Path\n\ndef total_amount(path: Path) -> Decimal:\n    total = Decimal('0')\n    with path.open(encoding='utf-8', newline='') as f:\n        for row in csv.DictReader(f):\n            raw = row['amount'].strip()\n            if raw:\n                total += Decimal(raw)\n    return total\n\nif __name__ == '__main__':\n    p = argparse.ArgumentParser()\n    p.add_argument('path', type=Path)\n    args = p.parse_args()\n    print(total_amount(args.path))\n"
+      },
+      {
+        "path": "docs-request.md",
+        "content": "Python标准库CSV金额汇总小工具。文档面向初次使用者，采用中文Markdown。输入UTF-8 CSV，含amount列；空白金额跳过，负数作为冲销计入，不支持货币换算。函数Decimal返回；非法金额会抛decimal.InvalidOperation，缺amount列触发KeyError，不存在文件触发FileNotFoundError。不要替用户改变错误处理或添加自动填充。示例100.25、空白、-20.25应总额80.00。需写实际命令、预期输出、API参数/返回/异常和排错办法，并执行正常及错误示例验证。"
+      }
+    ],
+    "reviewChecks": [
+      "文档准确覆盖Path参数、Decimal返回、空白跳过、负数保留及指定异常",
+      "实际执行正常80.00及错误例子，保存命令退出结果",
+      "不更改summary.py语义，不承诺自动填零或汇率功能",
+      "交付README/接口/排错、可复现验证脚本及结果"
+    ]
+  },
+  "data-analysis-cleaning": {
+    "scenario": "缺失重复退款与币种数据清理",
+    "prompt": "执行规则清理orders.csv，实际运行脚本，交付清理CSV、异常CSV、处置台账和分币种汇总。 读取全部模拟资料，先按需读取配套技能及参考。用中文说明，实际生成可复用交付文件并用 App 成果工具登记。执行先调用 load_workspace_dependencies，用实际返回的 Python/Node 绝对路径；使用标准库，不安装依赖，不访问真实外部服务，不进行 UI 自动化。命令检查结果写入报告。",
+    "files": [
+      {
+        "path": "orders.csv",
+        "content": "row_id,order_id,date,region,amount,currency\nr1,A,2026-10-01,华东,100,CNY\nr2,A,2026-10-01,华东,100,CNY\nr3,B,2026-10-02,华西,,CNY\nr4,C,2026-10-02,华东,-20,CNY\nr5,D,2026-10-02,华西,100,USD\nr6,E,2026-10-03, 华东 ,200,CNY\nr7,F,2026-02-30,华东,50,CNY\nr8,G,2026-10-03,华西,oops,CNY\n"
+      },
+      {
+        "path": "rules.md",
+        "content": "模拟订单，按order_id一行一单，row_id是导出行标识；除row_id外完全一致的重复导出只保留首次并在台账关联重复行。amount为原币金额，C订单-20是已确认退款，需要保留。空白表示未知，不填零。允许去除region首尾空格；非法日期、不可解析金额隔离到异常清单。没有汇率，不合并CNY/USD。B金额未知但订单保留，不因未知金额删除订单。原始文件不覆盖。"
+      }
+    ],
+    "reviewChecks": [
+      "8原始行：去除r2精确重复、隔离r7非法日期/r8非法金额，保留5单A B C D E",
+      "B缺失保持为空；C退款-20保留；E地区去空格",
+      "已知CNY金额100-20+200=280，未知金额1；USD100单列，无合并货币总额",
+      "原始文件不变，行级台账追溯8行，实际执行脚本与断言"
+    ]
+  },
+  "data-analysis-quality": {
+    "scenario": "数据质量档案与错误经营报告核验",
+    "prompt": "剖析原始数据，审核现有分析，独立复算并给数据质量问题、影响和修正报告。不要只给抽象检查清单。 读取全部模拟资料，先按需读取配套技能及参考。用中文说明，实际生成可复用交付文件并用 App 成果工具登记。执行先调用 load_workspace_dependencies，用实际返回的 Python/Node 绝对路径；使用标准库，不安装依赖，不访问真实外部服务，不进行 UI 自动化。命令检查结果写入报告。",
+    "files": [
+      {
+        "path": "orders.csv",
+        "content": "row_id,order_id,date,region,amount,currency\nr1,A,2026-10-01,华东,100,CNY\nr2,A,2026-10-01,华东,100,CNY\nr3,B,2026-10-02,华西,,CNY\nr4,C,2026-10-02,华东,-20,CNY\nr5,D,2026-10-02,华西,100,USD\nr6,E,2026-10-03, 华东 ,200,CNY\nr7,F,2026-02-30,华东,50,CNY\nr8,G,2026-10-03,华西,oops,CNY\n"
+      },
+      {
+        "path": "rules.md",
+        "content": "模拟订单，按order_id一行一单，row_id是导出行标识；除row_id外完全一致的重复导出只保留首次并在台账关联重复行。amount为原币金额，C订单-20是已确认退款，需要保留。空白表示未知，不填零。允许去除region首尾空格；非法日期、不可解析金额隔离到异常清单。没有汇率，不合并CNY/USD。B金额未知但订单保留，不因未知金额删除订单。原始文件不覆盖。"
+      },
+      {
+        "path": "report.md",
+        "content": "待审报告：共8个订单；所有金额合计630元（已将空金额按0、oops按0）。负数一律错误应删除。所有日期有效，华东只有3笔。报告打算将总额作为人民币收入发布。"
+      }
+    ],
+    "reviewChecks": [
+      "识别原始8行并非8个订单、精确重复r2、r7非法日期、r8金额解析失败、地区空格、未知B金额和多币种",
+      "识别退款负数有效，不能一律删除；修正为合格5单，CNY已知280和未知1，USD100",
+      "原始非空合法数值金额简单合计实际530（含重复/非法日期及混币），报告630也算术不符；不把530当业务总额",
+      "提供字段缺失率/有效数、原始行定位、独立计算证据及具体修正动作"
+    ]
+  },
+  "data-analysis-sql": {
+    "scenario": "订单明细连接避免金额翻倍",
+    "prompt": "用Python sqlite3在隔离数据库执行建表与分析SQL。按客户输出已付订单数、金额（分）、商品件数，并保留无已付订单的客户；按地区给总数，附SQL、结果与断言。 读取全部模拟资料，先按需读取配套技能及参考。用中文说明，实际生成可复用交付文件并用 App 成果工具登记。执行先调用 load_workspace_dependencies，用实际返回的 Python/Node 绝对路径；使用标准库，不安装依赖，不访问真实外部服务，不进行 UI 自动化。命令检查结果写入报告。",
+    "files": [
+      {
+        "path": "seed.sql",
+        "content": "CREATE TABLE customers(id TEXT PRIMARY KEY, region TEXT);\nCREATE TABLE orders(id TEXT PRIMARY KEY,customer_id TEXT,amount_cents INTEGER,status TEXT);\nCREATE TABLE items(id TEXT PRIMARY KEY,order_id TEXT,qty INTEGER);\nINSERT INTO customers VALUES ('u1','华东'),('u2','华西'),('u3','华北');\nINSERT INTO orders VALUES ('o1','u1',10000,'paid'),('o2','u1',20000,'paid'),('o3','u2',5000,'cancelled'),('o4','u2',8000,'paid');\nINSERT INTO items VALUES ('i1','o1',1),('i2','o1',2),('i3','o2',1),('i4','o3',1),('i5','o4',2),('i6','o4',1);\n"
+      },
+      {
+        "path": "rules.md",
+        "content": "订单金额存于orders，商品件数是items.qty之和；取消订单排除，amount_cents单位分。商品行多条不能使订单金额重复累计。客户u3也应保留，订单数/金额/件数均为0。禁止修改输入seed.sql；只创建任务内数据库，不连接外部数据仓库。"
+      }
+    ],
+    "reviewChecks": [
+      "u1=2单30000分4件；u2=1单8000分3件；u3=0单0分0件",
+      "总计3已付订单38000分7件，o3排除，多商品行没有订单金额膨胀",
+      "正确使用预聚合与LEFT JOIN，过滤不丢失零客户，SQL实际执行且结果保存",
+      "SQL方言SQLite、金额单位分一致，代码与结果可复现"
+    ]
+  },
+  "data-analysis-statistics": {
+    "scenario": "配对样本与缺失数据统计",
+    "prompt": "分析同一学生前后练习完成时间，实际计算描述统计和配对效应。用Python标准库精确枚举双侧符号检验并明确原假设/假设，报告单位及缺失处理。不要把单组前后比较写成教学方法因果证明。 读取全部模拟资料，先按需读取配套技能及参考。用中文说明，实际生成可复用交付文件并用 App 成果工具登记。执行先调用 load_workspace_dependencies，用实际返回的 Python/Node 绝对路径；使用标准库，不安装依赖，不访问真实外部服务，不进行 UI 自动化。命令检查结果写入报告。",
+    "files": [
+      {
+        "path": "times.csv",
+        "content": "student,before_minutes,after_minutes\ns1,30,25\ns2,28,24\ns3,35,30\ns4,32,28\ns5,27,25\ns6,40,35\ns7,29,27\ns8,31,\n"
+      },
+      {
+        "path": "design.md",
+        "content": "便利抽样8名同学，自己参加了两次练习；没有随机分配、对照组，前后题目难度也未验证一致。主要结局同一ID after-before 分钟，负数表示变快。s8后测缺失，不填零，只用完整配对作主分析并单列缺失。不能把s8前测混进完整配对的前后均值比较。符号检验H0为差值正负概率各0.5（非零差值且配对独立），报告实际枚举方法和样本限制。"
+      }
+    ],
+    "reviewChecks": [
+      "8人中7完整配对1缺失；差值[-5,-4,-5,-4,-2,-5,-2]分钟",
+      "完整配对before均值221/7=31.5714，after194/7=27.7143，平均差-27/7=-3.8571，差值中位数-4",
+      "7个负差无零，双侧精确符号检验p=2/128=0.015625，说明H0/独立配对假设",
+      "单组便利样本与题目难度未控制，不把改善直接归因或保证总体效果，运行脚本和结果保留"
+    ]
+  },
+  "data-analysis-experiment": {
+    "scenario": "A/B实验中期分析与固定时点决策",
+    "prompt": "核验实验资料，计算当前转化率、绝对/相对差与95%近似差值区间，并回答是否已满足上线条件。用标准库实际计算；生成报告和后续决策表，不进行上线操作。 读取全部模拟资料，先按需读取配套技能及参考。用中文说明，实际生成可复用交付文件并用 App 成果工具登记。执行先调用 load_workspace_dependencies，用实际返回的 Python/Node 绝对路径；使用标准库，不安装依赖，不访问真实外部服务，不进行 UI 自动化。命令检查结果写入报告。",
+    "files": [
+      {
+        "path": "experiment.json",
+        "content": "{\"day\": 7, \"plannedDays\": 14, \"assignmentUnit\": \"user\", \"randomized\": true, \"primaryMetric\": \"first_purchase_conversion\", \"alternative\": \"two-sided\", \"alpha\": 0.05, \"plannedEarlyStopping\": false, \"groups\": [{\"variant\": \"A\", \"users\": 1000, \"purchases\": 100}, {\"variant\": \"B\", \"users\": 1000, \"purchases\": 120}]}"
+      },
+      {
+        "path": "request.md",
+        "content": "这是预定14天实验第7天的中期快照。分流按用户随机，当前未报告重复用户或丢事件，唯一主指标首次购买用户/分配用户，无事先早停规则。产品方希望现在立刻宣布B胜出。请给当前效果与区间，说明固定时点与中期查看的区别，以及第14天需核对的分流、追踪和业务条件。不把当前用户数当最终样本量。"
+      }
+    ],
+    "reviewChecks": [
+      "A10% B12%，绝对差2个百分点，相对提升20%（基准A）",
+      "独立二项近似非合并标准误sqrt(.1*.9/1000+.12*.88/1000)，95%区间约[-0.741,4.741]个百分点，实际脚本计算",
+      "第7天中期且无预设早停，不能宣布满足既定胜出条件；区间含0不写无效已证明",
+      "第14天按预定分析核验分流/追踪/业务收益，报告点估计和区间，保留原始快照"
+    ]
+  },
+  "data-analysis-bi": {
+    "scenario": "离线经营BI看板",
+    "prompt": "基于CSV制作单文件离线HTML看板，包含地区和日期筛选、访问/订单/净收入/转化率KPI、每日趋势及明细表。用同一纯聚合模块生成或驱动页面，并实际执行独立业务测试，页面无需自动点击。 读取全部模拟资料，先按需读取配套技能及参考。用中文说明，实际生成可复用交付文件并用 App 成果工具登记。执行先调用 load_workspace_dependencies，用实际返回的 Python/Node 绝对路径；使用标准库，不安装依赖，不访问真实外部服务，不进行 UI 自动化。命令检查结果写入报告。",
+    "files": [
+      {
+        "path": "metrics.csv",
+        "content": "date,region,visits,orders,net_revenue_cny\n2026-10-01,华东,100,10,1000\n2026-10-01,华西,50,10,800\n2026-10-02,华东,200,20,2000\n2026-10-02,华西,0,0,0\n"
+      },
+      {
+        "path": "definitions.md",
+        "content": "每行是日×地区汇总。visits为访问次数，orders为订单数；net_revenue_cny是扣退款后的人民币净收入，不是利润。转化率=订单数/访问次数，按筛选后总分子/总分母算，不能均值每日或地区百分比。0访问0订单时转化率未定义，显示—。所有数据嵌入HTML，无CDN，无外部数据请求，原生SVG/HTML即可。筛选同时更新KPI、趋势和明细，默认全部。"
+      }
+    ],
+    "reviewChecks": [
+      "默认合计350访问40单3800元，转化40/350≈11.4286%，非平均分组率",
+      "华西合计50访问10单800元转化20%；10月2日华西0/0显示—而非0或NaN",
+      "HTML真实包含筛选逻辑且所有视图共用筛选数据，无CDN或远程引用，净收入未改称利润",
+      "标准库或Node纯逻辑测试实际执行默认/地区/日期/空与零分母，交付HTML、源数据、脚本、结果"
+    ]
+  },
+  "data-analysis-visualization": {
+    "scenario": "含亏损月份的数据可视化",
+    "prompt": "根据数据选择图表，生成可独立查看的SVG和配套数据表/说明。展示每月净利润变化及收入/成本比较，所有数字由脚本读取源文件计算，实际执行并静态核对输出。 读取全部模拟资料，先按需读取配套技能及参考。用中文说明，实际生成可复用交付文件并用 App 成果工具登记。执行先调用 load_workspace_dependencies，用实际返回的 Python/Node 绝对路径；使用标准库，不安装依赖，不访问真实外部服务，不进行 UI 自动化。命令检查结果写入报告。",
+    "files": [
+      {
+        "path": "monthly.csv",
+        "content": "month,revenue_cny,cost_cny\n2026-01,100,70\n2026-02,90,100\n2026-03,130,80\n"
+      },
+      {
+        "path": "requirements.md",
+        "content": "这是模拟完整月份经营资料，金额人民币元。净利润=收入-成本，2月亏损是有效值，不能删除或取绝对值。月份按自然顺序。利润图含清楚零线与负向表达，收入成本比较共用尺度且条形从0开始。图需标题、单位、月份、图例或直接标签，附数据表、简要替代说明和可重复生成脚本。SVG可用标准库，不需要安装绘图库或自动打开浏览器。"
+      }
+    ],
+    "reviewChecks": [
+      "利润分别30,-10,50元，2月负值保留且零线正确，收入合计320成本250利润70",
+      "图表真实生成且数值、标签、月份和人民币单位完整；收入/成本相同尺度从零起",
+      "绘图数据、SVG、脚本和说明一致，提供可读数据表与替代描述",
+      "实际运行脚本并核对SVG结构及数值，不声称做过页面交互验收"
+    ]
+  }
+}

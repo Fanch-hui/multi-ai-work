@@ -1,0 +1,7 @@
+Adapted from anthropics/knowledge-work-plugins
+Commit: 33eeda1e8fd856455b05479d13a0f85b5f803744
+Source: data/skills/statistical-analysis/SKILL.md
+License: Apache-2.0 (see LICENSE)
+Upstream author: Anthropic
+Verified: 2026-10-18T18:21:20.285545Z
+Adaptation: Chinese task workflow, App tools, self-contained references, standard-library execution and deliverable validation. Original skill and supporting resources retained under upstream/.

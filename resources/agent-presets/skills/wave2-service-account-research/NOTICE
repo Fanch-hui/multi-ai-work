@@ -1,0 +1,5 @@
+本资源基于 anthropics/knowledge-work-plugins 的 customer-support/skills/customer-research/SKILL.md 改编。
+上游提交：33eeda1e8fd856455b05479d13a0f85b5f803744
+原始入口存于 upstream-SKILL.md，仅用于来源审阅；运行入口为本目录 SKILL.md。
+上游著作权与许可见 LICENSE。中文岗位流程、App工具适配、计算规则核验及资源筛选：multi-AI work，2026。
+上游连接器、固定响应时限、示例阈值与脚本不自动构成当前用户配置。资源中的外部链接为参考资料。

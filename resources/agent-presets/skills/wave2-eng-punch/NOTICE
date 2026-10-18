@@ -1,0 +1,4 @@
+Adapted from https://github.com/datadrivenconstruction/DDC_Skills_for_AI_Agents_in_Construction/tree/ce45bbfbdd63ab7868871061fdf5e83bc17f5020/1_DDC_Toolkit/Field-Operations/punch-list-manager
+Upstream license: MIT; upstream copyright and license retained in LICENSE.
+Local adaptation: Chinese workflow, project/enterprise applicability, evidence states, tool names and output checks by multi-AI work contributors (2026).
+Original complete skill resources are preserved in upstream/. Local entry instructions govern this preset; upstream examples and numeric defaults are reference material.

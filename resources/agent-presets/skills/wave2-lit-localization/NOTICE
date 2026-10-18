@@ -1,0 +1,7 @@
+界面文案本地化与资源保护
+Adapted from https://github.com/deusyu/translate-book
+Commit: a663b1b4f1e625b286cd2a81dffd16571e6f2aa2
+Source: SKILL.md
+License: MIT; see LICENSE.
+Adaptation: Chinese role workflow, App tool names, local resources, source fidelity and output checks for multi-AI work.
+Copyright and attribution from upstream are retained in LICENSE.

@@ -1,0 +1,7 @@
+Adapted from Jeffallan/claude-skills
+Commit: 36f3fe8052da7c57083783268c6ea3265d075265
+Source: skills/code-documenter/SKILL.md
+License: MIT (see LICENSE)
+Upstream author: Jeff Allan / Synergetic Solutions
+Verified: 2026-10-18T18:21:20.285545Z
+Adaptation: Chinese task workflow, App tools, self-contained references, standard-library execution and deliverable validation. Original skill and supporting resources retained under upstream/.

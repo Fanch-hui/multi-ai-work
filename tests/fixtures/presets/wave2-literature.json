@@ -1,0 +1,234 @@
+{
+  "author-novel-planner": {
+    "scenario": "有限设定下的六章悬疑小说策划",
+    "prompt": "根据简报制作六章大纲、人物弧线与伏笔表。结局提供两种选择供作者决定，不把其中一种记成已确定。 请先读取适用的配套 Skill，以 write_artifact 保存正式交付物。材料均为模拟验收输入，不联网补查。",
+    "files": [
+      {
+        "path": "materials.md",
+        "content": "# 作者已确认简报\n题材：近未来港口悬疑，面向成年读者。第三人称限知，仅跟随修钟匠林舟。\n林舟 28 岁，因辨色障碍不能靠红绿灯色判读信号；他能分辨亮度和位置。\n世界规则：港口电子钟每天 02:00 统一校时；机械钟不联网。旧机械钟每天慢两分钟。\n已定开端：一艘已在三年前报废的船，在电子时刻表上出现靠港记录。林舟在旧机械钟后发现一张无日期纸条：“别相信准点的钟。”\n人物：邻居阿遥是夜班调度员；林舟尚不知道她在当夜调过时刻表。\n禁改：不能加入时间旅行、超能力或突然出现的万能黑客。\n作者尚未决定阿遥是否有意掩护别人，结局也未定。\n"
+      }
+    ],
+    "reviewChecks": [
+      "六章均有目标、阻碍、行动选择、变化与后续期待，事件有因果连接",
+      "保留机械钟每日慢两分钟且不联网的限制，未出现时间旅行/超能力/万能黑客",
+      "林舟不能凭红绿色辨认信号；其认知不能直接读出阿遥未告知的信息",
+      "结局及阿遥动机是候选，不写成作者已确认；伏笔铺垫与可能回收可定位"
+    ]
+  },
+  "author-fiction-writer": {
+    "scenario": "限知视角小说场景草稿",
+    "prompt": "写约 600 字场景：林舟夜里发现纸条并与阿遥短暂交谈，结束时让他产生一个新的具体疑问。保持简报事实，创作新增背景另列建议。 请先读取适用的配套 Skill，以 write_artifact 保存正式交付物。材料均为模拟验收输入，不联网补查。",
+    "files": [
+      {
+        "path": "materials.md",
+        "content": "# 场景简报\n第三人称限知，只跟随林舟。他听觉敏锐但不是超能力。\n林舟在一楼修钟铺；旧机械钟每天慢两分钟且不联网；现在墙上的联网钟显示 02:00。\n他在旧机械钟后发现“别相信准点的钟”的无日期纸条。他还没有看见报废船的靠港记录。\n邻居阿遥是夜班调度员，刚从港口回来；她当晚改过时刻表，但这件事尚未告诉林舟，林舟也没证据知道。\n阿遥来取修好的怀表，只说“今晚港口很安静”。禁止直接写阿遥内心或宣布她在说谎。\n场景内不安排追逐、打斗、时间旅行，不确定纸条作者。\n"
+      }
+    ],
+    "reviewChecks": [
+      "正文是完整场景而非大纲，包含纸条、取表与对话及新的具体疑问",
+      "限定林舟认知，不直接描写阿遥内心或把改表事实灌入林舟认知",
+      "没有让机械钟联网，机械钟误差使用未超出给定条件",
+      "不定纸条作者，不加入追逐打斗/时间旅行；新增背景若提出需与已定设定分开"
+    ]
+  },
+  "author-serial-editor": {
+    "scenario": "跨章人物知识与时间线冲突",
+    "prompt": "检查前三章连续性，输出问题清单、增量设定与伏笔表及第四章上下文卡。每项引用章段，不直接改正文。 请先读取适用的配套 Skill，以 write_artifact 保存正式交付物。材料均为模拟验收输入，不联网补查。",
+    "files": [
+      {
+        "path": "materials.md",
+        "content": "# 作者已确认设定表\n林舟 28 岁，旧机械钟每天慢两分钟，不联网。林舟直到第三章才第一次获知阿遥调过时刻表。\n# 第一章 第1段\n10月1日夜，林舟发现纸条：“别相信准点的钟。”他不知道是谁留下的。\n# 第二章 第1段\n第二天，林舟对阿遥说：“我早知道你昨夜改过时刻表。”\n# 第二章 第2段\n他把旧机械钟连上港口网络，瞬间校准了时间。\n# 第二章 第3段\n刚过完三十岁生日的林舟坐回柜台。\n# 第三章 第1段\n阿遥第一次向林舟承认：“10月1日晚，我改过时刻表。”没有解释原因。\n# 作者备注\n纸条作者尚未决定。本批只审不改，不能猜定阿遥是凶手。\n"
+      }
+    ],
+    "reviewChecks": [
+      "定位第二章提前知道改表、机械钟联网、年龄 30 与 28 三个冲突并引用位置",
+      "区分阿遥确实改表、原因未知与纸条作者未知，未推断凶手",
+      "伏笔记录真实引入且未虚构回收，第四章卡片用第三章后真实知识状态",
+      "只给修订选项不擅改正史或正文，时间线不发明具体出生年"
+    ]
+  },
+  "author-writing-researcher": {
+    "scenario": "模拟口述与档案冲突资料整理",
+    "prompt": "为港口背景写作整理资料卡、来源冲突与待核验清单，仅用三份材料，不以现实常识改写。 请先读取适用的配套 Skill，以 write_artifact 保存正式交付物。材料均为模拟验收输入，不联网补查。",
+    "files": [
+      {
+        "path": "materials.md",
+        "content": "# 材料说明\n以下地名、档案和口述均为虚构验收资料。\n## A：青湾港档案摘录，档案号 Q-17，第2页\n第一台港区电动起重机于 1958 年投入使用。未记载旧手摇设备停用日期。\n## B：退休工人口述，访谈记录 B，第3段\n“我记得1956年就看到电动吊机了，也可能是我记错了两年。”\n## C：作者原稿，第2章\n“1957年的青湾港，每个工人都已用上全自动吊机，老式手摇设备早就绝迹。”\n## 写作问题\n电动设备何时出现？1957年是否已全面自动化？能否描写手摇设备？\n"
+      }
+    ],
+    "reviewChecks": [
+      "将档案1958与口述1956保留冲突，并说明口述自身不确定",
+      "没有从第一台投入推出全港自动化，也没从停用日期缺失推出1957手摇一定在或不在",
+      "指出原稿“每个”“全自动”“早就绝迹”资料支持不足",
+      "每张资料卡有真实文件/段页出处，不伪造联网核查、文献或现场细节"
+    ]
+  },
+  "author-nonfiction-writer": {
+    "scenario": "口述采访非虚构草稿与事实表",
+    "prompt": "写一篇约 500 字的非虚构草稿及事实核对表；材料不足的现场描写可以省略，另列补访问题。 请先读取适用的配套 Skill，以 write_artifact 保存正式交付物。材料均为模拟验收输入，不联网补查。",
+    "files": [
+      {
+        "path": "materials.md",
+        "content": "# 模拟采访资料\n## 访谈逐字稿，第1段\n受访者化名陈姨：“雨停了，我才出门。”\n## 访谈逐字稿，第2段\n陈姨自述 2024 年夏天开始在社区厨房帮忙，每周去两次。尚无排班表支持。\n## 活动登记表，第4行\n2024-07-12，陈姨登记参加厨房志愿活动。登记表未记录她首次参加的日期。\n## 作者采访笔记\n只进行了电话访谈，没有现场观察；受访者真实姓名不公开。厨房使用人数、餐食销量、工作人员收入均未提供。\n## 写作意图\n写她参与社区生活的经历，语气朴素，不塑造英雄，不替她补写内心。\n"
+      }
+    ],
+    "reviewChecks": [
+      "直接引语只用真实逐字稿，不制造第二句采访原话",
+      "2024夏天/每周两次归属陈姨自述，7月12登记不替代首次参与日期",
+      "不添加现场天气、动作、气味、心理或销量收入数字为事实",
+      "化名保留，事实表引用真实材料位置，补访问题具体，草稿完整可读"
+    ]
+  },
+  "author-copyeditor": {
+    "scenario": "有意口语与确定性错漏的审校",
+    "prompt": "仅做文字校对，交付另存修订稿、问题与改动表、风格表。保留人物口语“俺不晓得”。 请先读取适用的配套 Skill，以 write_artifact 保存正式交付物。材料均为模拟验收输入，不联网补查。",
+    "files": [
+      {
+        "path": "materials.md",
+        "content": "# 作者风格与正史\n人名林舟；店名归航钟铺。对白使用中文引号。“俺不晓得”为人物固定口语，不应改成普通话。林舟28岁。\n# 稿件\n## 第一章\n林洲站在归航钟铺门前。他把把钥匙放进兜里。\n“俺不晓得，”老陈说，“钟还没修好。”\n林舟抬头看了看店牌：归行钟铺。\n第二天，28岁的林舟仍没开门。本文未说明原因。\n# 要求\n不新增剧情，不把未知不开门原因补成生病。\n"
+      }
+    ],
+    "reviewChecks": [
+      "修正林洲→林舟、把把→把，并将归行与归航作为明确风格表冲突处理",
+      "“俺不晓得”完整保留，没有把口语标成必须纠正错误",
+      "修订稿与改动表一致，无新增生病等原因或情节",
+      "校对范围与结构建议区分，问题定位到原文"
+    ]
+  },
+  "author-publishing-planner": {
+    "scenario": "有资料边界的图书出版提案",
+    "prompt": "为选题写出版提案、目录样章计划和推进清单。把已具备素材、计划和待验证项分开。 请先读取适用的配套 Skill，以 write_artifact 保存正式交付物。材料均为模拟验收输入，不联网补查。",
+    "files": [
+      {
+        "path": "materials.md",
+        "content": "# 作者与选题\n作者为社区图书馆志愿者，有两年志愿经历，无已出版作品。\n拟写一本面向首次加入社区志愿活动者的非虚构小书，暂名《第一次做邻居》。\n已有12份采访笔记，其中只有7份取得本书引用同意；5份未确认。已完成两篇各1500字的样稿。\n目标全书约5万字是写作目标，目录尚未定。未来8周每周可投入10小时。未经作者批准不承诺完稿日期。\n# 模拟竞品资料\nA《邻里日记》：用户提供目录，偏个人随笔。B《社区志愿入门》：用户提供目录，偏办事流程。无售价、销量、出版社或读者评分资料。\n# 目标\n希望兼顾真实经历与新人可操作建议。发行渠道、出版社、稿酬和印数均未确定。\n"
+      }
+    ],
+    "reviewChecks": [
+      "出版提案含读者问题、可证据支持的差异、目录与样章和资源推进安排",
+      "作者没有已出版作品，现有两篇样稿不写成全书完稿",
+      "区分7份已同意与5份待授权，不用待授权材料标为可直接引用",
+      "不编造竞品销量价格和出版社反馈，不承诺8周必定5万字，任务安排适应80小时总投入"
+    ]
+  },
+  "translation-business": {
+    "scenario": "条件与承诺程度的商务翻译",
+    "prompt": "将邮件完整译为简体中文，另附术语与歧义表及逐段核对结果。 请先读取适用的配套 Skill，以 write_artifact 保存正式交付物。材料均为模拟验收输入，不联网补查。",
+    "files": [
+      {
+        "path": "materials.md",
+        "content": "# Source email\n[P1] Dear Ms. Chen, this quotation is valid until 18 November 2026. The price is USD 12,500, excluding import duties.\n[P2] Delivery may take 20 business days after receipt of the deposit. We cannot guarantee arrival before the exhibition unless the carrier confirms the schedule in writing.\n[P3] A 30% deposit is requested. Please do not transfer funds until we send a revised invoice. This email does not confirm acceptance of your order.\n# Approved terms\nquotation = 报价；deposit = 预付款；business days = 工作日；carrier = 承运人。\n"
+      }
+    ],
+    "reviewChecks": [
+      "P1-P3完整覆盖，不遗漏末句不确认接单与禁止先付款",
+      "USD12500、2026年11月18日、30%、20工作日准确，税费排除保持",
+      "may 与 cannot guarantee/unless written confirmation保留不确定和例外逻辑，不写承诺准时到达",
+      "术语遵从批准译法，清楚区分预付款请求和实际已支付"
+    ]
+  },
+  "translation-technical": {
+    "scenario": "保留代码公式的技术说明翻译",
+    "prompt": "把 source.md 完整译成简体中文，保留 Markdown、代码、公式、表格和链接，交付术语表及覆盖核对。 请先读取适用的配套 Skill，以 write_artifact 保存正式交付物。材料均为模拟验收输入，不联网补查。",
+    "files": [
+      {
+        "path": "source.md",
+        "content": "# Upload API\n[P1] The client MUST retry only when `retryable` is `true`. A timeout does not mean that the upload failed. Check the upload ID before resubmitting.\n\n| Parameter | Meaning |\n|---|---|\n| `limit` | Maximum number of records; default: 25 |\n| `dry_run` | Validate without saving changes |\n\n```sh\ncurl -X POST https://example.invalid/api/upload --data '{\"dry_run\":true}'\n```\n[P2] The ratio is $r = a / b$ for $b > 0$. See [API reference](https://example.invalid/docs#upload).\n\n![Flow](media/upload-flow.png)\n\n# Approved glossary\nclient=客户端；upload ID=上传 ID；timeout=超时；retry=重试。\n"
+      }
+    ],
+    "reviewChecks": [
+      "MUST/only when精确保留，timeout不意味失败及重提先核ID完整",
+      "limit/dry_run键、25数值、代码块字节和链接目标/图片路径保持",
+      "公式r=a/b与b>0不变，表格两行和Markdown结构完整",
+      "没有把dry_run译为真实保存，没有遗漏标题、图说明或API引用"
+    ]
+  },
+  "translation-literary": {
+    "scenario": "英文限知叙述的文学翻译",
+    "prompt": "将两段英文译为简体中文，保留克制语气与留白；另列关键译法说明和专名表。 请先读取适用的配套 Skill，以 write_artifact 保存正式交付物。材料均为模拟验收输入，不联网补查。",
+    "files": [
+      {
+        "path": "materials.md",
+        "content": "# Source\n[P1] Robin left the cup by the door. It was still warm. \"Later,\" Alex had said, but the train had already gone.\n[P2] The room was quiet enough for the clock to sound impatient. Robin did not touch the letter. Outside, someone laughed; it might have been Alex, or only a stranger with the same laugh.\n# Author notes\nRobin/罗宾，Alex/亚历克斯为批准专名。两人的性别和关系均未确定；不要补成夫妻、兄妹。不要说杯子是什么饮料，也没有火车目的地。叙述不解释信中内容。\n"
+      }
+    ],
+    "reviewChecks": [
+      "两段完整，杯子尚温、火车已走、未碰信及可能是陌生人的不确定保持",
+      "专名使用批准译法，未给两人补定性别、关系、饮品、目的地或信内容",
+      "时钟不耐烦的拟人和克制留白得到保留，不转成事实解释",
+      "关键译法说明有原文依据，不把补写情节作为翻译"
+    ]
+  },
+  "translation-terminologist": {
+    "scenario": "同形异义与手工批准术语保护",
+    "prompt": "建立术语表、冲突清单和受影响段落列表。当前不批准任何新译法，不重写整篇。 请先读取适用的配套 Skill，以 write_artifact 保存正式交付物。材料均为模拟验收输入，不联网补查。",
+    "files": [
+      {
+        "path": "materials.md",
+        "content": "# Approved glossary\nworkspace = 工作区（产品界面概念，用户已批准）\ntenant = 租户（SaaS组织边界，用户已批准）\n# Source with current translation\n[P1 source] Open your workspace and invite two members.\n[P1 current] 打开你的工作空间，邀请两名成员。\n[P2 source] The tenant can create three workspaces.\n[P2 current] 房客可以创建三个工作区。\n[P3 source] In the lease example, the tenant must pay rent by Friday.\n[P3 current] 在租约示例中，租户必须在周五前支付租金。\n[P4 source] Robin met Rob at the station.\n[P4 current] 罗宾在车站遇见罗伯。\n# Notes\nP3是租赁语境，不属于SaaS组织。没有证据说明Robin与Rob为同一个人；它们是原句两个参与者。P4没有批准专名译法。\n"
+      }
+    ],
+    "reviewChecks": [
+      "工作区批准译法受保护，P1工作空间冲突定位准确；P2房客语义错误定位",
+      "P3租赁tenant与SaaS概念区分，不把所有tenant全局强制统一",
+      "Robin和Rob保持不同实体，未凭拼写相近合并，不把候选专名译法标批准",
+      "术语表有源词、译法、语境、来源段落、状态，受影响段落列表与问题一致"
+    ]
+  },
+  "translation-localization-editor": {
+    "scenario": "JSON界面本地化与变量保持",
+    "prompt": "将 en.json 本地化为简体中文，保存 zh-CN.json，并提供键级核对表。保持全部键、变量、URL、标记与业务意义。 请先读取适用的配套 Skill，以 write_artifact 保存正式交付物。材料均为模拟验收输入，不联网补查。",
+    "files": [
+      {
+        "path": "en.json",
+        "content": "{\n  \"invite\": \"Invite {name} to {workspace}\",\n  \"deleteWarning\": \"Delete this workspace? This action cannot be undone.\",\n  \"remaining\": \"{count} files remaining\",\n  \"help\": \"Read <a href=\\\"https://example.invalid/help\\\">the guide</a>.\",\n  \"schedule\": \"Next run: {date} at {time}\",\n  \"payment\": \"No payment is required until the trial ends.\"\n}\n\n"
+      },
+      {
+        "path": "glossary.md",
+        "content": "workspace=工作区；trial=试用；目标地区zh-CN。文件仅6个键，无实际界面截图。"
+      }
+    ],
+    "reviewChecks": [
+      "JSON输出可解析且6个键一一对应，变量name/workspace/count/date/time拼写与出现次数保持",
+      "链接href与HTML标签结构保留，只有可见文字翻译",
+      "删除不可撤销的语义保留，payment试用结束之前不需付款不误译为永久免费",
+      "没有把date/time替成具体日期或金额，核对表与实际资源一致"
+    ]
+  },
+  "translation-bilingual-reviewer": {
+    "scenario": "明确误译与漏译的双语审校",
+    "prompt": "逐段审校并保存完整修订译文、问题表与覆盖核对结果。 请先读取适用的配套 Skill，以 write_artifact 保存正式交付物。材料均为模拟验收输入，不联网补查。",
+    "files": [
+      {
+        "path": "materials.md",
+        "content": "# Source\n[P1] The fee is EUR 240 per year, not per month.\n[P2] You may cancel at any time. Cancellation does not delete your existing files.\n[P3] Access is read-only unless an administrator grants write permission.\n[P4] Keep the recovery code in a safe place.\n# Current translation\n[P1] 费用为每月240美元。\n[P2] 您可以随时取消。取消会删除已有文件。\n[P3] 管理员授予写入权限后，访问仍只能读取。\n# Approved terms\nrecovery code = 恢复码；read-only=只读；write permission=写入权限。\n"
+      }
+    ],
+    "reviewChecks": [
+      "P1年/月与EUR/USD两种实质错误均发现并修正",
+      "P2否定翻转发现并修正，不增加实际删除行为",
+      "P3 unless条件准确修复为默认只读、管理员授权后允许写，非仍只读",
+      "P4漏译被补齐，最终4段完整，恢复码术语正确，问题表与修订稿一致"
+    ]
+  },
+  "translation-subtitle-translator": {
+    "scenario": "SRT边界、时码与跨段指代",
+    "prompt": "将 source.srt 译为简体中文字幕，保留3段编号、时码和边界，另附逐段问题清单。 请先读取适用的配套 Skill，以 write_artifact 保存正式交付物。材料均为模拟验收输入，不联网补查。",
+    "files": [
+      {
+        "path": "source.srt",
+        "content": "1\n00:00:01,000 --> 00:00:03,000\nOpen the workspace.\n\n2\n00:00:03,200 --> 00:00:06,000\nDo not delete it until\n\n3\n00:00:06,200 --> 00:00:09,500\nthe backup has finished. It may take two minutes.\n"
+      },
+      {
+        "path": "glossary.md",
+        "content": "workspace=工作区；backup=备份。没有音频或视频文件，不做听校。"
+      }
+    ],
+    "reviewChecks": [
+      "输出可保存为SRT，恰好3段，编号与全部时码原样，段落非空",
+      "第2与3段合读的not until保持备份完成前不要删除，未翻成完成后禁止删",
+      "workspace=工作区，two minutes=两分钟，may保留可能性",
+      "没有合并片段、改轴、补造听音校对结果或遗漏末句"
+    ]
+  }
+}

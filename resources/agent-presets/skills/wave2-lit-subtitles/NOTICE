@@ -1,0 +1,7 @@
+字幕逐段翻译与时码保持
+Adapted from https://github.com/shang-zhu/violin
+Commit: 7a86852ced84624b1849abee6d7444c0904a73ea
+Source: .claude/skills/video-translator/SKILL.md
+License: MIT; see LICENSE.
+Adaptation: Chinese role workflow, App tool names, local resources, source fidelity and output checks for multi-AI work.
+Copyright and attribution from upstream are retained in LICENSE.
