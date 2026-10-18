@@ -18,6 +18,7 @@ import {
 const executeFile = promisify(execFile);
 const require = createRequire(import.meta.url);
 const SEARCH_VALIDATION_CONCURRENCY = 8;
+const CASE_INSENSITIVE_GLOBS = path.matchesGlob('file.TXT', '*.txt');
 type Page = { path: string; offset: number; limit: number };
 type Search = Page & { query: string; regex: boolean; glob?: string; contextLines: number };
 const privateGlobs = [...credentialFileNames, '.env*', 'credentials*', 'secret*', 'id_rsa*', 'id_ed25519*', 'id_ecdsa*', '*.pem', '*.p12', '*.pfx', '*.key'];
@@ -124,7 +125,7 @@ async function ripgrep(args: string[], cwd: string, context: ToolExecutionContex
 export async function findFiles(input: Page & { pattern: string }, context: ToolExecutionContext): Promise<unknown> {
   const root = await resolveCanonicalRoot(context.workspace.path);
   const target = await directory(input.path, context, root);
-  const output = await ripgrep(['--files', '--null', '.'], target, context);
+  const output = await ripgrep(['--files', '--null', ...patternFilter(input.pattern), '.'], target, context);
   const candidates = output.split('\0').filter(relative => Boolean(relative) && matchesPattern(relative, input.pattern));
   const validated = await mapConcurrent(candidates, SEARCH_VALIDATION_CONCURRENCY, async relative => {
     const candidate = path.resolve(target, relative);
@@ -141,11 +142,21 @@ function matchesPattern(relative: string, pattern: string): boolean {
   return path.matchesGlob(normalized, pattern) || (!pattern.includes('/') && path.matchesGlob(path.basename(normalized), pattern));
 }
 
+function patternFilter(pattern?: string): string[] {
+  if (!pattern || !/^[\w./*? -]+$/.test(pattern)) return [];
+  let basename = pattern.split('/').at(-1)!;
+  if (!basename || basename === '*' || basename.includes('**')) return [];
+  if (CASE_INSENSITIVE_GLOBS) basename = basename.replace(/[a-z]/gi, letter => `[${letter.toLowerCase()}${letter.toUpperCase()}]`);
+  // Type filters preserve ignore rules; positive --glob filters would override them.
+  // Keep path.matchesGlob as the authority for path components and richer patterns.
+  return ['--type-add', `appsearch:${basename}`, '--type', 'appsearch'];
+}
+
 type EventData = { path?: { text?: string }; line_number?: number; lines?: { text?: string } };
 export async function searchText(input: Search, context: ToolExecutionContext): Promise<unknown> {
   const root = await resolveCanonicalRoot(context.workspace.path);
   const target = await directory(input.path, context, root);
-  const options = ['--json', '--context', String(input.contextLines), '--max-columns', '2000'];
+  const options = ['--json', '--context', String(input.contextLines), '--max-columns', '2000', ...patternFilter(input.glob)];
   if (!input.regex) options.push('--fixed-strings');
   const output = await ripgrep([...options, '--', input.query, '.'], target, context);
   const pendingFiles = new Map<string, { lines: Map<number, string>; matches: number[] }>();
