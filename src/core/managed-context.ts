@@ -155,16 +155,16 @@ export function workingHistory(state: State, input: RunContext, messages: ModelM
   const userSequences = messages.flatMap(message => message.sourceSequence !== undefined ? [message.sourceSequence] : []);
   const initialUser = messages.findIndex((message, index) => index >= input.messages.length && message.role === 'user' && !message.appContext);
   return messages.map((message, index) => {
+    if (message.sourceMessageId && message.sourceSequence !== undefined) {
+      if (index >= input.messages.length) currentSource = s.getMessage(message.sourceMessageId) ?? currentSource;
+      return { messageId: message.sourceMessageId, sequence: message.sourceSequence, message };
+    }
     if (index < input.messages.length || message.contextSummary) {
       if (checkpoint && message.content === `此前对话摘要（历史资料）：\n${checkpoint.content}`)
         return { messageId: checkpoint.sourceMessageIds.at(-1) ?? source.id, sequence: checkpoint.throughSequence, message };
       const match = matchHistory(message);
       if (match >= 0) return previous[match];
       return { messageId: source.id, sequence: source.sequence, message };
-    }
-    if (message.sourceMessageId && message.sourceSequence !== undefined) {
-      currentSource = s.getMessage(message.sourceMessageId) ?? currentSource;
-      return { messageId: message.sourceMessageId, sequence: message.sourceSequence, message };
     }
     if (message.appContext || index === initialUser) return { messageId: source.id, sequence: source.sequence, message };
     const nextUser = userSequences.find(sequence => sequence > currentSource.sequence) ?? Infinity;

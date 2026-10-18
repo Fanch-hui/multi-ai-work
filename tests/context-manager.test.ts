@@ -73,7 +73,8 @@ describe('ContextManager', () => {
     const { manager, checkpoint } = setup();
     const messages = [message(1, '旧内容'.repeat(500)), message(2, '最新目标')];
     const failed = await manager.prepare({ ...baseInput, messages, summarize: async () => { throw new Error('network'); } });
-    expect(failed.messages).toEqual(modelMessageHistory(messages, 'a').map(entry => entry.message));
+    expect(failed.messages).toEqual(modelMessageHistory(messages, 'a').map(entry => ({ ...entry.message,
+      sourceMessageId: entry.messageId, sourceSequence: entry.sequence })));
     const stale = await manager.prepare({ ...baseInput, messages, summarize: async () => '短摘要', isSourceCurrent: () => false });
     expect(stale.messages).toEqual(failed.messages);
     expect(checkpoint()).toBeUndefined();

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { ModelMessage, RunContext } from '../src/domain/provider.js';
 import type { Bot, Task, ToolConnection } from '../src/domain/types.js';
-import { estimateModelMessagesTokens } from '../src/runtime/model-history.js';
+import { estimateModelMessagesTokens, type ModelHistoryEntry } from '../src/runtime/model-history.js';
 import { remoteToolAlias } from '../src/tools/mcp-catalog.js';
 import { eventually, setup } from './core-harness.js';
 
@@ -80,5 +80,16 @@ describe('带 MCP 目录的手动压缩', () => {
     await turn(core, roomId, '撤销连接后继续');
     expect(requests.at(-1)!.tools.some(item => item.name === remote)).toBe(false);
     expect(JSON.stringify(requests.at(-1)!.messages)).not.toContain(summary);
+    const original = core.state.storage.messages(roomId).find(message => message.authorType === 'user')!;
+    const rebuilt = core.state.storage.metadata<ModelHistoryEntry[]>(`history:${binding.id}`)!;
+    expect(rebuilt.find(entry => entry.message.content.includes('EARLY_HISTORY_TOKEN')))
+      .toMatchObject({ messageId: original.id, sequence: original.sequence });
+    const compactAgain = await core.request('conversations.compact', { id: roomId }) as Task;
+    await eventually(() => ['completed', 'failed'].includes(core.state.storage.get<Task>('tasks', compactAgain.id)?.status ?? ''), 10000);
+    expect(core.state.storage.get<Task>('tasks', compactAgain.id))
+      .toMatchObject({ status: 'completed', contextCompactionOutcome: 'compressed' });
+    await turn(core, roomId, '重建并压缩后继续');
+    expect(JSON.stringify(requests.at(-1)!.messages)).toContain(summary);
+    expect(JSON.stringify(requests.at(-1)!.messages)).not.toContain('EARLY_HISTORY_TOKEN');
   });
 });

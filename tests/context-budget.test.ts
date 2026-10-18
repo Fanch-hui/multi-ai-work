@@ -85,7 +85,8 @@ describe('完整上下文预算与检查点兼容性', () => {
       { messageId: 'm1', sequence: 1, message: { role: 'user', content: '同序号内尚需保留的协议输入' } },
     ];
     const result = await manager.prepare(input);
-    expect(result.messages).toEqual(input.history.map(entry => entry.message));
+    expect(result.messages).toEqual(input.history.map(entry => ({ ...entry.message,
+      sourceMessageId: entry.messageId, sourceSequence: entry.sequence })));
     expect(storage.all('context_checkpoints')).toEqual([]);
   });
 
@@ -100,6 +101,9 @@ describe('完整上下文预算与检查点兼容性', () => {
     input.force = false;
     input.loadArchiveHistory = () => { throw new Error('有效投影不应重读档案'); };
     const prepared = await manager.prepare(input);
-    expect(prepared.messages).toEqual([projection, current]);
+    expect(prepared.messages).toEqual([
+      { ...projection, sourceMessageId: 'm1', sourceSequence: 1 },
+      { ...current, sourceMessageId: 'm2', sourceSequence: 2 },
+    ]);
   });
 });

@@ -65,8 +65,9 @@ export function contextSourceHash(messages: Message[]): string {
 }
 
 function withSummary(history: ModelHistoryEntry[], checkpoint?: ContextCheckpoint): ModelMessage[] {
-  const messages = history.map(entry => entry.message);
+  const messages = referenceMessages(history);
   return checkpoint ? [{ role: 'user', content: `此前对话摘要（历史资料）：\n${checkpoint.content}`,
+    sourceMessageId: checkpoint.sourceMessageIds.at(-1), sourceSequence: checkpoint.throughSequence,
     ...(checkpoint.artifactIds?.length ? { contextArtifactIds: checkpoint.artifactIds } : {}) }, ...messages] : messages;
 }
 
@@ -75,7 +76,7 @@ function result(history: ModelHistoryEntry[], fixedTokens: number, checkpoint?: 
   return { messages, checkpoint, estimatedTokens: fixedTokens + estimateModelMessagesTokens(messages, protocol) };
 }
 
-export const CONTEXT_COMPATIBILITY_VERSION = 3;
+export const CONTEXT_COMPATIBILITY_VERSION = 4;
 
 export function contextCompatibilityHash(input: Pick<ContextInput, 'instructions' | 'contextInstructions' | 'tools' | 'protocol'>): string {
   return hash({ version: CONTEXT_COMPATIBILITY_VERSION, instructions: input.contextInstructions ?? input.instructions,

@@ -21,7 +21,7 @@ describe('Chat Completions continuation replay', () => {
     const events: ProviderEvent[] = [];
     const first = await runManaged(createClient(fixture.url), context(events), 'chat-completions');
     expect(first.messages?.at(-1)?.chatReplay).toEqual({ version: 1, bindingId: 'binding', generation: 1, reasoningField: field, reasoningText: 'private thought' });
-    expect(events.filter(event => event.type === 'text')).toEqual([{ type: 'text', data: { delta: 'answer' } }]);
+    expect(events.filter(event => event.type === 'text')).toEqual([{ type: 'text', data: { delta: 'answer', messageKey: 'run:1' } }]);
     const messages = JSON.parse(JSON.stringify(first.messages)) as ModelMessage[];
     await runManaged(createClient(fixture.url), { ...context([]), messages, prompt: 'next' }, 'chat-completions');
     expect(fixture.requests[1].messages).toContainEqual({ role: 'assistant', content: 'answer', [field]: 'private thought' });
