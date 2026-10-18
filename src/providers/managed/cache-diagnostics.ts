@@ -3,13 +3,28 @@ import type { Response, ResponseCreateParamsStreaming } from 'openai/resources/r
 import type { RunContext } from '../../domain/provider.js';
 
 type Fingerprints = { instructions: string; tools: string; settings: string; input: string; items: string[] };
-type Baseline = { requestId: string; responseId: string; fingerprints: Fingerprints };
-const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value ?? null)).digest('hex');
+type Baseline = { requestId: string; responseId: string; fingerprints: Fingerprints; outputItems: string[] };
+const hashJson = (json: string) => createHash('sha256').update(json).digest('hex');
+const hash = (value: unknown) => hashJson(JSON.stringify(value ?? null));
+
+function inputFingerprints(input: ResponseCreateParamsStreaming['input']) {
+  if (!Array.isArray(input)) {
+    const fingerprint = hash(input);
+    return { input: fingerprint, items: [fingerprint] };
+  }
+  const digest = createHash('sha256').update('[');
+  const items = input.map((item, index) => {
+    const json = JSON.stringify(item ?? null);
+    if (index) digest.update(',');
+    digest.update(json);
+    return hashJson(json);
+  });
+  return { input: digest.update(']').digest('hex'), items };
+}
 
 function fingerprints(body: ResponseCreateParamsStreaming): Fingerprints {
   const { instructions, tools, input, prompt_cache_options: _diagnostics, ...settings } = body;
-  return { instructions: hash(instructions), tools: hash(tools), settings: hash(settings), input: hash(input),
-    items: (Array.isArray(input) ? input : [input]).map(hash) };
+  return { instructions: hash(instructions), tools: hash(tools), settings: hash(settings), ...inputFingerprints(input) };
 }
 
 function supportsComparison(context: RunContext): boolean {
@@ -27,6 +42,10 @@ export class ResponsesCacheDiagnostics {
     let sharedInputItems = 0;
     if (previous) while (sharedInputItems < previous.fingerprints.items.length
       && current.items[sharedInputItems] === previous.fingerprints.items[sharedInputItems]) sharedInputItems++;
+    const inputPrefixUnchanged = !!previous && sharedInputItems === previous.fingerprints.items.length;
+    let sharedOutputItems = 0;
+    if (previous && inputPrefixUnchanged) while (sharedOutputItems < previous.outputItems.length
+      && current.items[sharedInputItems + sharedOutputItems] === previous.outputItems[sharedOutputItems]) sharedOutputItems++;
     const changedFields = previous ? (['instructions', 'tools', 'settings'] as const)
       .filter(key => current[key] !== previous.fingerprints[key]) : [];
     const comparisonResponseId = previous && supportsComparison(context) ? previous.responseId : undefined;
@@ -34,7 +53,9 @@ export class ResponsesCacheDiagnostics {
       fingerprints: { instructions: current.instructions, tools: current.tools, settings: current.settings, input: current.input },
       inputItems: current.items.length,
       ...(previous ? { baselineRequestId: previous.requestId, baselineInputItems: previous.fingerprints.items.length,
-        sharedInputItems, changedFields, inputPrefixUnchanged: sharedInputItems === previous.fingerprints.items.length } : {}),
+        sharedInputItems, changedFields, inputPrefixUnchanged, baselineOutputItems: previous.outputItems.length,
+        sharedOutputItems, confirmedPrefixUnchanged: inputPrefixUnchanged
+          && sharedOutputItems === previous.outputItems.length && changedFields.length === 0 } : {}),
       ...(comparisonResponseId ? { comparisonResponseId } : {}),
     } });
     return {
@@ -52,7 +73,7 @@ export class ResponsesCacheDiagnostics {
             comparisonReusableTokens: diagnostics.comparison_reusable_tokens,
           } : {}) } : { type: 'not_reported' },
         } });
-        this.baseline = { requestId, responseId: response.id, fingerprints: current };
+        this.baseline = { requestId, responseId: response.id, fingerprints: current, outputItems: (response.output ?? []).map(hash) };
       },
     };
   }

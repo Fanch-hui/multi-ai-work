@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
 import type { Response, ResponseCreateParamsStreaming } from 'openai/resources/responses/responses';
 import type { ProviderEvent, RunContext } from '../src/domain/provider.js';
 import { ResponsesCacheDiagnostics } from '../src/providers/managed/cache-diagnostics.js';
+import { responsesInput } from '../src/providers/managed/messages.js';
 
 function context(events: ProviderEvent[], provider = 'chatgpt', model = 'gpt-6.1-sol') {
   return { connection: { provider } as RunContext['connection'], bot: { model } as RunContext['bot'],
@@ -67,6 +69,47 @@ describe('request cache diagnostics', () => {
     expect(events.at(-1)?.data.diagnostics).toEqual({ type: 'cache_miss', reason: 'input_changed',
       cacheMissedTokens: 2000, comparisonReusableTokens: 2000 });
     expect(events.at(-1)?.data).not.toHaveProperty('cachedInputTokens');
+    expect(JSON.stringify(events)).not.toContain('private');
+  });
+
+  it('hashes the full input and its items in one serialization pass', () => {
+    const events: ProviderEvent[] = [], ctx = context(events), tracker = new ResponsesCacheDiagnostics();
+    let reads = 0;
+    const item = { role: 'user' as const, get content() { reads++; return 'private large input'.repeat(1000); } };
+    const input = [item, { role: 'user' as const, content: 'next' }];
+    const expected = createHash('sha256').update(JSON.stringify([
+      { role: 'user', content: 'private large input'.repeat(1000) }, { role: 'user', content: 'next' },
+    ])).digest('hex');
+    tracker.begin(ctx, 'run:1', { ...body(), input });
+    expect(reads).toBe(1);
+    expect(events.at(-1)?.data.fingerprints).toMatchObject({ input: expected });
+    expect(JSON.stringify(events)).not.toContain('private');
+  });
+
+  it('distinguishes preserved request input from rewritten confirmed output', () => {
+    const events: ProviderEvent[] = [], ctx = context(events), tracker = new ResponsesCacheDiagnostics();
+    const output: Response['output'] = [
+      { type: 'reasoning', id: 'reasoning_1', summary: [], encrypted_content: 'private encrypted state' },
+      { type: 'function_call', id: 'fc_1', call_id: 'call_1', name: 'read', arguments: '{"path":"private.txt"}', status: 'completed' },
+    ];
+    const initial = body();
+    tracker.begin(ctx, 'run:1', initial).complete({ ...response(), output });
+    const next = { ...body(), input: [
+      ...(initial.input as unknown[]),
+      ...responsesInput([{ role: 'assistant', content: '', providerItems: output },
+        { role: 'tool', callId: 'call_1', content: 'private tool result' }]),
+    ] } as ResponseCreateParamsStreaming;
+    tracker.begin(ctx, 'run:2', next);
+    expect(events.at(-1)?.data).toMatchObject({ inputPrefixUnchanged: true, baselineOutputItems: 2,
+      sharedOutputItems: 2, confirmedPrefixUnchanged: true });
+    const rewritten = structuredClone(next);
+    (rewritten.input as Response['output'])[2] = { ...output[1], arguments: '{"path":"other.txt"}' } as Response['output'][number];
+    tracker.begin(ctx, 'run:3', rewritten);
+    expect(events.at(-1)?.data).toMatchObject({ inputPrefixUnchanged: true, sharedOutputItems: 1,
+      confirmedPrefixUnchanged: false });
+    tracker.begin(ctx, 'run:4', { ...next, instructions: 'different instructions' });
+    expect(events.at(-1)?.data).toMatchObject({ sharedOutputItems: 2, changedFields: ['instructions'],
+      confirmedPrefixUnchanged: false });
     expect(JSON.stringify(events)).not.toContain('private');
   });
 });
