@@ -89,11 +89,8 @@ async function start() {
   const snapshot = await core.request('state.snapshot', {}) as Snapshot; trayEnabled = snapshot.settings.trayEnabled;
   await window.loadFile(pagePath); window.show();
   void updater.start();
-  const pixels = Buffer.alloc(16 * 16 * 4);
-  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
-    if ((x >= 2 && x <= 6 && y >= 3 && y <= 7) || (x >= 9 && x <= 13 && y >= 3 && y <= 7) || (x >= 4 && x <= 11 && y >= 10 && y <= 13)) pixels[(y * 16 + x) * 4 + 3] = 255;
-  }
-  const icon = nativeImage.createFromBitmap(pixels, { width: 16, height: 16 }); icon.setTemplateImage(true);
+  const icon = nativeImage.createFromPath(join(app.getAppPath(), 'resources', process.platform === 'darwin' ? 'trayTemplate.png' : 'tray.png'));
+  if (process.platform === 'darwin') icon.setTemplateImage(true);
   tray = new Tray(icon); tray.setToolTip('multi-AI work');
   tray.setContextMenu(Menu.buildFromTemplate([{ label: '打开 multi-AI work', click: () => window.show() }, { type: 'separator' }, { label: '退出', click: () => { exiting = true; app.quit(); } }]));
   tray.on('click', () => window.show());

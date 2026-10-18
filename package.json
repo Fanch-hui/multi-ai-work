@@ -73,6 +73,7 @@
     },
     "files": [
       "dist/**/*",
+      "resources/tray*.png",
       "package.json",
       "THIRD_PARTY_NOTICES.md",
       "licenses/**/*"
