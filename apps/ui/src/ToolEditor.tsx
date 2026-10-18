@@ -3,6 +3,7 @@ import type { ToolConnection } from "../../../src/domain/types.js";
 import type { Mutate } from "./store.js";
 import { errorMessage } from "./api.js";
 import { Button, ErrorNote, Field, Modal, inputClass } from "./components.js";
+const deepseekSearchUrl = "https://api.deepseek.com/v1/tools/search";
 export function ToolEditor({ tool, mutate, close }: { tool?: ToolConnection; mutate: Mutate; close: () => void }) {
   const [name, setName] = useState(tool?.name || "");
   const [kind, setKind] = useState<ToolConnection["kind"]>(tool?.kind || "mcp");
@@ -25,7 +26,7 @@ export function ToolEditor({ tool, mutate, close }: { tool?: ToolConnection; mut
           ...tool,
           name,
           kind,
-          searchBackend: kind === "search" ? "http" : searchBackend || undefined,
+          searchBackend: kind === "search" ? searchBackend === "deepseek" ? "deepseek" : "http" : searchBackend || undefined,
           transport,
           url: transport === "http" ? url : undefined,
           command: transport === "stdio" ? command : undefined,
@@ -74,13 +75,24 @@ export function ToolEditor({ tool, mutate, close }: { tool?: ToolConnection; mut
             </select>
           </Field>
         </div>
-        {kind !== "search" && <Field label="搜索适配" hint="Tavily 也会在检测到 tavily-search 工具后自动识别。">
+        {kind === "search" ? <Field label="搜索服务">
+          <select className={inputClass} value={searchBackend} onChange={event => {
+            const value = event.target.value as typeof searchBackend;
+            setSearchBackend(value);
+            if (value === "deepseek" && !url.trim()) setUrl(deepseekSearchUrl);
+          }}>
+            <option value="http">通用 HTTP GET</option>
+            <option value="deepseek">DeepSeek</option>
+          </select>
+        </Field> : <Field label="搜索适配" hint="Tavily 也会在检测到 tavily-search 工具后自动识别。">
           <select className={inputClass} value={searchBackend} onChange={event => setSearchBackend(event.target.value as typeof searchBackend)}>
             <option value="">自动识别</option>
             <option value="tavily">Tavily MCP</option>
           </select>
         </Field>}
-        {kind === "search" && <p className="text-xs leading-5 text-slate-500">HTTP 搜索服务使用 GET 请求，并通过 q 参数传递查询。Tavily 地址请选择 MCP 类型。</p>}
+        {kind === "search" && <p className="text-xs leading-5 text-slate-500">{searchBackend === "deepseek"
+          ? "使用 DeepSeek 搜索接口，请填写 DeepSeek API Key。"
+          : "HTTP 搜索服务使用 GET 请求，并通过 q 参数传递查询。Tavily 地址请选择 MCP 类型。"}</p>}
         {transport === "http" ? (
           <>
             <Field label="服务地址">
@@ -90,7 +102,7 @@ export function ToolEditor({ tool, mutate, close }: { tool?: ToolConnection; mut
                 className={inputClass}
                 value={url}
                 onChange={(event) => setUrl(event.target.value)}
-                placeholder={kind === "search" ? "https://example.com/search" : "https://example.com/mcp"}
+                placeholder={kind === "search" ? searchBackend === "deepseek" ? deepseekSearchUrl : "https://example.com/search" : "https://example.com/mcp"}
               />
             </Field>
             <Field label="Bearer 凭据" hint={tool?.secretRef ? "留空保留已保存凭据。" : undefined}>

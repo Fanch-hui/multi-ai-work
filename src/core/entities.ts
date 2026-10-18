@@ -32,7 +32,7 @@ const botSchema = z.object({ id: z.string().optional(), name, role: z.string().m
   skillIds: z.array(z.string()).default([]), toolConnectionIds: z.array(z.string()).default([]), memoryMode: z.enum(['off', 'manual', 'propose']).default('propose') });
 const toolSchema = z.object({ id: z.string().optional(), name, kind: z.enum(['mcp', 'bridge', 'search']), transport: z.enum(['stdio', 'http']).optional(),
   url: z.string().optional(), command: z.string().optional(), args: z.array(z.string()).optional(), secret: z.string().optional(), enabled: z.boolean().default(true),
-  searchBackend: z.enum(['http', 'tavily']).optional() });
+  searchBackend: z.enum(['http', 'tavily', 'deepseek']).optional() });
 
 export class EntityService {
   constructor(private state: State, private vault: Vault) {}

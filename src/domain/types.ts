@@ -143,7 +143,7 @@ export interface ToolConnection {
   id: string; name: string; kind: 'mcp' | 'bridge' | 'search'; transport?: 'stdio' | 'http';
   url?: string; command?: string; args?: string[]; secretRef?: string; enabled: boolean;
   toolNames: string[]; status: 'untested' | 'ready' | 'error'; error?: string;
-  searchBackend?: 'http' | 'tavily';
+  searchBackend?: 'http' | 'tavily' | 'deepseek';
 }
 export interface Skill { id: string; name: string; path: string; content: string; description?: string; resourceRoot?: string; version?: string; bundled?: boolean;
   digest?: string; source?: SkillSource; missing?: boolean; presetOnly?: boolean; }

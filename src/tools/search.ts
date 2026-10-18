@@ -1,7 +1,7 @@
 import type { ToolConnection } from '../domain/types.js';
 import type { ToolExecutionContext } from '../domain/tools.js';
 import type { McpConnections } from './mcp.js';
-import { searchWeb } from './web.js';
+import { searchHttp } from './http-search.js';
 import { extractSearchResults } from './web-content.js';
 
 export function tavilySearchTool(names: readonly string[]): string | undefined {
@@ -29,7 +29,7 @@ export function searchConnection(context: ToolExecutionContext, connectionId?: s
 
 export async function search(query: string, connectionId: string | undefined, context: ToolExecutionContext, mcp: McpConnections) {
   const connection = searchConnection(context, connectionId);
-  if (connection.kind === 'search') return searchWeb(query, connection.id, context);
+  if (connection.kind === 'search') return searchHttp(connection, query, context.signal, context.getSecret);
   const toolName = tavilySearchTool(connection.toolNames);
   if (!toolName) throw new Error('Tavily 搜索工具尚未发现，请重新检测连接');
   const result = await mcp.call(connection.id, toolName, { query }, context) as { content?: { type: string; text?: string }[]; structuredContent?: unknown; isError?: boolean };

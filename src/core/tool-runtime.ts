@@ -64,10 +64,11 @@ export class ToolRuntime {
   assertNativeSettled(runId: string) { this.qoderTools.get(runId)?.assertSettled(); }
   async prepare(context: ToolExecutionContext, bot: Bot) {
     if (context.task.kind || !bot.toolNames.includes('call_mcp')) return;
+    const configurations = new Map(context.toolConnections.map(connection => [connection.id, toolConfiguration(connection)]));
     await this.registry.prepare?.(context);
     for (const connection of context.toolConnections) {
       const current = this.state.storage.get<ToolConnection>('tool_connections', connection.id);
-      if (current && current.enabled && bot.toolConnectionIds?.includes(current.id) && toolConfiguration(current) === toolConfiguration(connection))
+      if (current && current.enabled && bot.toolConnectionIds?.includes(current.id) && toolConfiguration(current) === configurations.get(connection.id))
         this.state.storage.put('tool_connections', { ...current, toolNames: connection.toolNames,
           status: connection.status, error: connection.error, searchBackend: connection.searchBackend });
     }

@@ -77,6 +77,15 @@ describe('tool connection changes during discovery', () => {
     expect(await tools.save({ ...connection, enabled: false })).toMatchObject({ id: connection.id, enabled: false });
   });
 
+  it('persists an explicit DeepSeek backend while keeping legacy HTTP configurations unchanged', async () => {
+    const { state, tools } = await setup(async () => ['search_web']);
+    const fields = { id: 'search', name: 'Search', kind: 'search', transport: 'http', url: 'https://api.deepseek.com/v1/tools/search' };
+    expect(await tools.save(fields)).toMatchObject({ id: fields.id, status: 'ready' });
+    expect(state.storage.get<ToolConnection>('tool_connections', fields.id)?.searchBackend).toBeUndefined();
+    expect(await tools.save({ ...fields, searchBackend: 'deepseek' })).toMatchObject({ searchBackend: 'deepseek', status: 'ready' });
+    expect(state.storage.get<ToolConnection>('tool_connections', fields.id)?.searchBackend).toBe('deepseek');
+  });
+
   it('does not access closed storage when discovery completes after shutdown', async () => {
     const gate = deferred<string[]>();
     const { state, tools } = await setup(() => gate.promise);

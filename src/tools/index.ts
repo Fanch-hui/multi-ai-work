@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { ToolRegistry } from '../domain/tools.js';
 import { createBuiltins } from './builtins.js';
 import { McpConnections } from './mcp.js';
-import { publicRequest } from './web.js';
+import { searchHttp } from './http-search.js';
 import { searchConnection, tavilySearchTool } from './search.js';
 import type { ToolDefinition } from '../domain/provider.js';
 
@@ -56,10 +56,7 @@ export function createToolRegistry(): ToolRegistry {
     },
     async probeConnection(connection, getSecret) {
       if (connection.kind !== 'search') return mcp.probe(connection, getSecret);
-      if (!connection.url) throw new Error('搜索连接缺少地址');
-      const url = new URL(connection.url); url.searchParams.set('q', 'multi-AI work connectivity');
-      const secret = await getSecret(connection.secretRef);
-      await publicRequest(url.href, AbortSignal.timeout(20_000), secret ? { Authorization: `Bearer ${secret}` } : {});
+      await searchHttp(connection, 'multi-AI work connectivity', AbortSignal.timeout(20_000), getSecret);
       return ['search_web'];
     },
     removeConnection(connectionId) { return mcp.remove(connectionId); },
