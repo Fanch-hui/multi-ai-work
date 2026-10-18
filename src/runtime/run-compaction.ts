@@ -36,7 +36,7 @@ export async function compactRunMessages(original: ModelMessage[], options: RunC
         if (entry.message.role !== 'tool' || entry.message.content.length <= 1200 || entry.message.contextArtifactIds?.length) continue;
         const preserved = await options.preserveToolOutput(entry.message);
         if (preserved?.artifactIds.length) {
-          entry.message.contextArtifactIds = [...new Set([...(entry.message.contextArtifactIds ?? []), ...preserved.artifactIds])];
+          entry.message.contextArtifactIds = [...new Set([...preserved.artifactIds, ...(entry.message.contextArtifactIds ?? [])])];
           references = {
             text: [references?.text, preserved.text].filter(Boolean).join('\n'),
             artifactIds: [...new Set([...(references?.artifactIds ?? []), ...preserved.artifactIds])],
@@ -76,7 +76,7 @@ async function compactLatestResult(messages: ModelMessage[], currentStart: numbe
     if (!call) return undefined;
     const annotatedTool: ModelMessage = {
       ...tool,
-      contextArtifactIds: [...new Set([...(tool.contextArtifactIds ?? []), ...reference.artifactIds])],
+      contextArtifactIds: [...new Set([...reference.artifactIds, ...(tool.contextArtifactIds ?? [])])],
     };
     const history = [{ ...messages[assistant], toolCalls: [call] }, annotatedTool]
       .map((message, sequence) => ({ message, sequence, messageId: String(sequence) }));

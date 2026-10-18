@@ -46,25 +46,17 @@ export function projectSummaryToolMessage(message: ModelMessage, budget: number,
     && (typeof parsed.preview === 'string' || typeof parsed.previewOmission === 'object'));
   if (alreadyProjected && estimateTokens(rawContent) <= toolBudget) return message;
   if (!alreadyProjected && rawContent.length <= 1200 && estimateTokens(rawContent) <= Math.floor(budget * 0.5)) return message;
+  const artifactId = message.contextArtifactIds?.[0];
+  if (!artifactId) return message;
 
   const callArgs = call?.arguments ? parseObject(call.arguments) : undefined;
-  const fullResultArgId = parsed?.fullResult && typeof parsed.fullResult === 'object'
-    ? (parsed.fullResult as { arguments?: { artifactId?: unknown } }).arguments?.artifactId
-    : undefined;
-  const artifactId = message.contextArtifactIds?.[0]
-    ?? (typeof parsed?.artifactId === 'string' ? parsed.artifactId : undefined)
-    ?? (typeof fullResultArgId === 'string' ? fullResultArgId : undefined)
-    ?? (call?.name === 'read_artifact' && typeof callArgs?.artifactId === 'string' ? callArgs.artifactId : undefined);
   const pathRef = (typeof parsed?.path === 'string' ? parsed.path : undefined)
     ?? (typeof parsed?.workingPath === 'string' ? parsed.workingPath : undefined)
     ?? (typeof callArgs?.path === 'string' ? callArgs.path : undefined)
     ?? (typeof callArgs?.workingPath === 'string' ? callArgs.workingPath : undefined);
   const metadata = parsed ? retainedMetadata(parsed) : {};
-  const source = parsed && typeof parsed.content === 'string' && parsed.content.length > 600 ? parsed.content
-    : parsed && typeof parsed.output === 'string' && parsed.output.length > 600 ? parsed.output
-    : parsed && typeof parsed.stdout === 'string' && parsed.stdout.length > 600 ? parsed.stdout
-    : rawContent;
-  const offset = parsed && typeof parsed.offset === 'number' ? parsed.offset : 0;
+  // Core archives the complete result text, so previews and offsets share that exact coordinate space.
+  const source = rawContent;
   const maxPreviewChars = Math.min(900, Math.max(160, Math.floor(source.length * 0.5)));
   const build = (characters: number): ModelMessage => {
     const head = safeHead(source, Math.ceil(characters / 2));
@@ -79,11 +71,11 @@ export function projectSummaryToolMessage(message: ModelMessage, budget: number,
         ...(pathRef && !metadata.path && !metadata.workingPath ? { path: pathRef } : {}),
         preview: `${head}\n[…中间内容已省略，请按完整结果引用读取…]\n${tail}`,
         truncated: true,
-        previewOmission: { offset: offset + head.length, endOffset: offset + source.length - tail.length, totalLength: source.length },
+        previewOmission: { offset: head.length, endOffset: source.length - tail.length, totalLength: source.length },
         ...(artifactId ? {
           fullResult: {
             tool: 'read_artifact',
-            arguments: { artifactId, offset: offset + head.length, limit: Math.max(1, Math.min(24000, Math.floor(toolBudget / 2))) },
+            arguments: { artifactId, offset: head.length, limit: Math.max(1, Math.min(24000, Math.floor(toolBudget / 2))) },
           },
         } : {}),
       }),

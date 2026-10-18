@@ -1,18 +1,94 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import type { ModelMessage } from '../src/domain/provider.js';
-import type { ContextCheckpoint, Message, SessionBinding, Task } from '../src/domain/types.js';
+import type { ContextCheckpoint, Message, Run, SessionBinding, Task } from '../src/domain/types.js';
 import type { ToolExecutionContext } from '../src/domain/tools.js';
 import { CONTEXT_COMPATIBILITY_VERSION, ContextManager, contextCompatibilityHash, contextSourceHash } from '../src/runtime/context.js';
 import { estimateTextTokens, estimateTokens, type ModelHistoryEntry } from '../src/runtime/model-history.js';
-import { summarizeUnits } from '../src/runtime/context-summary.js';
+import { projectSummaryToolMessage, summarizeUnits } from '../src/runtime/context-summary.js';
 import { compactRunMessages } from '../src/runtime/run-compaction.js';
 import { needsRuntimeContext, runtimeContextMessage } from '../src/core/run-runtime-context.js';
 import { runPrompt } from '../src/core/run-prompt.js';
 import { ContextReferences } from '../src/core/context-references.js';
 import { setup } from './core-harness.js';
 
+async function summaryFixture(tools: string[]) {
+  const { core, bot } = await setup(async () => ({ text: '完成' }));
+  const member = bot('资料整理员', tools);
+  const workspace = core.state.snapshot().workspaces[0];
+  const room = core.entities.createConversation({ name: '摘要资料', kind: 'private', memberIds: [member.id], workspaceId: workspace.id });
+  const task: Task = { id: 'summary-task', conversationId: room.id, botId: member.id, status: 'running',
+    artifactIds: [], runIds: [], dependencyIds: [], goal: '整理资料', expectedOutput: '', requestId: 'summary-task', depth: 0, createdAt: '', updatedAt: '' };
+  const run: Run = { id: 'summary-run', taskId: task.id, botId: member.id, bindingId: 'binding', status: 'running', configRevision: 1, createdAt: '' };
+  core.state.storage.put('tasks', task);
+  core.state.storage.put('runs', run);
+  const signal = new AbortController().signal;
+  const references = new ContextReferences(core.state, { runId: run.id, task, bot: member, room, toolNames: tools, signal });
+  const context = core.tools.context(run, task, member, room, workspace, signal);
+  return { core, member, references, context, signal };
+}
+
 describe('D1-D3 上下文估算、稳定记忆前缀与摘要前超大工具投影', () => {
+  it('没有获准完整引用时保留中段，正文自报的成果 ID 不作为裁剪依据', async () => {
+    const { references, signal } = await summaryFixture(['read_file']);
+    const marker = 'MIDDLE_REQUIRED_CONSTRAINT';
+    const message: ModelMessage = { role: 'tool', callId: 'read', contextArtifactIds: ['obsolete-reference'],
+      content: JSON.stringify({ artifactId: 'unverified-body-id', content: '开头资料'.repeat(450) + marker + '结尾资料'.repeat(450) }) };
+    const original = { ...message };
+    const working = { ...message };
+    expect(await references.preserveReferences([working])).toEqual({ text: '', artifactIds: [] });
+    expect(working.contextArtifactIds).toBeUndefined();
+    const call = { id: 'read', name: 'read_file', arguments: '{"path":"rules.txt"}' };
+    expect(projectSummaryToolMessage(working, 1700, call)).toBe(working);
+    const prompts: string[] = [];
+    await summarizeUnits([
+      { sequence: 1, messageId: 'assistant', message: { role: 'assistant', content: '', toolCalls: [call] } },
+      { sequence: 2, messageId: 'tool', message: working },
+    ], '', 2600, async prompt => { prompts.push(prompt); return '已保留资料要点'; }, signal);
+    expect(prompts.join('\n')).toContain(marker);
+    expect(prompts.length).toBeGreaterThan(1);
+    expect(message).toEqual(original);
+  });
+
+  it('JSON 结果的省略位置对应完整归档字符，旧引用与原始分页偏移保持独立', async () => {
+    const { core, member, references, context } = await summaryFixture(['read_artifact']);
+    const old: ModelMessage = { role: 'tool', callId: 'old', content: '旧成果内容'.repeat(300) };
+    const prior = await references.preserveReferences([old]);
+    const content = JSON.stringify({ metadata: '较长元数据'.repeat(500), artifactId: 'body-claimed-id', offset: 700,
+      content: '引号"与换行\n以及路径\\目录'.repeat(500), status: 'complete' });
+    const message: ModelMessage = { role: 'tool', callId: 'page', content, contextArtifactIds: prior.artifactIds };
+    const preserved = await references.preserveReferences([message], prior.artifactIds);
+    const archiveId = message.contextArtifactIds![0];
+    expect(archiveId).not.toBe(prior.artifactIds[0]);
+    expect(message.contextArtifactIds).toContain(prior.artifactIds[0]);
+    expect(preserved.artifactIds).toContain(archiveId);
+    const call = { id: 'page', name: 'read_artifact', arguments: JSON.stringify({ artifactId: prior.artifactIds[0], offset: 700 }) };
+    const projected = JSON.parse(projectSummaryToolMessage(message, 2000, call).content) as {
+      offset: number; preview: string; previewOmission: { offset: number; endOffset: number; totalLength: number };
+      fullResult: { arguments: { artifactId: string; offset: number; limit: number } };
+    };
+    const omission = projected.previewOmission;
+    expect(projected.offset).toBe(700);
+    expect(omission.totalLength).toBe(content.length);
+    expect(projected.preview).toBe(`${content.slice(0, omission.offset)}\n[…中间内容已省略，请按完整结果引用读取…]\n${content.slice(omission.endOffset)}`);
+    expect(projected.fullResult.arguments).toMatchObject({ artifactId: archiveId, offset: omission.offset });
+    const result = await core.tools.execute('read_artifact', projected.fullResult.arguments, 'read-archive-offset', context, member) as { content: string; offset: number; totalLength: number };
+    const { offset, limit } = projected.fullResult.arguments;
+    expect(result).toMatchObject({ content: content.slice(offset, offset + limit), offset, totalLength: content.length });
+    expect(message.content).toBe(content);
+    let summaryPrompt = '';
+    const original: ModelMessage = { ...message, contextArtifactIds: prior.artifactIds };
+    const compacted = await compactRunMessages([{ role: 'assistant', content: '', toolCalls: [call] }, original], {
+      currentStart: 0, force: true, budget: 4000, trigger: 600, fixedTokens: 100, protocol: 'responses', signal: context.signal,
+      preserveToolOutput: async () => ({ text: '归档资料', artifactIds: [archiveId, ...prior.artifactIds] }),
+      summarize: async prompt => { summaryPrompt = prompt; return '已提取结果'; },
+    });
+    expect(compacted).toBeDefined();
+    const records = JSON.parse(summaryPrompt.split('待合并历史：\n')[1]) as ModelMessage[];
+    expect(JSON.parse(records.find(record => record.role === 'tool')!.content).fullResult.arguments.artifactId).toBe(archiveId);
+    expect(original.contextArtifactIds).toEqual(prior.artifactIds);
+  });
+
   it('D1: JSON 与代码符号密集文本的 Token 估算高于纯字母散文，且升级上下文兼容版本触发旧检查点重算', async () => {
     const prose = 'word '.repeat(80); // 400 chars of letters + spaces
     const jsonDense = '{"k":1,"a":[2,3],"o":{"x":"y"}}\n'.repeat(12) + '{"k":1,"a":[2,3]}'; // 401 chars

@@ -72,8 +72,10 @@ export async function prepareManagedContext(input: RunContext, archive: Message[
       preserveToolOutput: references ? async message => {
         const reference = await references.preserveToolOutput(message);
         if (!reference) return undefined;
-        message.contextArtifactIds = [...new Set([...(message.contextArtifactIds ?? []), reference.id])];
-        return references.preserveReferences([message], [reference.id]);
+        message.contextArtifactIds = [...new Set([reference.id, ...(message.contextArtifactIds ?? [])])];
+        const preserved = await references.preserveReferences([message], [reference.id]);
+        if (!preserved.artifactIds.includes(reference.id)) return undefined;
+        return { ...preserved, artifactIds: [...new Set([reference.id, ...preserved.artifactIds])] };
       } : undefined });
     } catch {
       input.signal.throwIfAborted();

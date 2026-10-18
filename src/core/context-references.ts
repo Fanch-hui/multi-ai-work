@@ -23,10 +23,11 @@ export class ContextReferences {
       if (message.role !== 'tool' || message.content.length <= Math.min(1200, limit)) continue;
       const reference = await this.preserveToolOutput(message);
       if (!reference) {
+        message.contextArtifactIds = undefined;
         if (message.content.length > limit) throw new Error('完整工具结果无法通过当前授权读取，保留原上下文');
         continue;
       }
-      message.contextArtifactIds = [...new Set([...(message.contextArtifactIds ?? []), reference.id])];
+      message.contextArtifactIds = [...new Set([reference.id, ...(message.contextArtifactIds ?? [])])];
       this.previous.push(reference);
     }
     this.previous = await this.collect(messages, [...this.previous, ...previous]);
