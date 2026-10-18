@@ -49,7 +49,8 @@ export class SnapshotSync {
     const ids = (table: string) => [...new Set(changes.flatMap(change => [...change.entities.get(table) ?? []]))];
     result.messages = ids('messages').map(id => s.getMessage(id)).filter((item): item is Message => !!item && item.conversationId === conversationId);
     const runs = ids('runs').map(id => s.get<Run>('runs', id)).filter((item): item is Run => !!item);
-    const eventRuns = ids('events').map(id => s.get<Run>('runs', id)).filter((item): item is Run => !!item);
+    const eventRunIds = new Set([...ids('events'), ...ids('text_events')]);
+    const eventRuns = [...eventRunIds].map(id => s.get<Run>('runs', id)).filter((item): item is Run => !!item);
     const taskIds = new Set([...ids('tasks'), ...runs.map(run => run.taskId), ...eventRuns.map(run => run.taskId)]);
     const tasks = [...taskIds].map(id => s.get<Task>('tasks', id)).filter((item): item is Task => !!item);
     const taskRuns = tasks.map(task => task.runIds.at(-1)).filter((id): id is string => !!id)

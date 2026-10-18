@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Message, Run, Task } from '../src/domain/types.js';
-import type { MessagePage, SnapshotView } from '../src/domain/snapshot-sync.js';
+import type { MessagePage, SnapshotDelta, SnapshotView } from '../src/domain/snapshot-sync.js';
 import { State } from '../src/core/state.js';
 import { setup } from './core-harness.js';
 
@@ -63,6 +63,38 @@ describe('versioned UI snapshots', () => {
     expect(readMessages).not.toHaveBeenCalled();
     expect(all.mock.calls.some(([table]) => table === 'tasks' || table === 'runs')).toBe(false);
     expect(state.sync.delta(delta.cursor, room.id).messages).toEqual([]);
+  });
+
+  it('preserves the event cursor through Core RPC and updates activity for text without run writes', async () => {
+    const { core } = await setup(async () => ({ text: '' }));
+    const state = core.state, s = state.storage, room = state.snapshot().conversations[0];
+    const task: Task = { id: 'stream-task', conversationId: room.id, botId: 'bot', dependencyIds: [], goal: 'work', expectedOutput: '', status: 'running',
+      runIds: ['stream-run'], artifactIds: [], requestId: 'stream-request', depth: 0, createdAt: '2026-10-18', updatedAt: '2026-10-18' };
+    const run: Run = { id: 'stream-run', taskId: task.id, botId: 'bot', bindingId: 'binding', status: 'running', configRevision: 1, createdAt: '2026-10-18' };
+    s.put('tasks', task); s.put('runs', run);
+    s.event({ id: 'model-start', runId: run.id, type: 'status', data: { phase: 'model-start' }, createdAt: '2026-10-18T12:00:00Z' });
+    const draft = s.appendMessage(message('rpc-stream', room.id, { status: 'draft', runId: run.id, content: '' }));
+    state.changed();
+    const view = await core.request('state.view', { conversationId: room.id }) as SnapshotView;
+    expect(view.snapshot.tasks.find(item => item.id === task.id)?.activity?.phase).toBe('model');
+    const events = vi.spyOn(s, 'events'), eventsAfter = vi.spyOn(s, 'eventsAfter');
+    const createdAt = '2026-10-18T12:00:01Z';
+    s.messageStream.append({ id: 'rpc-text', runId: run.id, type: 'text', data: { delta: 'live text' }, createdAt }, draft.id);
+    state.changed('content');
+    const delta = await core.request('state.changes', { cursor: view.cursor, conversationId: room.id }) as SnapshotDelta;
+    expect(delta.messages[0].content).toBe('live text');
+    expect(delta.tasks.find(item => item.id === task.id)?.activity).toMatchObject({ phase: 'responding', lastActivityAt: createdAt });
+    expect(delta.runs).toEqual([]);
+    expect(delta.events).toBeUndefined();
+    expect(delta.cursor.eventSequence).toBe(view.cursor.eventSequence);
+    expect(events).not.toHaveBeenCalled(); expect(eventsAfter).not.toHaveBeenCalled();
+
+    s.event({ id: 'tool-next', runId: run.id, type: 'tool', data: { name: 'read_file', phase: 'started' }, createdAt });
+    state.changed('content');
+    const next = await core.request('state.changes', { cursor: delta.cursor, conversationId: room.id }) as SnapshotDelta;
+    expect(next.events?.map(event => event.id)).toEqual(['tool-next']);
+    expect(next.cursor.eventSequence).toBeGreaterThan(delta.cursor.eventSequence!);
+    expect(events).not.toHaveBeenCalled(); expect(eventsAfter).toHaveBeenCalledOnce();
   });
 
   it('resets old, foreign, deletion and restore cursors and rereads loaded ranges authoritatively', () => {

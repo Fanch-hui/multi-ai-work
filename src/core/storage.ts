@@ -21,6 +21,7 @@ const indexedFields = {
   taskId: '$.taskId',
   conversationId: '$.conversationId',
 } as const;
+const visibleEventFilter = "(json_extract(payload, '$.type') != 'text') = 1";
 
 export class Storage {
   readonly db: Database.Database;
@@ -58,6 +59,8 @@ export class Storage {
         CREATE TABLE IF NOT EXISTS run_events (
           id TEXT PRIMARY KEY, run_id TEXT NOT NULL, payload TEXT NOT NULL);
         CREATE INDEX IF NOT EXISTS events_by_run ON run_events(run_id);
+        CREATE INDEX IF NOT EXISTS visible_events_by_sequence ON run_events((json_extract(payload, '$.type') != 'text'))
+          WHERE ${visibleEventFilter};
         CREATE INDEX IF NOT EXISTS text_by_message ON run_events(
           json_extract(payload, '$.data.messageId'), json_extract(payload, '$.data.streamSequence'))
           WHERE json_extract(payload, '$.data.streamSequence') IS NOT NULL;
@@ -205,20 +208,20 @@ export class Storage {
   }
   latestNonTextEventSequence(): number {
     const row = this.prepare(`SELECT COALESCE((SELECT rowid FROM run_events
-      WHERE json_extract(payload, '$.type') != 'text' ORDER BY rowid DESC LIMIT 1), 0) AS seq`).get() as { seq: number };
+      WHERE ${visibleEventFilter} ORDER BY rowid DESC LIMIT 1), 0) AS seq`).get() as { seq: number };
     return row.seq;
   }
   eventsAfter(afterSequence: number, limit = 200): { events: RunEvent[]; eventSequence: number } {
     const size = Math.max(1, Math.min(200, Math.floor(limit)));
     const rows = this.prepare(`SELECT rowid, payload FROM run_events
-      WHERE rowid > ? AND json_extract(payload, '$.type') != 'text'
+      WHERE rowid > ? AND ${visibleEventFilter}
       ORDER BY rowid DESC LIMIT ?`).all(afterSequence, size) as { rowid: number; payload: string }[];
     const eventSequence = rows[0]?.rowid ?? (afterSequence > 0 ? afterSequence : this.latestNonTextEventSequence());
     return { events: rows.map(row => JSON.parse(row.payload) as RunEvent).reverse(), eventSequence };
   }
   events(): RunEvent[] {
     return (this.prepare(`SELECT payload FROM run_events
-      WHERE json_extract(payload, '$.type') != 'text'
+      WHERE ${visibleEventFilter}
       ORDER BY rowid DESC LIMIT 200`).all() as { payload: string }[]).map(row => JSON.parse(row.payload) as RunEvent).reverse();
   }
   transaction<T>(action: () => T): T { return this.db.transaction(action)(); }
