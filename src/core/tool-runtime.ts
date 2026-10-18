@@ -159,6 +159,23 @@ export class ToolRuntime {
       && (bot.memoryMode === 'propose' || tool.name !== 'propose_memory'));
   }
 
+  async currentDefinitions(context: ToolExecutionContext, botId: string): Promise<ToolDefinition[]> {
+    const bot = this.state.storage.get<Bot>('bots', botId);
+    if (!bot || bot.archived) return [];
+    await this.prepare(this.currentContext(context, bot), bot);
+    const latest = this.state.storage.get<Bot>('bots', botId);
+    return latest && !latest.archived ? this.definitions(this.currentContext(context, latest), latest) : [];
+  }
+
+  private currentContext(context: ToolExecutionContext, bot: Bot): ToolExecutionContext {
+    const s = this.state.storage;
+    return { ...context,
+      conversation: s.get<Conversation>('conversations', context.conversation.id) ?? context.conversation,
+      workspace: { ...context.workspace, writable: context.workspace.writable && !!s.get<Workspace>('workspaces', context.workspace.id)?.writable },
+      toolConnections: s.all<ToolConnection>('tool_connections').filter(item => item.enabled && bot.toolConnectionIds?.includes(item.id)),
+      skills: authorizedSkills(this.state, bot) };
+  }
+
   execute(name: string, args: Record<string, unknown>, callId: string, context: ToolExecutionContext, bot: Bot): Promise<unknown> {
     const operation = this.executeOperation(name, args, callId, context, bot);
     const pending = this.pending.get(context.runId) ?? new Set();
@@ -173,11 +190,7 @@ export class ToolRuntime {
     if (context.task.kind === 'question-decision') throw new Error('主管代答任务仅可决定回答');
     const currentBot = this.state.storage.get<Bot>('bots', bot.id);
     if (!currentBot || currentBot.archived) throw new Error('智能体已归档');
-    const currentWorkspace = this.state.storage.get<Workspace>('workspaces', context.workspace.id);
-    context = { ...context,
-      workspace: { ...context.workspace, writable: context.workspace.writable && !!currentWorkspace?.writable },
-      toolConnections: this.state.storage.all<ToolConnection>('tool_connections').filter(item => item.enabled && currentBot.toolConnectionIds?.includes(item.id)),
-      skills: authorizedSkills(this.state, currentBot) };
+    context = this.currentContext(context, currentBot);
     const requestedName = name;
     if (!this.definitions(context, currentBot).some(tool => tool.name === requestedName)) throw new Error(`当前未授权工具：${requestedName}`);
     const canonical = this.registry.canonical?.(name, args, context);
@@ -214,17 +227,15 @@ export class ToolRuntime {
       const assertAuthorized = () => {
         context.signal.throwIfAborted();
         const latestBot = this.state.storage.get<Bot>('bots', bot.id);
-        const latestRoom = this.state.storage.get<Conversation>('conversations', context.conversation.id) ?? context.conversation;
-        const latestContext: ToolExecutionContext = { ...context, conversation: latestRoom };
-        if (!latestBot || latestBot.archived
-          || !this.definitions(latestContext, latestBot).some(tool => tool.name === requestedName)
-          || !this.definitions(latestContext, latestBot).some(tool => tool.name === name))
+        if (!latestBot || latestBot.archived) throw new Error(`当前未授权工具：${name}`);
+        const latestContext = this.currentContext(context, latestBot);
+        if (['write_artifact', 'write_file', 'edit_file', 'delete_file', 'run_command', 'render_document'].includes(name)
+          && !latestContext.workspace.writable) throw new Error('工作目录仅允许读取');
+        const authorizedNames = new Set(this.definitions(latestContext, latestBot).map(tool => tool.name));
+        if (!authorizedNames.has(requestedName) || !authorizedNames.has(name))
           throw new Error(`当前未授权工具：${name}`);
         if (['call_mcp', 'search_web'].includes(name) && (typeof args.connectionId !== 'string' || !latestBot.toolConnectionIds?.includes(args.connectionId)
           || !this.state.storage.get<ToolConnection>('tool_connections', args.connectionId)?.enabled)) throw new Error('外部连接未授权');
-        if (['write_artifact', 'write_file', 'edit_file', 'delete_file', 'run_command', 'render_document'].includes(name)
-          && (!context.workspace.writable || !this.state.storage.get<Workspace>('workspaces', context.workspace.id)?.writable))
-          throw new Error('工作目录仅允许读取');
       };
       const execute = () => {
         if (this.questions.forRun(context.runId)) throw new Error('本轮正在等待用户回答');

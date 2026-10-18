@@ -37,7 +37,7 @@ export async function startHttp(core: CoreService, web: boolean, port = web ? 43
       const token = request.headers.authorization?.replace(/^Bearer /, '') ?? '';
       const active = core.executor.nativeContexts.get(token);
       if (!active) return json(response, { error: '运行授权已失效' }, 401);
-      if (url.pathname === '/native/tools' && request.method === 'GET') return json(response, core.tools.definitions(active.context, active.bot));
+      if (url.pathname === '/native/tools' && request.method === 'GET') return json(response, await core.tools.currentDefinitions(active.context, active.bot.id));
       if (url.pathname === '/native/yield' && request.method === 'POST') {
         core.tools.yieldInput(active.runId); return json(response, { waiting: true });
       }
