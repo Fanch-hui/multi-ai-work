@@ -29,9 +29,13 @@ describe('stream notifications and indexed task queries', () => {
     expect(state.storage.getMessage(message.id)?.content).toHaveLength(100);
     expect(received).toEqual([]);
     vi.advanceTimersByTime(80); expect(received).toEqual(['a'.repeat(100)]);
-    message.status = 'committed'; message.content += '!'; state.storage.updateMessage(message); state.changed();
-    vi.advanceTimersByTime(80); expect(received.at(-1)).toBe(`${'a'.repeat(100)}!`);
-    state.changed(); unsubscribe(); vi.advanceTimersByTime(80);
+    message.content += '!'; state.storage.updateMessage(message); state.changed('content');
+    message.status = 'committed'; state.storage.updateMessage(message); state.changed();
+    state.changed();
+    await Promise.resolve();
+    expect(received).toEqual(['a'.repeat(100), `${'a'.repeat(100)}!`]);
+    vi.advanceTimersByTime(80); expect(received).toHaveLength(2);
+    state.changed(); unsubscribe(); await Promise.resolve(); vi.advanceTimersByTime(80);
     expect(received).toHaveLength(2);
   });
 

@@ -21,6 +21,26 @@ function fixture(handler: (method: string, params?: Record<string, unknown>) => 
 }
 
 describe('UI snapshot synchronization', () => {
+  it('publishes completed task and reply updates while the authoritative reload is still pending', async () => {
+    const running = { id: 'task', status: 'running' }, completed = { ...running, status: 'completed' };
+    const draft = { ...message('reply', 1), status: 'draft' as const };
+    const committed = { ...draft, status: 'committed' as const };
+    const reload = deferred<SnapshotView>(); let reads = 0;
+    const initial: SnapshotView = { ...view([draft]), snapshot: { ...snapshot([draft]), tasks: [running] as Snapshot['tasks'] } };
+    const final: SnapshotView = { ...view([committed], 2), snapshot: { ...snapshot([committed]), tasks: [completed] as Snapshot['tasks'] } };
+    const { store } = fixture(async method => {
+      if (method === 'state.view') return ++reads === 1 ? initial : reload.promise;
+      return { ...delta([committed]), tasks: [completed], reset: true };
+    });
+    await store.refresh(true);
+    const pending = store.refresh();
+    await vi.waitFor(() => expect(store.current().data?.tasks[0].status).toBe('completed'));
+    expect(store.current().data?.messages[0].status).toBe('committed');
+    expect(reads).toBe(2);
+    reload.resolve(final); await pending;
+    expect(store.current().data).toEqual(final.snapshot);
+  });
+
   it('queues notifications during the initial read and upserts full messages without duplicated chunks', async () => {
     const initial = deferred<SnapshotView>();
     const { store, request } = fixture(async method => method === 'state.view' ? initial.promise : delta([message('one', 1, 'finished')]));

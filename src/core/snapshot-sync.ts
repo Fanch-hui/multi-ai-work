@@ -38,8 +38,9 @@ export class SnapshotSync {
     const result: SnapshotDelta = { cursor: { epoch: this.epoch, version: this.version, eventSequence: cursor.eventSequence },
       messages: [], tasks: [], runs: [], processes: [] };
     if (cursor.epoch !== this.epoch || cursor.version > this.version
-      || cursor.version < (this.log[0]?.version ?? this.version + 1) - 1 || changes.some(change => change.reset))
+      || cursor.version < (this.log[0]?.version ?? this.version + 1) - 1)
       return { ...result, reset: true };
+    if (changes.some(change => change.reset)) result.reset = true;
     const s = this.state.storage;
     if (cursor.eventSequence === undefined) {
       result.events = s.events();

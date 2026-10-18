@@ -77,8 +77,8 @@ export async function chatTurn(client: OpenAI, context: RunContext, messages: Mo
       accumulator.accept(chunk);
       if (accumulator.finished && !accumulator.completed) accumulator.finish();
       if (accumulator.completed) {
-        request.complete();
         if (accumulator.hasUsage) break;
+        request.complete();
       }
     }
     request.signal.throwIfAborted();

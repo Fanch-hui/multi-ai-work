@@ -47,6 +47,7 @@ export class TeamSnapshotStore {
         let delta: SnapshotDelta | undefined;
         if (!full && this.cursor) delta = await this.request<SnapshotDelta>('state.changes', { cursor: this.cursor, conversationId: room });
         if (generation !== this.generation) continue;
+        if (delta && this.value.data && delta.cursor.epoch === this.cursor?.epoch) this.applyDelta(delta);
         if (!delta || delta.reset) {
           const sameEpoch = !delta || delta.cursor.epoch === this.cursor?.epoch;
           const from = sameEpoch ? this.value.data?.messages[0]?.sequence : undefined;
@@ -54,18 +55,17 @@ export class TeamSnapshotStore {
           if (generation !== this.generation) continue;
           this.cursor = result.cursor; this.historyGeneration++;
           this.emit({ data: result.snapshot, nextBefore: result.history?.nextBefore, error: '' });
-        } else if (this.value.data) {
-          const data = this.value.data;
-          this.cursor = delta.cursor;
-          this.emit({ data: { ...data, messages: orderedMessages(data.messages, delta.messages),
-            tasks: upsert(data.tasks, delta.tasks), runs: upsert(data.runs, delta.runs),
-            processes: upsert(data.processes, delta.processes),
-            conversations: delta.conversations ?? data.conversations, events: recentEvents(data.events, delta.events) }, error: '' });
-        }
+        } else this.cursor = delta.cursor;
       } catch (error) {
         if (generation === this.generation) this.emit({ error: error instanceof Error ? error.message : String(error) });
       }
     }
+  }
+  private applyDelta(delta: SnapshotDelta) {
+    const data = this.value.data!;
+    this.emit({ data: { ...data, messages: orderedMessages(data.messages, delta.messages),
+      tasks: upsert(data.tasks, delta.tasks), runs: upsert(data.runs, delta.runs), processes: upsert(data.processes, delta.processes),
+      conversations: delta.conversations ?? data.conversations, events: recentEvents(data.events, delta.events) }, error: '' });
   }
   async loadMore() {
     const room = this.conversationId, before = this.value.nextBefore;

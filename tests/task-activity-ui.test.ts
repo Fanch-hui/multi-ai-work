@@ -20,7 +20,7 @@ const run: Run = { id: 'run', taskId: task.id, botId: task.botId, bindingId: 'bi
 describe('task activity diagnostics', () => {
   it('聊天状态区分实际模型活动并保留业务等待和终态优先级', () => {
     const labels: Record<ModelActivityKind, string> = { waiting: '正在等待响应', thinking: '正在认真思考',
-      responding: '正在组织回复', tool: '正在努力工作', working: '正在努力工作' };
+      responding: '正在组织回复', tool: '正在努力工作', working: '正在努力工作', finishing: '正在收尾' };
     for (const [kind, label] of Object.entries(labels)) {
       const current: Task = { ...task, activity: { phase: 'model', modelActivity: kind as ModelActivityKind } };
       expect(agentActivity(current)).toBe(label);

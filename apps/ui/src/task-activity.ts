@@ -3,7 +3,7 @@ import type { ModelActivityKind, TaskActivity } from '../../../src/domain/task-a
 
 const modelLabels: Record<ModelActivityKind, string> = {
   waiting: '正在等待响应', thinking: '正在认真思考', responding: '正在组织回复',
-  tool: '正在努力工作', working: '正在努力工作',
+  tool: '正在努力工作', working: '正在努力工作', finishing: '正在收尾',
 };
 
 const phaseLabels: Record<TaskActivity['phase'], string> = {

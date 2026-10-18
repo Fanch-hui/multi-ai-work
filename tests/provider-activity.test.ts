@@ -63,7 +63,7 @@ describe('provider model activity', () => {
       { choices: [], usage: { prompt_tokens: 2, completion_tokens: 3 } },
     ]);
     const turn = await chatTurn(client, context, []);
-    expect(kinds(events)).toEqual(['waiting', 'thinking', 'tool', 'responding']);
+    expect(kinds(events)).toEqual(['waiting', 'thinking', 'tool', 'responding', 'finishing']);
     expect(turn.message.content).toBe('Checking'); expect(turn.message.toolCalls).toHaveLength(1);
     expect(JSON.stringify(events)).not.toContain('private-thought');
   });
@@ -74,7 +74,7 @@ describe('provider model activity', () => {
       { choices: [], usage: { prompt_tokens: 1, completion_tokens: 1 } },
     ]);
     await chatTurn(client, context, []);
-    expect(kinds(events)).toEqual(['waiting', 'working']);
+    expect(kinds(events)).toEqual(['waiting', 'working', 'finishing']);
   });
 
   it('distinguishes Responses lifecycle, reasoning, tool arguments and answer events', async () => {

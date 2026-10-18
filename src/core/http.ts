@@ -4,6 +4,7 @@ import { publicError } from './errors.js';
 import { z } from 'zod';
 import { imageResolver } from './run-images.js';
 import { createWebSession } from './web-session.js';
+import { subscribeBatchedChanges } from './state-notifications.js';
 
 async function body(request: IncomingMessage, limit = 2 * 1024 * 1024): Promise<Record<string, unknown>> {
   const chunks: Buffer[] = []; let size = 0;
@@ -21,11 +22,8 @@ function json(response: ServerResponse, value: unknown, status = 200) {
 export async function startHttp(core: CoreService, web: boolean, port = web ? 4317 : 0) {
   const webSession = web ? createWebSession() : undefined;
   const subscribers = new Set<ServerResponse>();
-  let scheduled = false;
-  const unsubscribe = core.state.subscribe(() => {
-    if (scheduled) return;
-    scheduled = true;
-    setTimeout(() => { scheduled = false; for (const response of subscribers) response.write('data: {}\n\n'); }, 80);
+  const unsubscribe = subscribeBatchedChanges(core.state, () => {
+    for (const response of subscribers) response.write('data: {}\n\n');
   });
   const server = createServer((request, response) => {
     void handle(request, response).catch(error => json(response, { error: publicError(error) }, 400));

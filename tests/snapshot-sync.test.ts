@@ -103,6 +103,27 @@ describe('versioned UI snapshots', () => {
     expect(events).not.toHaveBeenCalled(); expect(eventsAfter).toHaveBeenCalledOnce();
   });
 
+  it('includes the completed reply and task in a business reset before the full snapshot is reloaded', () => {
+    const { state, s, room } = stateFixture();
+    const task: Task = { id: 'task', conversationId: room.id, botId: 'bot', dependencyIds: [], goal: 'work', expectedOutput: '', status: 'running',
+      runIds: ['run'], artifactIds: [], requestId: 'request', depth: 0, createdAt: '', updatedAt: '' };
+    const run: Run = { id: 'run', taskId: task.id, botId: 'bot', bindingId: 'binding', status: 'running', configRevision: 1, createdAt: '' };
+    s.put('tasks', task); s.put('runs', run);
+    const draft = s.appendMessage(message('answer', room.id, { status: 'draft', runId: run.id }));
+    state.changed(); const start = state.sync.view(room.id);
+    s.transaction(() => {
+      s.updateMessage({ ...draft, status: 'committed' });
+      s.put('runs', { ...run, status: 'completed' });
+      s.put('tasks', { ...task, status: 'completed' });
+      state.changed();
+    });
+    const delta = state.sync.delta(start.cursor, room.id);
+    expect(delta.reset).toBe(true);
+    expect(delta.messages[0].status).toBe('committed');
+    expect(delta.runs[0].status).toBe('completed');
+    expect(delta.tasks[0]).toMatchObject({ status: 'completed', activity: { phase: 'finished' } });
+  });
+
   it('resets old, foreign, deletion and restore cursors and rereads loaded ranges authoritatively', () => {
     const { state, s, room } = stateFixture();
     for (let i = 0; i < 75; i++) s.appendMessage(message(`old${i}`, room.id));

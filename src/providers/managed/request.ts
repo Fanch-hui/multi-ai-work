@@ -16,7 +16,7 @@ export class ModelRequest {
   private modelActivity: ModelActivity;
   private completed = false;
 
-  constructor(private context: RunContext) {
+  constructor(private context: Pick<RunContext, 'signal' | 'emit' | 'userInput' | 'isWaitingForInput' | 'inputSignal'>) {
     this.modelActivity = new ModelActivity(event => context.emit(event));
     this.signal = AbortSignal.any([context.signal, this.controller.signal]);
     this.unsubscribe = context.userInput?.subscribe(() => {
@@ -29,6 +29,7 @@ export class ModelRequest {
 
   activity(kind: string, hasOutput: boolean, activityKind?: ModelActivityKind) {
     this.outputStarted ||= hasOutput;
+    if (this.completed) return;
     this.arm();
     if (['response.completed', 'response.failed', 'response.incomplete', 'error'].includes(kind)) return;
     if (activityKind) this.modelActivity.report(activityKind, kind);
@@ -39,6 +40,7 @@ export class ModelRequest {
   complete() {
     if (this.completed) return;
     this.completed = true;
+    this.modelActivity.report('finishing', 'chat.completed');
     this.arm();
   }
 
