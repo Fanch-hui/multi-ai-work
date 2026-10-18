@@ -75,6 +75,8 @@ describe('会话管理', () => {
     core.state.storage.put('context_checkpoints', { id: 'checkpoint', bindingId: binding.id });
     core.state.storage.put('compactions', { id: 'compaction', bindingId: binding.id });
     core.state.storage.put('provider_archive', { id: run.id, bindingId: binding.id });
+    core.state.storage.put('managed_progress_deltas', { id: 'delta', runId: run.id });
+    core.state.storage.put('managed_progress_deltas', { id: 'retained-delta', runId: 'other-run' });
     await new ConversationService(core.state, core.tasks, core.scheduler).delete(room.id);
     const snapshot = core.state.snapshot();
     expect(snapshot.conversations.find(item => item.id === room.id)).toBeUndefined();
@@ -82,6 +84,7 @@ describe('会话管理', () => {
     expect(snapshot.tasks).toEqual([]); expect(snapshot.runs).toEqual([]); expect(snapshot.events).toEqual([]);
     expect(snapshot.bindings).toEqual([]); expect(snapshot.checkpoints).toEqual([]); expect(snapshot.compactions).toEqual([]);
     expect(core.state.storage.all('provider_archive')).toEqual([]);
+    expect(core.state.storage.all('managed_progress_deltas')).toEqual([{ id: 'retained-delta', runId: 'other-run' }]);
     expect(core.state.storage.all('tool_operations')).toEqual([]);
     expect(core.state.storage.metadata('send:deleted-send')).toBeUndefined();
     expect(core.state.storage.metadata(`history:${binding.id}`)).toBeUndefined();

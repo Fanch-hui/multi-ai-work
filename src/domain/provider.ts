@@ -16,9 +16,12 @@ export interface ManagedProgress {
   pendingInputIds: string[];
   turnId: string;
   attempt: number;
+  earlyFailures?: number;
   phase: 'ready' | 'request' | 'tools' | 'complete';
   recovery?: ModelRecovery;
 }
+export type ManagedProgressChange = { type: 'tool-result'; assistantIndex: number; callId: string }
+  | { type: 'assistant-item'; assistantIndex: number };
 export interface RunUserInput {
   take(): ModelMessage[];
   acknowledge?(messageIds: string[]): void;
@@ -52,7 +55,7 @@ export interface RunContext {
   compactContext?(messages: ModelMessage[], options: { force: boolean; currentStart: number }): Promise<{ messages: ModelMessage[]; currentStart: number } | undefined>;
   prepareToolResults?(messages: ModelMessage[], batchStart: number): Promise<ModelMessage[] | undefined>;
   progress?: ManagedProgress;
-  saveProgress?(progress: ManagedProgress): Promise<void>;
+  saveProgress?(progress: ManagedProgress, change?: ManagedProgressChange): Promise<void>;
   deferRecovery?: boolean;
   isWaitingForInput?(): boolean;
   inputSignal?: AbortSignal;

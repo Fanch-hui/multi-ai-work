@@ -37,8 +37,8 @@ describe('persistent managed recovery', () => {
     let saved: ManagedProgress | undefined;
     const { core, root, bot } = await setup(context => runManaged(client, {
       ...context,
-      saveProgress: async progress => {
-        await context.saveProgress!(progress);
+      saveProgress: async (progress, change) => {
+        await context.saveProgress!(progress, change);
         saved = structuredClone(progress);
         if (checkpoint === 'progress-saved' && !interrupted
           && progress.messages.some(message => message.role === 'tool' && message.callId === 'first-write')

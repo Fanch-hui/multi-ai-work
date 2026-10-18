@@ -26,6 +26,7 @@ import { loadManagedProgress, restoreProgressTools, restoreProgressInputs, saveM
   type ManagedCheckpoint } from './managed-progress.js';
 import { RunTextWriter } from './message-stream.js';
 import { ModelRecoveryPendingError } from '../domain/recovery.js';
+import { clearProgressDeltas } from './managed-progress-deltas.js';
 
 export class Executor {
   readonly nativeContexts = new Map<string, { context: ToolExecutionContext; bot: Bot; runId: string }>();
@@ -139,7 +140,10 @@ export class Executor {
           lastDeliveredSequence, memoryVersions: prepared.memoryVersions });
         if (!background) {
           if (result.messages) this.saveHistory(binding, input, result.messages, published, inputCutoff, result.text, result.contextMessages);
-          else s.put('provider_archive', { id: run.id, bindingId: binding.id, entries: [], output: result.text });
+          else {
+            s.put('provider_archive', { id: run.id, bindingId: binding.id, entries: [], output: result.text });
+            clearProgressDeltas(s, run.id);
+          }
         }
       });
     } catch (error) {
@@ -181,6 +185,7 @@ export class Executor {
       this.tasks.update(task, { status: answered ? 'completed' : 'cancelled', result: result.text,
         error: answered ? undefined : '问题已处理或主管代答已停止' });
       s.put('provider_archive', { id: run.id, bindingId: run.bindingId, entries: [], messages: result.messages, output: result.text });
+      clearProgressDeltas(s, run.id);
     });
   }
 
@@ -208,8 +213,11 @@ export class Executor {
       if (result.text.trim()) completeRunMessage(s, draft, result.text, []); else interruptRunMessage(s, draft.id);
       this.tasks.update(task, { status: question.status === 'answered' ? 'queued' : 'waiting_input', error: undefined });
       if (result.messages && input) this.saveHistory(binding, input, result.messages, draft, cutoff, result.text, result.contextMessages);
-      else s.put('provider_archive', { id: run.id, bindingId: binding.id, entries: [], output: result.text,
-        toolOperations: s.byField('tool_operations', 'runId', run.id) });
+      else {
+        s.put('provider_archive', { id: run.id, bindingId: binding.id, entries: [], output: result.text,
+          toolOperations: s.byField('tool_operations', 'runId', run.id) });
+        clearProgressDeltas(s, run.id);
+      }
       const current = s.get<SessionBinding>('session_bindings', binding.id) ?? binding;
       const renew = !result.messages;
       const delivered = renew ? 0 : this.inputs.complete(run.id, cutoff);
@@ -268,9 +276,12 @@ export class Executor {
     if (managed && !task.kind) {
       input.progress = saved?.progress;
       input.deferRecovery = true;
-      input.saveProgress = async progress => {
+      input.saveProgress = async (progress, change) => {
         writer.flush();
-        saveManagedProgress(s, run, task, binding, draft, saved?.cutoff ?? draft.sequence - 1, input, progress);
+        const began = performance.now();
+        saveManagedProgress(s, run, task, binding, draft, saved?.cutoff ?? draft.sequence - 1, input, progress, change);
+        input.emit({ type: 'status', data: { phase: 'performance', stage: 'checkpoint-save',
+          mode: change?.type ?? 'snapshot', durationMs: performance.now() - began, messageCount: progress.messages.length } });
       };
     }
     const summaryUsage = managed ? await prepareManagedContext(input, archive, delivered, this.state, this.contextManager, adapter) : () => undefined;
@@ -281,6 +292,7 @@ export class Executor {
     const s = this.state.storage;
     const history = workingHistory(this.state, input, messages, draft, cutoff);
     s.put('provider_archive', { id: input.runId, bindingId: binding.id, entries: history.slice(input.messages.length), output });
+    clearProgressDeltas(s, input.runId);
     const active = projected ? projectedHistory(history, projected) : history;
     s.setMetadata(`history:${binding.id}`, active);
     saveHistoryValidity(this.state, input);

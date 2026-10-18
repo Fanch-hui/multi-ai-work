@@ -91,7 +91,7 @@ export class ConversationService {
     const runIds = new Set(s.all<{ id: string; taskId: string }>('runs').filter(run => taskIds.has(run.taskId)).map(run => run.id));
     const bindingIds = new Set(s.all<SessionBinding>('session_bindings').filter(binding => binding.conversationId === conversationId).map(binding => binding.id));
     const tables: EntityTable[] = ['tasks', 'runs', 'session_bindings', 'approvals', 'context_checkpoints',
-      'compactions', 'provider_archive', 'tool_operations', 'deliveries', 'notifications', 'questions', 'processes', 'task_plans'];
+      'compactions', 'provider_archive', 'managed_progress_deltas', 'tool_operations', 'deliveries', 'notifications', 'questions', 'processes', 'task_plans'];
     for (const table of tables) {
       for (const row of s.all<{ id: string; taskId?: string; runId?: string; bindingId?: string; parentId?: string; childIds?: string[] }>(table)) {
         if (taskIds.has(row.id) || runIds.has(row.id) || bindingIds.has(row.id)

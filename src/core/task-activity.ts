@@ -22,7 +22,7 @@ const modelFilter = `(${streamedText}) OR
     AND json_extract(payload, '$.data.phase') NOT IN ('model-retry', 'model-cache-request', 'model-cache-response'))`;
 const eventFilter = `(${streamedText}) OR json_extract(payload, '$.type') IN ('tool', 'compaction') OR
   (json_extract(payload, '$.type') = 'status' AND
-    COALESCE(json_extract(payload, '$.data.phase'), '') NOT IN ('model-cache-request', 'model-cache-response'))`;
+    COALESCE(json_extract(payload, '$.data.phase'), '') NOT IN ('model-cache-request', 'model-cache-response', 'performance'))`;
 
 export function taskActivity(storage: Storage, task: Task): TaskActivity {
   const run = task.runIds.at(-1) ? storage.get<Run>('runs', task.runIds.at(-1)!) : undefined;

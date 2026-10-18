@@ -26,7 +26,7 @@ export async function completeToolBatch(context: RunContext, state: ManagedRunSt
       && (order.get(message.callId!) ?? Infinity) > order.get(call.id)!);
     state.messages.splice(index < 0 ? state.messages.length : index, 0, toolResultMessage(call.id, result));
     executed.add(call.id);
-    await state.save('tools');
+    await state.save('tools', undefined, { type: 'tool-result', assistantIndex, callId: call.id });
     context.emit({ type: 'tool', data: { name: call.name, callId: call.id, phase: 'completed' } });
   };
   for (let start = 0; start < pending.length;) {

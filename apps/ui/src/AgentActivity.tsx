@@ -13,7 +13,7 @@ export function agentActivity(task?: Task, run?: Run, events: RunEvent[] = [], s
   if (status === 'waiting_children') return '正在协调团队';
   if (processes.some(process => process.runId === run?.id && process.status === 'running')) return '正在努力工作';
   const recent = events.filter(event => event.runId === run?.id
-    && !(event.type === 'status' && ['model-cache-request', 'model-cache-response'].includes(String(event.data.phase))))
+    && !(event.type === 'status' && ['model-cache-request', 'model-cache-response', 'performance'].includes(String(event.data.phase))))
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   const tools = new Map<string, string>();
   for (const event of recent) {

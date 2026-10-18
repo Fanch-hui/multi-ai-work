@@ -1,10 +1,11 @@
-import type { ManagedProgress, RunContext } from '../domain/provider.js';
+import type { ManagedProgress, ManagedProgressChange, RunContext } from '../domain/provider.js';
 import type { Message, Run, SessionBinding, Task, TaskInput } from '../domain/types.js';
 import type { ModelRecovery } from '../domain/recovery.js';
 import type { ToolExecutionContext } from '../domain/tools.js';
 import type { ProviderArchive } from './managed-context.js';
 import type { Storage } from './storage.js';
 import { now } from './state.js';
+import { clearProgressDeltas, replayProgressDeltas, saveProgressDelta } from './managed-progress-deltas.js';
 
 export interface ManagedCheckpoint {
   taskId: string;
@@ -19,7 +20,9 @@ export interface ManagedCheckpoint {
 interface ProgressArchive extends ProviderArchive { checkpoint?: ManagedCheckpoint; }
 
 export function progressForRun(storage: Storage, runId: string): ManagedCheckpoint | undefined {
-  return storage.get<ProgressArchive>('provider_archive', runId)?.checkpoint;
+  const saved = storage.get<ProgressArchive>('provider_archive', runId)?.checkpoint;
+  if (saved) replayProgressDeltas(storage, runId, saved.progress);
+  return saved;
 }
 
 export function latestProgressRun(storage: Storage, task: Task): string | undefined {
@@ -34,12 +37,13 @@ export function latestProgressRun(storage: Storage, task: Task): string | undefi
 export function loadManagedProgress(storage: Storage, task: Task, binding: SessionBinding): ManagedCheckpoint | undefined {
   if (!task.resumeFromRunId) return undefined;
   const archive = storage.get<ProgressArchive>('provider_archive', task.resumeFromRunId);
-  const saved = archive?.checkpoint;
+  const saved = progressForRun(storage, task.resumeFromRunId);
   if (!saved || saved.taskId !== task.id || saved.botId !== task.botId || saved.conversationId !== task.conversationId)
     throw new Error('任务恢复进度不存在，请核查已有成果');
-  if (archive.bindingId !== binding.id || saved.generation !== binding.generation || saved.workspaceId !== binding.workspaceId)
+  if (archive?.bindingId !== binding.id || saved.generation !== binding.generation || saved.workspaceId !== binding.workspaceId)
     throw new Error('模型、连接或工作目录已变化，无法直接续接原运行');
   const progress = structuredClone(saved.progress);
+  if (!task.recovery && progress.earlyFailures) progress.earlyFailures = 0;
   if (!task.recovery && ['ready', 'request'].includes(progress.phase)) {
     progress.phase = 'ready'; progress.attempt = 0; progress.recovery = undefined;
   }
@@ -47,12 +51,15 @@ export function loadManagedProgress(storage: Storage, task: Task, binding: Sessi
 }
 
 export function saveManagedProgress(storage: Storage, run: Run, task: Task, binding: SessionBinding,
-  draft: Message, cutoff: number, input: RunContext, progress: ManagedProgress) {
+  draft: Message, cutoff: number, input: RunContext, progress: ManagedProgress, change?: ManagedProgressChange) {
   storage.transaction(() => {
-    storage.put('provider_archive', { id: run.id, bindingId: binding.id, entries: [], checkpoint: {
-      taskId: task.id, conversationId: task.conversationId, botId: task.botId, generation: binding.generation,
-      workspaceId: binding.workspaceId, draftId: draft.id, cutoff, progress,
-    } satisfies ManagedCheckpoint });
+    if (!change || !saveProgressDelta(storage, run.id, progress, change)) {
+      storage.put('provider_archive', { id: run.id, bindingId: binding.id, entries: [], checkpoint: {
+        taskId: task.id, conversationId: task.conversationId, botId: task.botId, generation: binding.generation,
+        workspaceId: binding.workspaceId, draftId: draft.id, cutoff, progress,
+      } satisfies ManagedCheckpoint });
+      clearProgressDeltas(storage, run.id);
+    }
     if (progress.phase === 'tools' || progress.phase === 'complete')
       input.userInput?.acknowledge?.(progress.pendingInputIds);
   });
@@ -104,8 +111,11 @@ export function recoverManagedRuns(storage: Storage, runIds: string[]) {
       nextAttemptAt: now(), reason: '继续上次中断的运行' };
     progress.recovery = recovery;
     const archive = storage.get<ProgressArchive>('provider_archive', runId)!;
-    storage.put('provider_archive', { ...archive, checkpoint: { ...saved, progress } });
-    storage.put('tasks', { ...task, status: 'recovering', recovery, resumeFromRunId: runId, error: undefined, updatedAt: now() });
+    storage.transaction(() => {
+      storage.put('provider_archive', { ...archive, checkpoint: { ...saved, progress } });
+      clearProgressDeltas(storage, runId);
+      storage.put('tasks', { ...task, status: 'recovering', recovery, resumeFromRunId: runId, error: undefined, updatedAt: now() });
+    });
   }
 }
 

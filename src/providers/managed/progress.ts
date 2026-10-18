@@ -1,4 +1,4 @@
-import type { ManagedProgress, ModelMessage, RunContext } from '../../domain/provider.js';
+import type { ManagedProgress, ManagedProgressChange, ModelMessage, RunContext } from '../../domain/provider.js';
 import type { ModelRecovery } from '../../domain/recovery.js';
 
 export class ManagedRunState {
@@ -10,6 +10,7 @@ export class ManagedRunState {
   pendingInputIds: Set<string>;
   turnId: string;
   attempt: number;
+  earlyFailures: number;
   phase: ManagedProgress['phase'];
   private turnSequence = 0;
 
@@ -24,6 +25,7 @@ export class ManagedRunState {
     this.pendingInputIds = new Set(saved?.pendingInputIds);
     this.turnId = saved?.turnId ?? this.newTurnId();
     this.attempt = saved?.attempt ?? 0;
+    this.earlyFailures = saved?.earlyFailures ?? 0;
     this.phase = saved?.phase ?? 'ready';
   }
 
@@ -36,6 +38,7 @@ export class ManagedRunState {
     if (!input.length) return false;
     this.context.userInput!.beginReply(this.text);
     this.text = '';
+    this.earlyFailures = 0;
     this.messages.push(...input);
     for (const message of input) if (message.sourceMessageId) this.pendingInputIds.add(message.sourceMessageId);
     this.nextTurn();
@@ -67,11 +70,11 @@ export class ManagedRunState {
     await this.save('ready');
   }
 
-  async save(phase: ManagedProgress['phase'], recovery?: ModelRecovery) {
+  async save(phase: ManagedProgress['phase'], recovery?: ModelRecovery, change?: ManagedProgressChange) {
     this.phase = phase;
     await this.context.saveProgress?.({ messages: this.messages, currentStart: this.currentStart, archiveStart: this.archiveStart, contextSignature: this.context.contextSignature, compaction: this.compaction, text: this.text,
-      pendingInputIds: [...this.pendingInputIds], turnId: this.turnId, attempt: this.attempt, phase,
-      ...(recovery ? { recovery } : {}) });
+      pendingInputIds: [...this.pendingInputIds], turnId: this.turnId, attempt: this.attempt, earlyFailures: this.earlyFailures, phase,
+      ...(recovery ? { recovery } : {}) }, change);
   }
 
   private newTurnId() { return `${this.context.runId}:turn:${++this.turnSequence}`; }

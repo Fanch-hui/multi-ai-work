@@ -3,7 +3,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ManagedProgress, ProviderAdapter, RunContext } from '../src/domain/provider.js';
 import type { Bot, Conversation, Run, Task, Workspace } from '../src/domain/types.js';
-import type { ManagedCheckpoint } from '../src/core/managed-progress.js';
+import { progressForRun, type ManagedCheckpoint } from '../src/core/managed-progress.js';
 import { CoreService } from '../src/core/service.js';
 import { sessionBinding } from '../src/core/session-binding.js';
 import { createClient } from '../src/providers/managed/client.js';
@@ -109,8 +109,8 @@ describe('managed recovery lifecycle', () => {
     let interrupted = false;
     const { core, bot } = await setup(context => runManaged(model.client, {
       ...context,
-      saveProgress: async progress => {
-        await context.saveProgress!(progress);
+      saveProgress: async (progress, change) => {
+        await context.saveProgress!(progress, change);
         if (!interrupted && progress.messages.some(message => message.role === 'tool' && message.callId === 'post')) {
           interrupted = true;
           throw new Error('即时发言后中断');
@@ -145,8 +145,8 @@ describe('managed recovery lifecycle', () => {
     let interrupted = false;
     const { core, root, bot } = await setup(context => runManaged(model.client, {
       ...context,
-      saveProgress: async progress => {
-        await context.saveProgress!(progress);
+      saveProgress: async (progress, change) => {
+        await context.saveProgress!(progress, change);
         if (!interrupted && progress.messages.some(message => message.role === 'tool' && message.callId === 'read-original')) {
           interrupted = true;
           throw new Error('读取完成后中断');
@@ -165,8 +165,9 @@ describe('managed recovery lifecycle', () => {
     const interruptedTask = core.state.storage.get<Task>('tasks', taskId)!;
     const runId = interruptedTask.runIds[0];
     const archived = core.state.storage.get<{ id: string; bindingId: string; entries: unknown[]; checkpoint: ManagedCheckpoint }>('provider_archive', runId)!;
-    const raw = archived.checkpoint.progress.messages;
-    const projected: ManagedProgress = { ...archived.checkpoint.progress, phase: 'ready', archiveStart: 0,
+    const restored = progressForRun(core.state.storage, runId)!;
+    const raw = restored.progress.messages;
+    const projected: ManagedProgress = { ...restored.progress, phase: 'ready', archiveStart: 0,
       messages: [raw[0], { role: 'assistant', content: '文件已读取，后续编辑遵循原版本', contextSummary: true }],
       compaction: { archived: raw, start: 2 } };
     core.state.storage.put('provider_archive', { ...archived, checkpoint: { ...archived.checkpoint, progress: projected } });

@@ -9,7 +9,7 @@ import { indexMemorySearch } from './memory-storage.js';
 
 export const entityTables = ['connections', 'bots', 'conversations', 'workspaces', 'session_bindings',
   'tasks', 'runs', 'approvals', 'artifacts', 'memory_entries', 'memory_revisions', 'memory_usage', 'context_checkpoints',
-  'tool_connections', 'skills', 'tool_operations', 'deliveries', 'notifications', 'compactions', 'provider_archive', 'questions', 'processes', 'preset_installations', 'task_plans'] as const;
+  'tool_connections', 'skills', 'tool_operations', 'deliveries', 'notifications', 'compactions', 'provider_archive', 'managed_progress_deltas', 'questions', 'processes', 'preset_installations', 'task_plans'] as const;
 export type EntityTable = typeof entityTables[number];
 const indexedFields = {
   status: '$.status',
@@ -65,6 +65,7 @@ export class Storage {
           json_extract(payload, '$.data.messageId'), json_extract(payload, '$.data.streamSequence'))
           WHERE json_extract(payload, '$.data.streamSequence') IS NOT NULL;
         CREATE INDEX IF NOT EXISTS archive_by_binding ON provider_archive(json_extract(payload, '$.bindingId'));
+        CREATE INDEX IF NOT EXISTS progress_deltas_by_run ON managed_progress_deltas(json_extract(payload, '$.runId'));
         CREATE INDEX IF NOT EXISTS checkpoints_by_binding ON context_checkpoints(json_extract(payload, '$.bindingId'));
         CREATE INDEX IF NOT EXISTS tasks_by_status ON tasks(json_extract(payload, '$.status'));
         CREATE INDEX IF NOT EXISTS tasks_by_parent ON tasks(json_extract(payload, '$.parentId'));
@@ -133,7 +134,7 @@ export class Storage {
   put<T extends { id: string }>(table: EntityTable, value: T): T {
     this.prepare(`INSERT INTO ${table}(id,payload) VALUES (?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload`).run(value.id, JSON.stringify(value));
     this.tableVersions.set(table, this.tableVersion(table) + 1);
-    if (table !== 'memory_usage') this.changes.mark(table, value.id);
+    if (table !== 'memory_usage' && table !== 'managed_progress_deltas') this.changes.mark(table, value.id);
     if (table === 'memory_entries') indexMemorySearch(this, value as unknown as MemoryEntry);
     return value;
   }

@@ -19,15 +19,17 @@ describe('批量任务活动快照', () => {
       { event: { type: 'status', data: { phase: 'model-request' } }, expected: { phase: 'model', modelActivity: 'waiting' } },
       { event: { type: 'status', data: { phase: 'model-activity', activityKind: 'thinking' } }, expected: { phase: 'model', modelActivity: 'thinking' } },
       { event: { type: 'status', data: { phase: 'model-cache-response' } }, expected: { phase: 'model', modelActivity: 'thinking' } },
+      { event: { type: 'status', data: { phase: 'performance', stage: 'model-first-output', durationMs: 20 } }, expected: { phase: 'model', modelActivity: 'thinking' } },
       { event: { type: 'status', data: { phase: 'model-activity', activityKind: 'tool' } }, expected: { phase: 'model', modelActivity: 'tool' } },
       { event: { type: 'tool', data: { name: 'read_file', status: 'started' } }, expected: { phase: 'tool', toolName: 'read_file' } },
       { event: { type: 'status', data: { phase: 'model-cache-request' } }, expected: { phase: 'tool', toolName: 'read_file' } },
+      { event: { type: 'status', data: { phase: 'performance', stage: 'checkpoint-save', durationMs: 1 } }, expected: { phase: 'tool', toolName: 'read_file' } },
       { event: { type: 'text', data: { delta: '答复' } }, expected: { phase: 'responding' } },
       { event: { type: 'status', data: { phase: 'model-request' } }, expected: { phase: 'model', modelActivity: 'waiting' } },
       { event: { type: 'status', data: { phase: 'model-activity', activity: 'chat.chunk' } }, expected: { phase: 'model', modelActivity: 'working' } },
     ];
     for (const [index, item] of cases.entries()) {
-      s.event({ id: `activity-${index}`, runId: 'activity-run', ...item.event, createdAt: `2026-10-18T01:00:0${index}Z` });
+      s.event({ id: `activity-${index}`, runId: 'activity-run', ...item.event, createdAt: `2026-10-18T01:00:${String(index).padStart(2, '0')}Z` });
       const activity = taskActivity(s, task);
       expect(activity).toMatchObject(item.expected);
       expect(core.state.snapshot().tasks[0].activity).toEqual(activity);
