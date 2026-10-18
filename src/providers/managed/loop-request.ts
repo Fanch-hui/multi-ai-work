@@ -24,20 +24,20 @@ export async function requestManagedTurn(client: OpenAI, context: RunContext, pr
   };
   const request = () => {
     state.takeUserInput();
-    return requestWithRetry(context, async (attempt, requestId) => {
+    return requestWithRetry(context, (_, requestId) => protocol === 'responses'
+        ? responsesTurn(client, context, state.messages, requestOptions.cacheDiagnostics, requestId)
+        : chatTurn(client, context, state.messages),
+    requestOptions.nextStep, requestOptions.recordDuration, requestOptions.retryDelays, async recovery => {
+      context.emit({ type: 'text', data: { replace: state.text } });
+      state.attempt = recovery.attempt;
+      await state.save('ready', recovery);
+    }, state.attempt, async attempt => {
       state.attempt = attempt;
       await compact(false);
       await state.save('request');
       context.signal.throwIfAborted();
       if (context.userInput?.hasPending() && !state.waitingForInput()) throw new SupplementalInputError();
-      return protocol === 'responses'
-        ? responsesTurn(client, context, state.messages, requestOptions.cacheDiagnostics, requestId)
-        : chatTurn(client, context, state.messages);
-    }, requestOptions.nextStep, requestOptions.recordDuration, requestOptions.retryDelays, async recovery => {
-      context.emit({ type: 'text', data: { replace: state.text } });
-      state.attempt = recovery.attempt;
-      await state.save('ready', recovery);
-    }, state.attempt);
+    });
   };
   try { const turn = await request(); requestOptions.recovered = false; return turn; }
   catch (error) {

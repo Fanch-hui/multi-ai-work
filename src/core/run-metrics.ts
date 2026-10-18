@@ -1,5 +1,6 @@
 import type { Run, RunEvent, RunMetrics, Usage } from '../domain/types.js';
 import type { Storage } from './storage.js';
+import { addUsage } from '../domain/usage.js';
 
 const count = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 const duration = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0;
@@ -54,7 +55,8 @@ function applyEvent(run: Run, event: RunEvent): Run {
   if (event.type === 'context') return { ...run, contextUsage: data };
   if (event.type !== 'usage' || data.phase === 'compaction') return run;
   const usage = usageSample(data);
-  return usage && (count(usage.inputTokens) || count(usage.outputTokens)) ? { ...run, confirmedUsage: usage } : run;
+  return usage && (count(usage.inputTokens) || count(usage.outputTokens))
+    ? { ...run, confirmedUsage: data.scope === 'turn' ? addUsage(run.confirmedUsage, usage) : usage } : run;
 }
 
 function requestEvent(event: RunEvent): RunEvent {
@@ -76,14 +78,16 @@ export function recordRunEvent(storage: Storage, input: RunEvent) {
 }
 
 export function migrateRunMetrics(storage: Storage) {
-  if (storage.metadata('run-metrics-v2')) return;
+  if (storage.metadata('run-metrics-v3')) return;
   storage.transaction(() => {
     const query = storage.db.prepare(`SELECT payload FROM run_events
       WHERE run_id = ? AND json_extract(payload, '$.type') IN ('status', 'usage', 'context') ORDER BY rowid`);
     for (const run of storage.all<Run>('runs')) {
       const events = (query.all(run.id) as { payload: string }[]).map(row => JSON.parse(row.payload) as RunEvent);
       const samples = events.some(event => event.type === 'status' && typeof event.data.requestId === 'string');
+      const turnSamples = events.some(event => event.type === 'usage' && event.data.scope === 'turn');
       const initial = { ...run,
+        ...(turnSamples ? { confirmedUsage: undefined } : {}),
         ...(events.some(event => modelTiming(event) && !summary(event)) ? { modelDurationMs: undefined } : {}),
         ...(samples ? { metrics: emptyRunMetrics(), modelRequestCount: undefined } : {}) };
       const seen = new Set<string>();
@@ -97,5 +101,6 @@ export function migrateRunMetrics(storage: Storage) {
       storage.put('runs', updated);
     }
     storage.setMetadata('run-metrics-v2', true);
+    storage.setMetadata('run-metrics-v3', true);
   });
 }

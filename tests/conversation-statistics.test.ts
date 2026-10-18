@@ -166,11 +166,26 @@ describe('conversation statistics', () => {
     expect(stats.rate).toBeUndefined(); expect(stats.usage.cachePercent).toBeUndefined(); expect(stats.usage.cached).toBeUndefined();
   });
 
-  it('keeps request rate wording and exposes partial counts and cache in the compact view', () => {
+  it('keeps the compact view short and exposes partial coverage in details', () => {
     const data = snapshot([task('a')], [run('a', 'a', '1', { modelRequestCount: 80,
       usage: { inputTokens: 100, outputTokens: 10, cachedInputTokens: 50, source: 'reported' } }), run('b', 'a', '2', { status: 'running' })]);
     const html = renderToStaticMarkup(createElement(ConversationStats, { data: data as Snapshot, conversation }));
-    expect(html).toContain('已记录 80 次请求'); expect(html).toContain('请求速率 统计中');
-    expect(html).toContain('缓存 已报告部分 50.0%');
+    expect(html).toContain('80 次请求'); expect(html).not.toContain('请求速率 统计中');
+    expect(html).toContain('缓存 50.0%'); expect(html).toContain('部分数据');
+    const stats = conversationStatistics(data, conversation);
+    const details = renderToStaticMarkup(createElement(StatisticsDetails, { id: 'usage', panel: 'usage', stats, rate: '—', close: () => {} }));
+    expect(details).toContain('<details'); expect(details).toContain('缓存样本输入'); expect(details).toContain('原生与历史缓存记录');
+    expect(details).toContain('用量为已报告部分');
   });
+  it('does not mark waiting native usage complete and caps only the context meter', () => {
+    const stats = conversationStatistics(snapshot([task('a')], [run('a', 'a', '1', {
+      status: 'waiting_input', usage: { inputTokens: 100, outputTokens: 10, source: 'reported' },
+      contextUsage: { source: 'app-estimated', estimatedTokens: 120, contextWindow: 100 },
+    })]), conversation);
+    expect(stats.usage.complete).toBe(false);
+    expect(stats.context.percent).toBe(120);
+    const html = renderToStaticMarkup(createElement(StatisticsDetails, { id: 'context', panel: 'context', stats, rate: '—', close: () => {} }));
+    expect(html).toContain('aria-valuenow="100"'); expect(html).toContain('已超过窗口');
+  });
+
 });

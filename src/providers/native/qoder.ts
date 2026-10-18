@@ -274,7 +274,7 @@ export class QoderAdapter implements ProviderAdapter {
       events.text = text;
       const usage = { inputTokens: message.usage.input_tokens, outputTokens: message.usage.output_tokens, source: 'reported' as const };
       inputTokens += usage.inputTokens; outputTokens += usage.outputTokens;
-      context.emit({ type: 'usage', data: { ...usage } });
+      context.emit({ type: 'usage', data: { ...usage, scope: 'turn' } });
       context.emit({ type: 'status', data: { stopReason: message.terminal_reason ?? message.stop_reason } });
       await userInput.flush();
       if (userInput.hasOutstanding()) continue;

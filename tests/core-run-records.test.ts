@@ -18,7 +18,8 @@ describe('Core 完整运行记录', () => {
     core.tasks.send({ conversationId: room.id, content: '执行工作' });
     await eventually(() => core.state.snapshot().runs[0]?.status === 'completed');
     const run = core.state.snapshot().runs[0];
-    expect(core.state.snapshot().events).toHaveLength(200);
+    expect(core.state.snapshot().events.every(event => event.type !== 'text')).toBe(true);
+    expect(core.state.snapshot().events.filter(event => event.data.phase === 'model-request')).toHaveLength(6);
     expect(run.modelRequestCount).toBe(6); expect(run.modelDurationMs).toBe(120);
     expect(run.confirmedUsage).toMatchObject({ source: 'reported', outputTokens: 360 });
     expect(run.contextUsage?.owner).toBe('app');

@@ -81,6 +81,36 @@ describe('persisted run records', () => {
     } finally { storage.close(); }
   });
 
+  it('retains all reported native turns after failure without adding cumulative snapshots twice', () => {
+    const storage = database();
+    try {
+      storage.put('runs', run('native')); storage.put('runs', run('managed'));
+      for (const [index, inputTokens, outputTokens] of [[1, 10, 1], [2, 20, 2]]) {
+        const native = event(`turn-${index}`, 'native', 'usage', { inputTokens, outputTokens, cachedInputTokens: inputTokens / 2,
+          source: 'reported', scope: 'turn' });
+        recordRunEvent(storage, native); recordRunEvent(storage, native);
+        recordRunEvent(storage, event(`snapshot-${index}`, 'managed', 'usage', { inputTokens, outputTokens, source: 'reported', scope: 'cumulative' }));
+      }
+      expect(storage.get<Run>('runs', 'native')?.confirmedUsage)
+        .toEqual({ inputTokens: 30, outputTokens: 3, cachedInputTokens: 15, source: 'reported' });
+      expect(storage.get<Run>('runs', 'managed')?.confirmedUsage)
+        .toMatchObject({ inputTokens: 20, outputTokens: 2, source: 'reported' });
+    } finally { storage.close(); }
+  });
+
+  it('backfills native turn totals after the earlier metrics migration has run', () => {
+    const storage = database();
+    try {
+      storage.setMetadata('run-metrics-v2', true);
+      storage.put('runs', { ...run('native'), confirmedUsage: { inputTokens: 20, outputTokens: 2, source: 'reported' } });
+      storage.event(event('turn-1', 'native', 'usage', { inputTokens: 10, outputTokens: 1, source: 'reported', scope: 'turn' }));
+      storage.event(event('turn-2', 'native', 'usage', { inputTokens: 20, outputTokens: 2, source: 'reported', scope: 'turn' }));
+      migrateRunMetrics(storage); migrateRunMetrics(storage);
+      expect(storage.get<Run>('runs', 'native')?.confirmedUsage)
+        .toMatchObject({ inputTokens: 30, outputTokens: 3, source: 'reported' });
+    } finally { storage.close(); }
+  });
+
   it('pairs usage with its request timing and retains partial cache and speed across failures and summaries', () => {
     const storage = database();
     try {

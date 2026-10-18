@@ -1,5 +1,5 @@
 import { createServer, type Server } from 'node:http';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ProviderEvent, RunContext } from '../src/domain/provider.js';
 import { createClient, providerError } from '../src/providers/managed/client.js';
 import { runManaged } from '../src/providers/managed/loop.js';
@@ -26,7 +26,7 @@ describe('managed request recovery', () => {
     const started = Date.now();
     const result = await runManaged(createClient(server.url), context(events), 'responses', [80, 1]);
     const elapsed = Date.now() - started;
-    const status = events.filter(event => event.type === 'status').map(event => event.data);
+    const status = events.filter(event => event.type === 'status' && !String(event.data.phase).startsWith('model-cache-')).map(event => event.data);
     expect(status.map(event => event.phase)).toEqual(['model-request', 'model-error', 'model-retry', 'model-request', 'model-response']);
     expect(status.filter(event => event.phase === 'model-request').map(event => event.step)).toEqual([1, 2]);
     expect(status.map(event => event.requestId)).toEqual(['run:1', 'run:1', 'run:1', 'run:2', 'run:2']);
@@ -38,6 +38,25 @@ describe('managed request recovery', () => {
     expect(elapsed - result.modelDurationMs!).toBeGreaterThanOrEqual(70);
     expect(result.text).toBe('完成');
     expect(server.requests).toHaveLength(2);
+  });
+
+  it('excludes context compaction and checkpoint preparation from request timing and counting', async () => {
+    const server = await fixture(() => ({ events: [completed()] }));
+    const events: ProviderEvent[] = [];
+    const clock = Date.now.bind(Date);
+    let preparationMs = 0;
+    const spy = vi.spyOn(Date, 'now').mockImplementation(() => clock() + preparationMs);
+    try {
+      const result = await runManaged(createClient(server.url), { ...context(events), compactContext: async () => {
+        preparationMs += 60_000;
+        expect(events.some(event => event.data.phase === 'model-request')).toBe(false);
+        return undefined;
+      } }, 'responses');
+      expect(server.requests).toHaveLength(1);
+      expect(result.modelDurationMs).toBeLessThan(60_000);
+      const response = events.find(event => event.data.phase === 'model-response');
+      expect(response?.data.durationMs).toBe(result.modelDurationMs);
+    } finally { spy.mockRestore(); }
   });
 
   it.each([429, 502, 503, 504])('recovers HTTP %s without rerunning an already executed tool', async status => {

@@ -47,9 +47,12 @@ function waitForRetry(delayMs: number, context: RunContext): Promise<void> {
 
 export async function requestWithRetry<T extends { usage?: Usage }>(context: RunContext, request: (attempt: number, requestId: string) => Promise<T>, nextStep: () => number,
   recordDuration: (durationMs: number) => void, delays: readonly number[] = [2000, 5000, 10000, 20000, 30000],
-  onRetry?: (recovery: ModelRecovery) => void | Promise<void>, initialAttempt = 0): Promise<T> {
+  onRetry?: (recovery: ModelRecovery) => void | Promise<void>, initialAttempt = 0,
+  prepare?: (attempt: number) => void | Promise<void>): Promise<T> {
   if (initialAttempt > Math.min(delays.length, 5)) throw new Error('模型连接自动恢复次数已耗尽，请继续原任务');
   for (let attempt = initialAttempt; ; attempt++) {
+    context.signal.throwIfAborted();
+    await prepare?.(attempt);
     context.signal.throwIfAborted();
     const step = nextStep();
     const requestId = `${context.runId}:${step}`;

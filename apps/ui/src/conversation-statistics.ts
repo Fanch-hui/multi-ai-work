@@ -15,7 +15,7 @@ function aggregateUsage(runs: Run[], events: RunEvent[]) {
   const completeRuns = runs.filter(run => run.metrics
     ? run.status === 'completed' && count(run.metrics.requests) && run.metrics.usageRequests === run.metrics.requests
       && run.metrics.usage?.source !== 'unknown' && count(run.metrics.usage?.inputTokens) && count(run.metrics.usage?.outputTokens)
-    : run.usage?.source !== 'unknown' && count(run.usage?.inputTokens) && count(run.usage?.outputTokens)).length;
+    : run.status === 'completed' && run.usage?.source !== 'unknown' && count(run.usage?.inputTokens) && count(run.usage?.outputTokens)).length;
   const fullyReported = runs.length > 0 && completeRuns === runs.length;
   return { input: inputs.length ? input : undefined, output: outputs.length ? output : undefined,
     total: known.length ? input + output : undefined, ...cacheStatistics(runs, samples),

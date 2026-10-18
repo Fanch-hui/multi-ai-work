@@ -38,7 +38,7 @@ export async function runManaged(client: OpenAI, context: RunContext, protocol: 
     await state.save(calls.length ? 'tools' : 'complete');
     await state.acknowledgeInput();
     usage = addUsage(usage, turn.usage ?? { source: 'unknown' });
-    context.emit({ type: 'usage', data: { ...usage } });
+    context.emit({ type: 'usage', data: { ...usage, scope: 'cumulative' } });
     if (calls.length) {
       await completeToolBatch(context, state, executed);
       continue;

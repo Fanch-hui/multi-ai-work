@@ -17,7 +17,7 @@ async function setup(web = true) {
   const core = {
     state: { subscribe: () => () => {}, snapshot: () => ({ conversations: [] }) },
     executor: { coreUrl: '', nativeContexts: new Map() },
-    tools: { definitions: () => [] }, request,
+    tools: { currentDefinitions: async () => [] }, request,
   } as unknown as CoreService;
   const channel = await startHttp(core, web, 0);
   channels.push(channel);
