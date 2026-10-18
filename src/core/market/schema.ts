@@ -15,7 +15,7 @@ const sourceSchema = z.object({
 }).strict();
 export const presetSchema = z.object({
   id: identifier, version: identifier, name: text.max(120), role: text.max(200), description: text,
-  professions: z.array(z.string().refine(value => professions.some(item => item.id === value))).min(1).max(13),
+  professions: z.array(z.string().refine(value => professions.some(item => item.id === value))).min(1).max(professions.length),
   group: text.optional(), rank: z.number().int().nonnegative(), instructions: text.max(40000),
   examples: z.array(text).max(30), outputs: z.array(text).max(30),
   skills: z.array(z.object({ key: identifier, name: text, description: text,

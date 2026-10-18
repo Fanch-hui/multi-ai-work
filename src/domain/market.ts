@@ -9,6 +9,12 @@ export const professions: Profession[] = [
   { id: 'education', name: '教师／培训讲师' }, { id: 'research', name: '科研／学术研究' },
   { id: 'design', name: '设计师' }, { id: 'finance', name: '财务／经营分析' },
   { id: 'student', name: '大学生' },
+  { id: 'author', name: '作者／文学创作' }, { id: 'construction', name: '建筑／工程项目' },
+  { id: 'administration', name: '行政／综合事务' }, { id: 'procurement', name: '采购／供应链' },
+  { id: 'customer_service', name: '客户服务／客户成功' }, { id: 'project_management', name: '项目管理／项目交付' },
+  { id: 'software', name: '软件开发／测试' }, { id: 'data_analysis', name: '数据分析／BI' },
+  { id: 'translation', name: '翻译／本地化' }, { id: 'manufacturing', name: '制造／质量管理' },
+  { id: 'logistics', name: '物流／仓储' },
 ];
 export interface SkillSource {
   repository: string; commit: string; path: string; license: string;

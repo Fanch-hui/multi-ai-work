@@ -78,5 +78,6 @@ describe('主管职业系统指令', () => {
     await completeTurn(core, core.state.settings().mainConversationId!);
     expect(instructions).toContain(chiefInstructions);
     for (const profession of professions) expect(instructions).toContain(profession.name);
+    expect(instructions).not.toContain('undefined');
   });
 });
