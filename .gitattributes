@@ -1,4 +1,5 @@
 # Handwritten source uses the same line endings on every platform.
+/biome.json text eol=lf
 /src/**/*.[jt]s text eol=lf
 /src/**/*.[cm][jt]s text eol=lf
 /src/**/*.[jt]sx text eol=lf
