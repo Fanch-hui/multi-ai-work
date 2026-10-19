@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { Artifact, Bot, Conversation, Task } from '../src/domain/types.js';
 import { artifactGroups, artifactProducer } from '../apps/ui/src/artifact-groups.js';
 import { ArtifactGroups, ArtifactItem } from '../apps/ui/src/Artifacts.js';
+import { latestArtifactVersions } from '../src/domain/artifact-versions.js';
 
 const task = (id: string, extra: Partial<Task> = {}): Task => ({
   id,
@@ -101,7 +102,7 @@ describe('artifact library conversation groups', () => {
   });
 
   it('combines the task tree without changing producer ownership or hiding identical working paths', () => {
-    const child = task('child', { parentId: 'parent', goal: '生成  \n 成员报告' });
+    const child = task('child', { parentId: 'parent', botId: 'member', goal: '生成  \n 成员报告' });
     const first = artifact('parent-file', { taskId: 'parent', workingPath: '/work/report.txt' });
     const second = artifact('child-file', { taskId: 'child', workingPath: '/work/report.txt' });
     const groups = artifactGroups({
@@ -147,7 +148,7 @@ describe('artifact library conversation groups', () => {
       task(id, { conversationId: 'main', goal: '同一个标题' }),
     );
     const artifacts = ['one', 'two'].map((id) =>
-      artifact(id, { taskId: `child-${id}`, workingPath: '/work/report.txt' }),
+      artifact(id, { taskId: `child-${id}`, conversationId: id, workingPath: '/work/report.txt' }),
     );
     tasks.push(
       ...['one', 'two'].map((id) => task(`child-${id}`, { conversationId: id, parentId: id })),
@@ -162,10 +163,10 @@ describe('artifact library conversation groups', () => {
     ]);
   });
 
-  it('selects each producing task newest version without hiding other task outputs in the same conversation', () => {
+  it('selects the newest working file across reply tasks while keeping separate outputs', () => {
     const older = artifact('old', { taskId: 'first', workingPath: '/work/report.txt' });
     const newer = artifact('new', {
-      taskId: 'first',
+      taskId: 'second',
       workingPath: '/work/report.txt',
       createdAt: '2026-10-12T13:00:00Z',
     });
@@ -180,11 +181,11 @@ describe('artifact library conversation groups', () => {
     ]);
   });
 
-  it('shows the preceding version after a single ID deletion and preserves other producers and tasks', () => {
+  it('shows the preceding version after deletion and preserves other producers and paths', () => {
     const artifacts = [
       artifact('old', { taskId: 'first', botId: 'chief', workingPath: '/work/report.txt' }),
       artifact('new', {
-        taskId: 'first',
+        taskId: 'second',
         botId: 'chief',
         workingPath: '/work/report.txt',
         createdAt: '2026-10-12T13:00:00Z',
@@ -194,7 +195,7 @@ describe('artifact library conversation groups', () => {
         botId: 'member',
         workingPath: '/work/report.txt',
       }),
-      artifact('other-task', { taskId: 'second', botId: 'chief', workingPath: '/work/report.txt' }),
+      artifact('other-path', { taskId: 'second', botId: 'chief', workingPath: '/work/notes.txt' }),
     ];
     const groups = artifactGroups({
       artifacts: artifacts.filter((item) => item.id !== 'new'),
@@ -204,7 +205,7 @@ describe('artifact library conversation groups', () => {
     expect(groups[0].artifacts.map((item) => item.id)).toEqual([
       'old',
       'other-author',
-      'other-task',
+      'other-path',
     ]);
   });
 
@@ -284,6 +285,30 @@ describe('artifact library conversation groups', () => {
     ]);
     expect(artifactGroups(data, 'missing')).toEqual([]);
   });
+
+  it('searches the latest deliverable without restoring older names or selecting process files', () => {
+    const data = {
+      artifacts: [
+        artifact('old', { taskId: 'first', name: 'draft.txt', workingPath: '/work/report.txt' }),
+        artifact('new', {
+          taskId: 'second',
+          name: 'final.txt',
+          workingPath: '/work/report.txt',
+          createdAt: '2026-10-12T12:00:00Z',
+        }),
+        artifact('process', {
+          taskId: 'second',
+          purpose: 'intermediate',
+          workingPath: '/work/report.txt',
+          createdAt: '2026-10-12T13:00:00Z',
+        }),
+      ],
+      tasks: [task('first'), task('second')],
+      conversations: [room],
+    };
+    expect(artifactGroups(data, 'draft')).toEqual([]);
+    expect(artifactGroups(data, 'final')[0].artifacts.map((item) => item.id)).toEqual(['new']);
+  });
   it('keeps different main conversations separate even when their names match', () => {
     const other = { ...main, id: 'other' };
     const tasks = [
@@ -360,6 +385,57 @@ describe('artifact library conversation groups', () => {
       id: 'conversation:team',
       title: '任务群 team',
     });
+  });
+});
+
+describe('artifact version selection', () => {
+  it('preserves artifacts without working paths and keeps equal timestamps in input order', () => {
+    const files = [
+      artifact('first', { botId: 'chief', workingPath: '/work/report.txt' }),
+      artifact('tied', { botId: 'chief', workingPath: '/work/report.txt' }),
+      artifact('unlinked-one', { botId: 'chief', name: 'same.txt' }),
+      artifact('unlinked-two', { botId: 'chief', name: 'same.txt' }),
+    ];
+    const original = structuredClone(files);
+    expect(latestArtifactVersions(files).map((item) => item.id)).toEqual([
+      'first',
+      'unlinked-one',
+      'unlinked-two',
+    ]);
+    expect(files).toEqual(original);
+    expect(latestArtifactVersions(files)[0]).toBe(files[0]);
+  });
+
+  it('isolates unknown producers by task and artifact while resolving legacy task ownership', () => {
+    const files = [
+      artifact('known-old', { taskId: 'known', workingPath: '/work/report.txt' }),
+      artifact('known-new', {
+        botId: 'chief',
+        workingPath: '/work/report.txt',
+        createdAt: '2026-10-12T12:00:00Z',
+      }),
+      artifact('unknown-one', { taskId: 'gone-one', workingPath: '/work/report.txt' }),
+      artifact('unknown-two', { taskId: 'gone-two', workingPath: '/work/report.txt' }),
+      artifact('unowned-one', { workingPath: '/work/report.txt' }),
+      artifact('unowned-two', { workingPath: '/work/report.txt' }),
+    ];
+    expect(
+      latestArtifactVersions(files, new Map([['known', { botId: 'chief' }]])).map(
+        (item) => item.id,
+      ),
+    ).toEqual(['known-new', 'unknown-one', 'unknown-two', 'unowned-one', 'unowned-two']);
+  });
+
+  it('selects versions independently of purpose or artifact source', () => {
+    const older = artifact('old', { botId: 'chief', workingPath: '/work/report.txt' });
+    const newer = artifact('new', {
+      botId: 'chief',
+      workingPath: '/work/report.txt',
+      purpose: 'intermediate',
+      source: 'user-attachment',
+      createdAt: '2026-10-12T12:00:00Z',
+    });
+    expect(latestArtifactVersions([older, newer])).toEqual([newer]);
   });
 });
 

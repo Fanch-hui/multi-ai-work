@@ -39,6 +39,7 @@ import { unreadConversationCounts } from './conversation-read.js';
 import type { Message } from '../domain/types.js';
 import { SnapshotCache } from './snapshot-cache.js';
 import { ArtifactContents } from './artifact-contents.js';
+import { migrateReplyArtifacts } from './reply-artifacts.js';
 
 export const now = () => new Date().toISOString();
 export const id = () => randomUUID();
@@ -58,6 +59,7 @@ export class State {
     this.snapshotCache = new SnapshotCache(this.storage);
     ensureMemoryContentHashes(this.storage);
     migrateRunMetrics(this.storage);
+    migrateReplyArtifacts(this.storage);
     if (!this.storage.all<Workspace>('workspaces').length) {
       const path = join(dataDirectory, 'workspace');
       mkdirSync(path, { recursive: true });

@@ -1,5 +1,6 @@
 import type { Message, Run } from '../domain/types.js';
 import { Storage } from './storage.js';
+import { replyArtifactIds } from './reply-artifacts.js';
 
 function currentDraft(storage: Storage, messageId: string): Message | undefined {
   const message = storage.getMessage(messageId);
@@ -23,6 +24,7 @@ export function completeRunMessage(
   artifactIds: string[],
 ): Message {
   const message = currentDraft(storage, draft.id);
+  const currentArtifactIds = replyArtifactIds(storage, draft, artifactIds);
   if (!message || !content.trim()) {
     const sources = runMessageSources(storage, draft.runId!);
     const previous = storage
@@ -35,12 +37,17 @@ export function completeRunMessage(
           message.status === 'committed',
       )
       .at(-1);
-    if (previous || !message || !artifactIds.length) {
+    if (!message || !currentArtifactIds.length) {
       if (message) storage.deleteMessage(message.id);
       return previous ?? draft;
     }
   }
-  const completed: Message = { ...message!, content, artifactIds, status: 'committed' };
+  const completed: Message = {
+    ...message!,
+    content,
+    artifactIds: currentArtifactIds,
+    status: 'committed',
+  };
   storage.updateMessage(completed);
   return completed;
 }

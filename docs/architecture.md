@@ -61,6 +61,10 @@ Scheduler 按现有优先级安排前台任务、主管代答和记忆整理，�
 
 状态按职责就近保存。新增状态时应先确定唯一写入者，再选择现有存储或类作为归属；共享对象通过明确操作更新。
 
+最终回复通过 `reply-artifacts.ts` 自动附加尚未发表的最新交付文件，同任务已通过 `post_message` 发出的文件沿用原消息；显式重发仍保留。启动与备份恢复时校正历史最终回复的重复附件关联，原文件和消息正文保留。
+
+库与自动交付共用 `latestArtifactVersions`，按实际产出会话、智能体和工作路径选择最新文件。同一会话连续修改文件时，库只列最新版本；不同会话或产出者的文件分别保留，历史版本仍在存储中。
+
 ## 上下文、检查点与恢复
 
 原始协议、工作上下文、摘要分别承担取证、模型输入和压缩职责。完整协议包含工具配对和不透明字段；工作投影可重建。`ManagedHistory` 集中历史加载、来源映射、归档提交和有效性保存，继续使用已有元数据键与档案格式。
@@ -101,6 +105,7 @@ Core 在 Provider 启动前准备恢复资料与运行上下文；Provider 开�
 | --- | --- |
 | 调度、启动恢复、补充输入 | [scheduler](../tests/scheduler.test.ts)、[scheduler-recovery](../tests/scheduler-recovery.test.ts)、[task-input-admission](../tests/task-input-admission.test.ts)、[core-user-input](../tests/core-user-input.test.ts) |
 | 执行结果、草稿、提问与停止 | [execution-lifecycle](../tests/execution-lifecycle.test.ts)、[run-publication](../tests/run-publication.test.ts)、[core-questions](../tests/core-questions.test.ts)、[task-controls](../tests/task-controls.test.ts) |
+| 文件交付、历史附件与库版本 | [reply-artifacts](../tests/reply-artifacts.test.ts)、[artifact-groups](../tests/artifact-groups.test.ts)、[artifact-delete](../tests/artifact-delete.test.ts) |
 | 协议、历史、检查点与压缩 | [managed-history](../tests/managed-history.test.ts)、[managed-progress](../tests/managed-progress.test.ts)、[managed-progress-deltas](../tests/managed-progress-deltas.test.ts)、[managed-recovery-lifecycle](../tests/managed-recovery-lifecycle.test.ts)、[manual-compaction-mcp](../tests/manual-compaction-mcp.test.ts) |
 | 工具权限、操作保存与 MCP 生命周期 | [core-permissions](../tests/core-permissions.test.ts)、[core-mcp-revocation](../tests/core-mcp-revocation.test.ts)、[tool-operation-lifecycle](../tests/tool-operation-lifecycle.test.ts)、[mcp-lifecycle](../tests/mcp-lifecycle.test.ts) |
 | 存储、增量快照和桌面进程 | [storage-binding](../tests/storage-binding.test.ts)、[snapshot-cache](../tests/snapshot-cache.test.ts)、[snapshot-sync](../tests/snapshot-sync.test.ts)、[snapshot-store](../tests/snapshot-store.test.ts)、[core-host](../tests/core-host.test.ts) |

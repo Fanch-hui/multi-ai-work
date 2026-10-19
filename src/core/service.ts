@@ -39,6 +39,7 @@ import { inspectTask } from './task-inspection.js';
 import { MaintenanceAdmission } from './maintenance-admission.js';
 import { createStorageMemoryStore, ensureMemoryContentHashes } from './memory-storage.js';
 import { queueContextCompaction } from './conversation-compaction.js';
+import { migrateReplyArtifacts } from './reply-artifacts.js';
 
 export type { HostRequest } from './artifact-requests.js';
 export class CoreService {
@@ -475,6 +476,7 @@ export class CoreService {
           migrateProviders(s);
           migrateContextSettings(s);
           ensureMemoryContentHashes(s);
+          migrateReplyArtifacts(s);
           this.state.syncMainTeam();
           syncOfficeSkills(this.state);
           return result;

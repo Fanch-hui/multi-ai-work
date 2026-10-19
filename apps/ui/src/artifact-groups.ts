@@ -1,5 +1,6 @@
 import type { Artifact, Bot, Conversation, Snapshot, Task } from '../../../src/domain/types.js';
 import { isDeliverableArtifact } from '../../../src/domain/artifact-purpose.js';
+import { latestArtifactVersions } from '../../../src/domain/artifact-versions.js';
 
 export interface ArtifactGroup {
   id: string;
@@ -70,21 +71,9 @@ export function artifactGroups(
   const tasks = new Map(data.tasks.map((task) => [task.id, task]));
   const conversations = new Map(data.conversations.map((room) => [room.id, room]));
   const groups = new Map<string, ArtifactGroup>();
-  const current = new Map<string, Artifact>();
-  for (const artifact of data.artifacts) {
-    if (!isDeliverableArtifact(artifact)) continue;
-    const task = artifact.taskId ? tasks.get(artifact.taskId) : undefined;
-    const key = JSON.stringify([
-      artifact.taskId ?? null,
-      artifact.taskId ? null : artifact.conversationId,
-      artifact.botId ?? task?.botId ?? null,
-      artifact.workingPath || artifact.id,
-    ]);
-    const previous = current.get(key);
-    if (!previous || artifact.createdAt > previous.createdAt) current.set(key, artifact);
-  }
+  const current = latestArtifactVersions(data.artifacts.filter(isDeliverableArtifact), tasks);
   const search = query.toLocaleLowerCase();
-  for (const artifact of current.values()) {
+  for (const artifact of current) {
     if (!artifact.name.toLocaleLowerCase().includes(search)) continue;
     const { id, title } = groupOrigin(artifact, tasks, conversations);
     let group = groups.get(id);

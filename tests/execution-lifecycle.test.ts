@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Run, Task } from '../src/domain/types.js';
+import type { Artifact, Run, Task } from '../src/domain/types.js';
 import { eventually, setup } from './core-harness.js';
 
 describe('execution settlement priorities', () => {
@@ -84,5 +84,52 @@ describe('execution settlement priorities', () => {
         .filter((message) => message.authorType === 'bot')
         .map((message) => message.content),
     ).toEqual(['第一项结果', '第二项结果']);
+  });
+
+  it('delivers posted files once while preserving the final explanation', async () => {
+    const { core, bot } = await setup(async (context) => {
+      const storage = core.state.storage;
+      const run = storage.get<Run>('runs', context.runId)!;
+      const task = storage.get<Task>('tasks', run.taskId)!;
+      const artifact: Artifact = {
+        id: 'report',
+        name: '报告.md',
+        path: '/artifacts/report.md',
+        workingPath: '/work/report.md',
+        mimeType: 'text/markdown',
+        sha256: 'digest',
+        size: 10,
+        taskId: task.id,
+        botId: task.botId,
+        conversationId: task.conversationId,
+        createdAt: task.createdAt,
+      };
+      storage.put('artifacts', artifact);
+      storage.put('tasks', { ...task, artifactIds: [artifact.id] });
+      await context.executeTool(
+        'post_message',
+        { content: '文件已完成', artifactIds: [artifact.id] },
+        'delivery',
+      );
+      return { text: '这是文件的详细说明' };
+    });
+    const member = bot('助手', ['post_message']);
+    const room = core.entities.createConversation({
+      name: '文件交付',
+      kind: 'private',
+      memberIds: [member.id],
+      workspaceId: core.state.snapshot().workspaces[0].id,
+    });
+    const sent = core.tasks.send({ conversationId: room.id, content: '制作报告' });
+    await eventually(
+      () => core.state.storage.get<Task>('tasks', sent.taskIds[0])?.status === 'completed',
+    );
+    const replies = core.state.storage
+      .messages(room.id)
+      .filter((item) => item.authorType === 'bot');
+    expect(replies.map((item) => [item.content, item.artifactIds])).toEqual([
+      ['文件已完成', ['report']],
+      ['这是文件的详细说明', []],
+    ]);
   });
 });
