@@ -196,11 +196,13 @@ export class TaskService {
     if (!content) throw new Error('消息不能为空');
     const requestId = input.requestId ?? id();
     const mentionedBotIds = [...new Set(input.targetBotIds ?? [])];
-    const targets = mentionedBotIds.length
-      ? mentionedBotIds
-      : room.kind === 'group'
-        ? room.memberIds.filter((botId) => !s.get<Bot>('bots', botId)?.archived)
-        : [room.chiefId ?? room.memberIds[0]];
+    let targets = mentionedBotIds;
+    if (!targets.length) {
+      targets =
+        room.kind === 'group'
+          ? room.memberIds.filter((botId) => !s.get<Bot>('bots', botId)?.archived)
+          : [room.chiefId ?? room.memberIds[0]];
+    }
     if (!targets.length) throw new Error('会话没有有效成员');
     for (const botId of targets) {
       const bot = required(s.get<Bot>('bots', botId), '智能体不存在');
@@ -257,13 +259,7 @@ export class TaskService {
             requestId: `${requestId}:${botId}`,
             sourceMessageId: message.id,
           });
-        new TaskInputService(this.state).append(current, message);
-        const resume = current.status === 'waiting_children' || current.coordinationPaused;
-        if (current.coordinationPaused) s.setMetadata(`coordination:${current.id}`, 0);
-        return this.update(current, {
-          inputArtifactIds: [...new Set([...(current.inputArtifactIds ?? []), ...artifactIds])],
-          ...(resume ? { status: 'queued', coordinationPaused: false, error: undefined } : {}),
-        });
+        return this.appendInput(current, message);
       });
       const value = { messageId: message.id, taskIds: tasks.map((task) => task.id) };
       s.setMetadata(`send:${requestId}`, { ...value, fingerprint });
@@ -271,6 +267,21 @@ export class TaskService {
     });
     this.state.changed();
     return result;
+  }
+
+  appendInput(task: Task, message: Message): Task {
+    new TaskInputService(this.state).append(task, message);
+    const resume = task.status === 'waiting_children' || task.coordinationPaused;
+    if (task.coordinationPaused) this.state.storage.setMetadata(`coordination:${task.id}`, 0);
+    const patch: Partial<Task> = {
+      inputArtifactIds: [...new Set([...(task.inputArtifactIds ?? []), ...message.artifactIds])],
+    };
+    if (resume) {
+      patch.status = 'queued';
+      patch.coordinationPaused = false;
+      if (message.authorType === 'user') patch.error = undefined;
+    }
+    return this.update(task, patch);
   }
 
   update(task: Task, patch: Partial<Task>) {

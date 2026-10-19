@@ -6,7 +6,6 @@ import type {
   Task,
   TaskQueueReason,
   UserQuestion,
-  SessionBinding,
 } from '../domain/types.js';
 import type { ProviderAdapter } from '../domain/provider.js';
 import { State, id, now } from './state.js';
@@ -14,11 +13,20 @@ import { Executor } from './executor.js';
 import { TaskService, terminal } from './tasks.js';
 import { publicError } from './errors.js';
 import { questionChief } from './question-policy.js';
-import { recoverTaskInputs } from './task-input-records.js';
-import { progressForRun, recoverManagedRuns } from './managed-progress.js';
+import { recoverSchedulerState } from './scheduler-recovery.js';
 
-const priority = (task: Task) =>
-  task.kind === 'memory-review' ? 2 : task.kind === 'question-decision' ? 1 : 0;
+function priority(task: Task): number {
+  if (task.kind === 'memory-review') return 2;
+  if (task.kind === 'question-decision') return 1;
+  return 0;
+}
+
+interface Candidate {
+  task: Task;
+  dependencies: (Task | undefined)[];
+  account: string;
+  bindingKey: string;
+}
 
 interface Active {
   task: Task;
@@ -45,12 +53,29 @@ export class Scheduler {
 
   private queueReason(task: Task): TaskQueueReason | undefined {
     if (!['queued', 'recovering'].includes(task.status)) return undefined;
+    return this.candidateQueueReason(this.candidate(task));
+  }
+
+  private candidate(task: Task, bot?: Bot): Candidate {
     const s = this.state.storage;
-    if (task.dependencyIds.some((id) => s.get<Task>('tasks', id)?.status !== 'completed'))
+    const dependencies = task.dependencyIds.map((taskId) => s.get<Task>('tasks', taskId));
+    const member = bot ?? s.get<Bot>('bots', task.botId);
+    const connection = member && s.get<Connection>('connections', member.connectionId);
+    return {
+      task,
+      dependencies,
+      account: connection?.accountScope ?? connection?.id ?? task.botId,
+      bindingKey: `${task.botId}:${task.conversationId}`,
+    };
+  }
+
+  private candidateQueueReason(candidate: Candidate): TaskQueueReason | undefined {
+    const { task, dependencies, account, bindingKey } = candidate;
+    const s = this.state.storage;
+    if (dependencies.some((dependency) => dependency?.status !== 'completed'))
       return 'dependencies';
     const active = [...this.active.values()];
-    if (active.some((item) => item.bindingKey === `${task.botId}:${task.conversationId}`))
-      return 'session_busy';
+    if (active.some((item) => item.bindingKey === bindingKey)) return 'session_busy';
     if (
       s
         .byField<Task>('tasks', 'status', 'recovering')
@@ -62,9 +87,6 @@ export class Scheduler {
         )
     )
       return 'session_busy';
-    const bot = s.get<Bot>('bots', task.botId);
-    const connection = bot && s.get<Connection>('connections', bot.connectionId);
-    const account = connection?.accountScope ?? connection?.id ?? task.botId;
     if (active.filter((item) => item.account === account).length >= this.accountLimit(account))
       return 'account_limit';
     if (active.length >= this.state.settings().maxActiveRuns) return 'global_limit';
@@ -80,7 +102,7 @@ export class Scheduler {
   }
 
   start() {
-    this.recover();
+    recoverSchedulerState(this.state);
     this.unsubscribe = this.state.subscribe((kind) => {
       if (kind === 'state') this.kick();
     });
@@ -97,6 +119,16 @@ export class Scheduler {
   private pump() {
     if (this.stopped || this.paused) return;
     this.tasks.settleParents();
+    for (const task of this.pendingTasks()) {
+      if (this.active.size >= this.state.settings().maxActiveRuns) break;
+      if (this.active.has(task.id)) continue;
+      if (!this.tasks.accepting(task.conversationId)) continue;
+      const candidate = this.admittedCandidate(task);
+      if (candidate) this.launch(candidate);
+    }
+  }
+
+  private pendingTasks(): Task[] {
     const s = this.state.storage;
     const recovering = s.byField<Task>('tasks', 'status', 'recovering');
     clearTimeout(this.recoveryTimer);
@@ -111,71 +143,75 @@ export class Scheduler {
     const due = recovering.filter(
       (task) => task.recovery && Date.parse(task.recovery.nextAttemptAt) <= Date.now(),
     );
-    for (const task of [...due, ...s.byField<Task>('tasks', 'status', 'queued')].sort(
+    return [...due, ...s.byField<Task>('tasks', 'status', 'queued')].sort(
       (a, b) => priority(a) - priority(b),
-    )) {
-      if (this.active.size >= this.state.settings().maxActiveRuns) break;
-      if (this.active.has(task.id)) continue;
-      if (!this.tasks.accepting(task.conversationId)) continue;
-      if (task.kind === 'question-decision') {
-        const question = task.questionId
-          ? s.get<UserQuestion>('questions', task.questionId)
-          : undefined;
-        if (
-          !question ||
-          question.status !== 'pending' ||
-          question.chiefTaskId !== task.id ||
-          !this.state.settings().autoAnswerMemberQuestions ||
-          questionChief(this.state, question)?.id !== task.botId
-        ) {
-          this.tasks.update(task, { status: 'cancelled', error: '问题已处理或主管代答已停止' });
-          continue;
-        }
-      }
-      const room = s.get<Conversation>('conversations', task.conversationId);
-      const bot = s.get<Bot>('bots', task.botId);
-      if (!bot || bot.archived || !room?.memberIds.includes(task.botId)) {
-        this.tasks.update(task, { status: 'cancelled', error: '智能体已离开此对话。' });
-        continue;
-      }
-      const dependencies = task.dependencyIds.map((taskId) => s.get<Task>('tasks', taskId));
-      if (
-        dependencies.some(
-          (dependency) =>
-            dependency && terminal(dependency.status) && dependency.status !== 'completed',
-        )
-      ) {
-        this.tasks.update(task, {
-          status: 'failed',
-          error: '前置任务未完成，已保留独立任务成果。',
-        });
-        continue;
-      }
-      if (dependencies.some((dependency) => !dependency || dependency.status !== 'completed'))
-        continue;
-      const connection = bot ? s.get<Connection>('connections', bot.connectionId) : undefined;
-      const account = connection?.accountScope ?? connection?.id ?? task.botId;
-      const bindingKey = `${task.botId}:${task.conversationId}`;
-      if (this.queueReason(task)) continue;
-      const controller = new AbortController();
-      const completion = this.executor
-        .execute(task, controller.signal)
-        .catch((error) => {
-          if (task.kind === 'question-decision' && !controller.signal.aborted)
-            this.executor.questionDecisionFailed(task, publicError(error));
-          this.tasks.update(task, {
-            status: controller.signal.aborted ? 'cancelled' : 'failed',
-            error: publicError(error),
-          });
-        })
-        .finally(() => {
-          this.active.delete(task.id);
-          this.state.changed();
-          this.kick();
-        });
-      this.active.set(task.id, { task, controller, account, bindingKey, completion });
-    }
+    );
   }
+
+  private admittedCandidate(task: Task): Candidate | undefined {
+    const s = this.state.storage;
+    if (task.kind === 'question-decision') {
+      const question = task.questionId
+        ? s.get<UserQuestion>('questions', task.questionId)
+        : undefined;
+      if (
+        !question ||
+        question.status !== 'pending' ||
+        question.chiefTaskId !== task.id ||
+        !this.state.settings().autoAnswerMemberQuestions ||
+        questionChief(this.state, question)?.id !== task.botId
+      ) {
+        this.tasks.update(task, { status: 'cancelled', error: '问题已处理或主管代答已停止' });
+        return undefined;
+      }
+    }
+    const room = s.get<Conversation>('conversations', task.conversationId);
+    const bot = s.get<Bot>('bots', task.botId);
+    if (!bot || bot.archived || !room?.memberIds.includes(task.botId)) {
+      this.tasks.update(task, { status: 'cancelled', error: '智能体已离开此对话。' });
+      return undefined;
+    }
+    const candidate = this.candidate(task, bot);
+    const { dependencies } = candidate;
+    if (
+      dependencies.some(
+        (dependency) =>
+          dependency && terminal(dependency.status) && dependency.status !== 'completed',
+      )
+    ) {
+      this.tasks.update(task, {
+        status: 'failed',
+        error: '前置任务未完成，已保留独立任务成果。',
+      });
+      return undefined;
+    }
+    if (dependencies.some((dependency) => !dependency || dependency.status !== 'completed'))
+      return undefined;
+    if (this.candidateQueueReason(candidate)) return undefined;
+    return candidate;
+  }
+
+  private launch(candidate: Candidate) {
+    const { task, account, bindingKey } = candidate;
+    const controller = new AbortController();
+    const completion = this.executor
+      .execute(task, controller.signal)
+      .catch((error) => {
+        if (task.kind === 'question-decision' && !controller.signal.aborted)
+          this.executor.questionDecisionFailed(task, publicError(error));
+        this.tasks.update(task, {
+          status: controller.signal.aborted ? 'cancelled' : 'failed',
+          error: publicError(error),
+        });
+      })
+      .finally(() => {
+        this.active.delete(task.id);
+        this.state.changed();
+        this.kick();
+      });
+    this.active.set(task.id, { task, controller, account, bindingKey, completion });
+  }
+
   async cancel(taskId: string) {
     const s = this.state.storage;
     const task = s.get<Task>('tasks', taskId);
@@ -233,7 +269,7 @@ export class Scheduler {
     this.paused = true;
   }
   resume(recover = false) {
-    if (recover) this.recover();
+    if (recover) recoverSchedulerState(this.state);
     this.paused = false;
     this.kick();
   }
@@ -262,78 +298,5 @@ export class Scheduler {
     }
     await Promise.allSettled(active.map((item) => item.completion));
     for (const adapter of this.adapters) await adapter.close?.();
-  }
-  private recover() {
-    const s = this.state.storage;
-    const crashed: string[] = [];
-    s.transaction(() => {
-      for (const run of s
-        .all<Run>('runs')
-        .filter((item) => ['running', 'waiting_approval'].includes(item.status))) {
-        const question = s
-          .all<UserQuestion>('questions')
-          .find((item) => item.runId === run.id && item.status === 'pending');
-        if (question) {
-          s.put('runs', { ...run, status: 'waiting_input', endedAt: now() });
-          const task = s.get<Task>('tasks', run.taskId);
-          if (task) s.put('tasks', { ...task, status: 'waiting_input', updatedAt: now() });
-          const binding = s.get<SessionBinding>('session_bindings', run.bindingId);
-          if (binding?.nativeSessionId)
-            s.put('session_bindings', {
-              ...binding,
-              generation: binding.generation + 1,
-              nativeSessionId: undefined,
-              lastDeliveredSequence: 0,
-              memoryVersions: undefined,
-            });
-          continue;
-        }
-        crashed.push(run.id);
-        s.put('runs', {
-          ...run,
-          status: 'interrupted',
-          endedAt: now(),
-          error: '上次运行未正常结束。',
-        });
-        const task = s.get<Task>('tasks', run.taskId);
-        if (task)
-          s.put('tasks', {
-            ...task,
-            status: 'interrupted',
-            error: '上次运行未正常结束，请检查成果后重试。',
-            updatedAt: now(),
-          });
-      }
-      for (const operation of s
-        .all<{ id: string; status: string; runId: string }>('tool_operations')
-        .filter((item) => item.status === 'dispatched')) {
-        s.put('tool_operations', { ...operation, status: 'unknown' });
-        const run = s.get<Run>('runs', operation.runId);
-        const task = run && s.get<Task>('tasks', run.taskId);
-        if (task) s.put('tasks', { ...task, reconciliationRequired: true });
-      }
-      for (const operation of s.all<{ id: string; status: string; runId: string }>(
-        'tool_operations',
-      )) {
-        if (operation.status === 'prepared' && !progressForRun(s, operation.runId))
-          s.put('tool_operations', { ...operation, status: 'failed' });
-        if (operation.status !== 'unknown') continue;
-        const run = s.get<Run>('runs', operation.runId);
-        const task = run && s.get<Task>('tasks', run.taskId);
-        if (task) s.put('tasks', { ...task, reconciliationRequired: true, status: 'interrupted' });
-      }
-      for (const approval of this.state
-        .snapshot()
-        .approvals.filter((item) => item.status === 'pending'))
-        s.put('approvals', { ...approval, status: 'rejected' });
-      for (const message of s.messages().filter((item) => item.status === 'draft'))
-        s.updateMessage({ ...message, status: 'interrupted' });
-      for (const operation of s
-        .all<{ id: string; status: string }>('compactions')
-        .filter((item) => item.status === 'started'))
-        s.put('compactions', { ...operation, status: 'failed', reason: 'interrupted' });
-      recoverTaskInputs(s);
-      recoverManagedRuns(s, crashed);
-    });
   }
 }

@@ -4,7 +4,6 @@ import type { State } from './state.js';
 import type { Scheduler } from './scheduler.js';
 import { TaskService, terminal } from './tasks.js';
 import { scopedTask } from './task-access.js';
-import { TaskInputService } from './task-inputs.js';
 import { inspectTask } from './task-inspection.js';
 import { id, now } from './state.js';
 import { required } from './errors.js';
@@ -84,15 +83,7 @@ export class TaskControlService {
           status: 'committed',
           createdAt: now(),
         });
-        new TaskInputService(this.state).append(current, message);
-        if (current.coordinationPaused)
-          this.state.storage.setMetadata(`coordination:${current.id}`, 0);
-        this.tasks.update(current, {
-          inputArtifactIds: [...new Set([...(current.inputArtifactIds ?? []), ...artifactIds])],
-          ...(['waiting_children'].includes(current.status) || current.coordinationPaused
-            ? { status: 'queued', coordinationPaused: false }
-            : {}),
-        });
+        this.tasks.appendInput(current, message);
         return {
           messageId: message.id,
           taskId: current.id,
