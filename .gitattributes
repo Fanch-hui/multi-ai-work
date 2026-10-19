@@ -1,2 +1,20 @@
+# Handwritten source uses the same line endings on every platform.
+/src/**/*.[jt]s text eol=lf
+/src/**/*.[cm][jt]s text eol=lf
+/src/**/*.[jt]sx text eol=lf
+/apps/**/*.[jt]s text eol=lf
+/apps/**/*.[cm][jt]s text eol=lf
+/apps/**/*.[jt]sx text eol=lf
+/scripts/**/*.[jt]s text eol=lf
+/scripts/**/*.[cm][jt]s text eol=lf
+/scripts/**/*.[jt]sx text eol=lf
+/tests/**/*.[jt]s text eol=lf
+/tests/**/*.[cm][jt]s text eol=lf
+/tests/**/*.[jt]sx text eol=lf
+/*.[jt]s text eol=lf
+/*.[cm][jt]s text eol=lf
+/*.[jt]sx text eol=lf
+/tests/fixtures/** -text -whitespace !eol
+
 resources/agent-presets/** text eol=lf
 resources/agent-presets/skills/** -text -whitespace
