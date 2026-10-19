@@ -1,13 +1,29 @@
 import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Artifact, Bot, ProcessRecord, Run, Skill, Snapshot, Settings, Task, TaskQueueReason, Workspace } from '../domain/types.js';
+import type {
+  Artifact,
+  Bot,
+  ProcessRecord,
+  Run,
+  Skill,
+  Snapshot,
+  Settings,
+  Task,
+  TaskQueueReason,
+  Workspace,
+} from '../domain/types.js';
 import { Storage } from './storage.js';
 import { ensureMemoryContentHashes, listMemoriesWithUsage } from './memory-storage.js';
 import { ensureMainTeam, publicBot } from './chief.js';
 import { migrateContextSettings } from './context-settings.js';
 import { migrateProviders } from './provider-migrations.js';
-import { migrateBotPermissions, migrateWorkSettings, workSettings, defaultSettings } from './work-settings.js';
+import {
+  migrateBotPermissions,
+  migrateWorkSettings,
+  workSettings,
+  defaultSettings,
+} from './work-settings.js';
 import { migrateRunMetrics } from './run-metrics.js';
 import { presetSkillIds, syncOfficeSkills } from './skills.js';
 import { initializeOnboarding } from './onboarding.js';
@@ -43,7 +59,8 @@ export class State {
     ensureMemoryContentHashes(this.storage);
     migrateRunMetrics(this.storage);
     if (!this.storage.all<Workspace>('workspaces').length) {
-      const path = join(dataDirectory, 'workspace'); mkdirSync(path, { recursive: true });
+      const path = join(dataDirectory, 'workspace');
+      mkdirSync(path, { recursive: true });
       this.storage.put('workspaces', { id: id(), name: '工作成果', path, writable: true });
     }
     if (!this.storage.metadata('settings')) this.storage.setMetadata('settings', defaultSettings);
@@ -53,19 +70,30 @@ export class State {
     syncOfficeSkills(this);
     if (!this.storage.metadata('task-input-artifacts-v1')) {
       for (const task of this.storage.all<Task>('tasks')) {
-        const inputs = task.artifactIds.filter(artifactId => this.storage.get<Artifact>('artifacts', artifactId)?.source === 'user-attachment');
-        this.storage.put('tasks', { ...task, inputArtifactIds: task.inputArtifactIds ?? inputs,
-          artifactIds: task.artifactIds.filter(artifactId => !inputs.includes(artifactId)) });
+        const inputs = task.artifactIds.filter(
+          (artifactId) =>
+            this.storage.get<Artifact>('artifacts', artifactId)?.source === 'user-attachment',
+        );
+        this.storage.put('tasks', {
+          ...task,
+          inputArtifactIds: task.inputArtifactIds ?? inputs,
+          artifactIds: task.artifactIds.filter((artifactId) => !inputs.includes(artifactId)),
+        });
       }
       this.storage.setMetadata('task-input-artifacts-v1', true);
     }
   }
-  settings(): Settings { return workSettings(this.storage.metadata('settings')); }
+  settings(): Settings {
+    return workSettings(this.storage.metadata('settings'));
+  }
   taskSnapshot(task: Task, readActivity?: (task: Task) => TaskActivity): Task {
     const queueReason = this.queueReasonFor?.(task);
     const current = { ...task, ...(queueReason ? { queueReason } : {}) };
-    return { ...current, activity: readActivity ? readActivity(current) : taskActivity(this.storage, current),
-      ...(!task.kind ? { requirement: taskRequirement(this.storage, task) } : {}) };
+    return {
+      ...current,
+      activity: readActivity ? readActivity(current) : taskActivity(this.storage, current),
+      ...(!task.kind ? { requirement: taskRequirement(this.storage, task) } : {}),
+    };
   }
   syncMainTeam() {
     migrateWorkSettings(this.storage);
@@ -75,22 +103,55 @@ export class State {
     initializeConversationReads(this.storage);
   }
   snapshot(messageProjection?: Message[]): Snapshot {
-    const s = this.storage, settings = this.settings(), messages = messageProjection ?? s.messages(), tasks = s.all<Task>('tasks');
-    const runs = s.all<Run>('runs'), readActivity = taskActivityReader(s, tasks, runs);
+    const s = this.storage,
+      settings = this.settings(),
+      messages = messageProjection ?? s.messages(),
+      tasks = s.all<Task>('tasks');
+    const runs = s.all<Run>('runs'),
+      readActivity = taskActivityReader(s, tasks, runs);
     const privateSkillIds = presetSkillIds(this);
-    return { connections: this.snapshotCache.all('connections'), bots: this.snapshotCache.all<Bot>('bots').map(bot => publicBot(bot, settings.mainBotId)), conversations: messageProjection ? unreadConversationCounts(s) : unreadConversations(s, messages),
-      workspaces: this.snapshotCache.all('workspaces'), messages, tasks: tasks.map(task => this.taskSnapshot(task, readActivity)), runs,
-      approvals: s.all('approvals'), artifacts: s.all<Artifact>('artifacts').map(artifact => ({ ...artifactRequirement(s, artifact),
-        ...(artifact.image ? { image: { ...artifact.image, path: '' } } : {}) })), questions: s.all('questions'),
+    return {
+      connections: this.snapshotCache.all('connections'),
+      bots: this.snapshotCache.all<Bot>('bots').map((bot) => publicBot(bot, settings.mainBotId)),
+      conversations: messageProjection
+        ? unreadConversationCounts(s)
+        : unreadConversations(s, messages),
+      workspaces: this.snapshotCache.all('workspaces'),
+      messages,
+      tasks: tasks.map((task) => this.taskSnapshot(task, readActivity)),
+      runs,
+      approvals: s.all('approvals'),
+      artifacts: s
+        .all<Artifact>('artifacts')
+        .map((artifact) => ({
+          ...artifactRequirement(s, artifact),
+          ...(artifact.image ? { image: { ...artifact.image, path: '' } } : {}),
+        })),
+      questions: s.all('questions'),
       memories: listMemoriesWithUsage(s),
       processes: s.all<ProcessRecord>('processes').map(publicProcess),
-      events: s.events(), toolConnections: this.snapshotCache.all('tool_connections'),
-      skills: this.snapshotCache.all<Skill>('skills').map(skill => privateSkillIds.has(skill.id) ? { ...skill, presetOnly: true } : skill),
-      bindings: s.all('session_bindings'), checkpoints: s.all('context_checkpoints'), compactions: s.all('compactions'),
-      taskPlans: s.all<TaskPlanRecord>('task_plans').map(plan => taskPlanView(plan, tasks, settings.mainBotId!)),
+      events: s.events(),
+      toolConnections: this.snapshotCache.all('tool_connections'),
+      skills: this.snapshotCache
+        .all<Skill>('skills')
+        .map((skill) => (privateSkillIds.has(skill.id) ? { ...skill, presetOnly: true } : skill)),
+      bindings: s.all('session_bindings'),
+      checkpoints: s.all('context_checkpoints'),
+      compactions: s.all('compactions'),
+      taskPlans: s
+        .all<TaskPlanRecord>('task_plans')
+        .map((plan) => taskPlanView(plan, tasks, settings.mainBotId!)),
       taskInputs: taskInputs(s),
-      settings, dataDirectory: this.dataDirectory };
+      settings,
+      dataDirectory: this.dataDirectory,
+    };
   }
-  changed(kind: StateChange = 'state') { this.sync.changed(kind); for (const listener of this.listeners) listener(kind); }
-  subscribe(listener: (kind: StateChange) => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
+  changed(kind: StateChange = 'state') {
+    this.sync.changed(kind);
+    for (const listener of this.listeners) listener(kind);
+  }
+  subscribe(listener: (kind: StateChange) => void) {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
 }

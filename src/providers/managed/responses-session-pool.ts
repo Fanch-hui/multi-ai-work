@@ -21,7 +21,10 @@ export class ResponsesSessionPool {
   private active = new Set<ResponsesSession>();
   private timer?: ReturnType<typeof setTimeout>;
   private closed = false;
-  constructor(private maxIdle = 16, private idleTtlMs = 5 * 60_000) {}
+  constructor(
+    private maxIdle = 16,
+    private idleTtlMs = 5 * 60_000,
+  ) {}
 
   acquire(key: string): ResponsesSession {
     if (this.closed) throw new Error('模型会话池已关闭');
@@ -70,7 +73,15 @@ export class ResponsesSessionPool {
   private schedule(): void {
     clearTimeout(this.timer);
     const first = this.idle.values().next().value;
-    this.timer = first ? setTimeout(() => { this.expire(); this.schedule(); }, Math.max(1, first.expires - Date.now())) : undefined;
+    this.timer = first
+      ? setTimeout(
+          () => {
+            this.expire();
+            this.schedule();
+          },
+          Math.max(1, first.expires - Date.now()),
+        )
+      : undefined;
     this.timer?.unref();
   }
 }

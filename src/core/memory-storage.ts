@@ -1,6 +1,10 @@
 import { createHash } from 'node:crypto';
 import type { MemoryEntry, MemoryRevisionRecord, MemoryUsage } from '../domain/memory.js';
-import { memoryPartitionKey, normalizeMemoryContent, searchableMemoryText } from '../domain/memory.js';
+import {
+  memoryPartitionKey,
+  normalizeMemoryContent,
+  searchableMemoryText,
+} from '../domain/memory.js';
 import type { MemorySearchMatch, MemorySearchQuery, MemoryStore } from '../runtime/memory.js';
 import type { Storage } from './storage.js';
 
@@ -28,7 +32,9 @@ const authorizedWhere = `
 export function indexMemorySearch(storage: Storage, entry: MemoryEntry) {
   storage.prepare('DELETE FROM memory_search WHERE id = ?').run(entry.id);
   if (entry.status === 'revoked' || entry.status === 'superseded') return;
-  storage.prepare('INSERT INTO memory_search(id,content) VALUES (?,?)').run(entry.id, searchableMemoryText(entry));
+  storage
+    .prepare('INSERT INTO memory_search(id,content) VALUES (?,?)')
+    .run(entry.id, searchableMemoryText(entry));
 }
 
 export function rebuildMemorySearch(storage: Storage) {
@@ -36,14 +42,24 @@ export function rebuildMemorySearch(storage: Storage) {
     storage.db.exec('DELETE FROM memory_search');
     for (const entry of storage.all<MemoryEntry>('memory_entries')) {
       if (entry.status === 'revoked' || entry.status === 'superseded') continue;
-      storage.prepare('INSERT INTO memory_search(id,content) VALUES (?,?)').run(entry.id, searchableMemoryText(entry));
+      storage
+        .prepare('INSERT INTO memory_search(id,content) VALUES (?,?)')
+        .run(entry.id, searchableMemoryText(entry));
     }
     storage.setMetadata('memory-search-v2', true);
   })();
 }
 
-export function searchAuthorizedMemories(storage: Storage, query: MemorySearchQuery): MemorySearchMatch[] {
-  const authParams = [query.conversationId, query.conversationId, query.botId, query.conversationId];
+export function searchAuthorizedMemories(
+  storage: Storage,
+  query: MemorySearchQuery,
+): MemorySearchMatch[] {
+  const authParams = [
+    query.conversationId,
+    query.conversationId,
+    query.botId,
+    query.conversationId,
+  ];
   const ftsRanks = new Map<string, number>();
 
   if (query.ftsQuery) {
@@ -54,7 +70,10 @@ export function searchAuthorizedMemories(storage: Storage, query: MemorySearchQu
         JOIN memory_entries m ON m.id = memory_search.id
         WHERE memory_search MATCH ? AND ${authorizedWhere}
       `;
-      const ftsRows = storage.prepare(ftsSql).all(query.ftsQuery, ...authParams) as { id: string; rank: number }[];
+      const ftsRows = storage.prepare(ftsSql).all(query.ftsQuery, ...authParams) as {
+        id: string;
+        rank: number;
+      }[];
       for (const row of ftsRows) ftsRanks.set(row.id, row.rank);
     } catch {
       // Fallback to parameterized substring matching if FTS query fails
@@ -69,11 +88,15 @@ export function searchAuthorizedMemories(storage: Storage, query: MemorySearchQu
     params.push(...query.ids);
   }
   if (query.topic?.trim()) {
-    whereParts.push(`lower(COALESCE(NULLIF(trim(json_extract(m.payload, '$.topic')), ''), CASE json_extract(m.payload, '$.scope') WHEN 'team' THEN '团队约定' WHEN 'shared' THEN '共享资料' ELSE '常用偏好' END)) = lower(?)`);
+    whereParts.push(
+      `lower(COALESCE(NULLIF(trim(json_extract(m.payload, '$.topic')), ''), CASE json_extract(m.payload, '$.scope') WHEN 'team' THEN '团队约定' WHEN 'shared' THEN '共享资料' ELSE '常用偏好' END)) = lower(?)`,
+    );
     params.push(query.topic.trim());
   }
 
-  const shortTerms = (query.shortTerms ?? []).map(term => term.toLocaleLowerCase().trim()).filter(Boolean);
+  const shortTerms = (query.shortTerms ?? [])
+    .map((term) => term.toLocaleLowerCase().trim())
+    .filter(Boolean);
   const ftsIds = [...ftsRanks.keys()];
 
   if (query.requireMatch) {
@@ -83,7 +106,9 @@ export function searchAuthorizedMemories(storage: Storage, query: MemorySearchQu
       params.push(...ftsIds);
     }
     for (const term of shortTerms) {
-      matchClauses.push(`INSTR(lower(COALESCE(s.content, json_extract(m.payload, '$.content'))), ?) > 0`);
+      matchClauses.push(
+        `INSTR(lower(COALESCE(s.content, json_extract(m.payload, '$.content'))), ?) > 0`,
+      );
       params.push(term);
     }
     if (!matchClauses.length) return [];
@@ -94,7 +119,10 @@ export function searchAuthorizedMemories(storage: Storage, query: MemorySearchQu
   const scoreParams: unknown[] = [];
   if (shortTerms.length) {
     scoreSql = shortTerms
-      .map(() => `(CASE WHEN INSTR(lower(COALESCE(s.content, json_extract(m.payload, '$.content'))), ?) > 0 THEN 3 ELSE 0 END)`)
+      .map(
+        () =>
+          `(CASE WHEN INSTR(lower(COALESCE(s.content, json_extract(m.payload, '$.content'))), ?) > 0 THEN 3 ELSE 0 END)`,
+      )
       .join(' + ');
     scoreParams.push(...shortTerms);
   }
@@ -110,8 +138,12 @@ export function searchAuthorizedMemories(storage: Storage, query: MemorySearchQu
       json_extract(m.payload, '$.updatedAt') DESC
   `;
 
-  const rows = storage.prepare(sql).all(...scoreParams, ...params) as { id: string; payload: string; shortScore: number }[];
-  const mapped = rows.map(row => ({
+  const rows = storage.prepare(sql).all(...scoreParams, ...params) as {
+    id: string;
+    payload: string;
+    shortScore: number;
+  }[];
+  const mapped = rows.map((row) => ({
     entry: JSON.parse(row.payload) as MemoryEntry,
     ftsRank: ftsRanks.get(row.id),
     shortScore: row.shortScore,
@@ -127,13 +159,21 @@ export function searchAuthorizedMemories(storage: Storage, query: MemorySearchQu
     });
   }
   const offset = Math.max(0, Math.floor(query.offset ?? 0));
-  const sliced = query.limit !== undefined
-    ? mapped.slice(offset, offset + Math.max(1, Math.floor(query.limit)))
-    : (offset > 0 ? mapped.slice(offset) : mapped);
+  const sliced =
+    query.limit !== undefined
+      ? mapped.slice(offset, offset + Math.max(1, Math.floor(query.limit)))
+      : offset > 0
+        ? mapped.slice(offset)
+        : mapped;
   return sliced.map(({ entry, ftsRank }) => ({ entry, ftsRank }));
 }
 
-export function recordMemoryUsage(storage: Storage, memoryIds: string[], kind: 'auto' | 'active', scopeKey?: string) {
+export function recordMemoryUsage(
+  storage: Storage,
+  memoryIds: string[],
+  kind: 'auto' | 'active',
+  scopeKey?: string,
+) {
   const uniqueIds = [...new Set(memoryIds)];
   if (!uniqueIds.length) return;
   const timestamp = new Date().toISOString();
@@ -181,13 +221,19 @@ export function getMemoryUsage(storage: Storage, memoryId: string): MemoryUsage 
 }
 
 export function ensureMemoryContentHashes(storage: Storage) {
-  const rows = storage.prepare("SELECT id, payload FROM memory_entries WHERE json_extract(payload, '$.contentHash') IS NULL").all() as { id: string; payload: string }[];
+  const rows = storage
+    .prepare(
+      "SELECT id, payload FROM memory_entries WHERE json_extract(payload, '$.contentHash') IS NULL",
+    )
+    .all() as { id: string; payload: string }[];
   if (!rows.length) return;
   const update = storage.prepare('UPDATE memory_entries SET payload = ? WHERE id = ?');
   storage.transaction(() => {
     for (const row of rows) {
       const entry = JSON.parse(row.payload) as MemoryEntry;
-      const contentHash = createHash('sha256').update(normalizeMemoryContent(entry.content)).digest('hex');
+      const contentHash = createHash('sha256')
+        .update(normalizeMemoryContent(entry.content))
+        .digest('hex');
       update.run(JSON.stringify({ ...entry, contentHash }), row.id);
     }
   });
@@ -201,14 +247,16 @@ export function findDuplicateMemory(
   contentHash: string,
   excludeId?: string,
 ): MemoryEntry | undefined {
-  const rows = storage.prepare(`
+  const rows = storage
+    .prepare(`
     SELECT payload FROM memory_entries
     WHERE json_extract(payload, '$.scope') = ?
       AND json_extract(payload, '$.ownerId') = ?
       AND json_extract(payload, '$.contentHash') = ?
       AND json_extract(payload, '$.status') IN ('approved', 'candidate')
     ORDER BY rowid
-  `).all(scope, ownerId, contentHash) as { payload: string }[];
+  `)
+    .all(scope, ownerId, contentHash) as { payload: string }[];
   const targetKey = memoryPartitionKey({ scope, ownerId, allowedConversationIds });
   for (const row of rows) {
     const item = JSON.parse(row.payload) as MemoryEntry;
@@ -219,13 +267,15 @@ export function findDuplicateMemory(
 }
 
 export function listMemoriesWithUsage(storage: Storage): MemoryEntry[] {
-  const rows = storage.prepare(`
+  const rows = storage
+    .prepare(`
     SELECT m.payload AS payload, u.payload AS usagePayload
     FROM memory_entries m
     LEFT JOIN memory_usage u ON u.id = m.id
     ORDER BY m.rowid
-  `).all() as { payload: string; usagePayload: string | null }[];
-  return rows.map(row => {
+  `)
+    .all() as { payload: string; usagePayload: string | null }[];
+  return rows.map((row) => {
     const entry = JSON.parse(row.payload) as MemoryEntry;
     if (!row.usagePayload) return entry;
     const record = JSON.parse(row.usagePayload) as MemoryUsageRecord;
@@ -243,7 +293,8 @@ export function listMemoriesWithUsage(storage: Storage): MemoryEntry[] {
 }
 
 export function listMemoryRevisions(storage: Storage, memoryId: string): MemoryRevisionRecord[] {
-  return storage.byField<MemoryRevisionRecord>('memory_revisions', 'memoryId', memoryId)
+  return storage
+    .byField<MemoryRevisionRecord>('memory_revisions', 'memoryId', memoryId)
     .sort((a, b) => b.revision - a.revision);
 }
 
@@ -252,14 +303,19 @@ export function createStorageMemoryStore(storage: Storage): MemoryStore {
   if (!storage.metadata('memory-search-v2')) rebuildMemorySearch(storage);
   return {
     list: () => storage.all<MemoryEntry>('memory_entries'),
-    save: entry => { storage.put('memory_entries', entry); },
+    save: (entry) => {
+      storage.put('memory_entries', entry);
+    },
     findDuplicate: (scope, ownerId, allowedConversationIds, contentHash, excludeId) =>
       findDuplicateMemory(storage, scope, ownerId, allowedConversationIds, contentHash, excludeId),
-    search: query => searchAuthorizedMemories(storage, query),
-    revisions: memoryId => listMemoryRevisions(storage, memoryId),
-    saveRevision: record => { storage.put('memory_revisions', record); },
-    usage: memoryId => getMemoryUsage(storage, memoryId),
-    recordUsage: (memoryIds, kind, scopeKey) => recordMemoryUsage(storage, memoryIds, kind, scopeKey),
+    search: (query) => searchAuthorizedMemories(storage, query),
+    revisions: (memoryId) => listMemoryRevisions(storage, memoryId),
+    saveRevision: (record) => {
+      storage.put('memory_revisions', record);
+    },
+    usage: (memoryId) => getMemoryUsage(storage, memoryId),
+    recordUsage: (memoryIds, kind, scopeKey) =>
+      recordMemoryUsage(storage, memoryIds, kind, scopeKey),
     canReadMessage: (messageId, conversationId) => {
       const message = storage.getMessage(messageId);
       return !!message && message.conversationId === conversationId;

@@ -1,35 +1,49 @@
-import { useState, type FormEvent } from "react";
-import type { MemoryEntry, Snapshot } from "../../../src/domain/types.js";
-import type { Mutate } from "./store.js";
-import { errorMessage } from "./api.js";
-import { Button, ErrorNote, Field, Modal, inputClass } from "./components.js";
+import { useState, type FormEvent } from 'react';
+import type { MemoryEntry, Snapshot } from '../../../src/domain/types.js';
+import type { Mutate } from './store.js';
+import { errorMessage } from './api.js';
+import { Button, ErrorNote, Field, Modal, inputClass } from './components.js';
 
-export function MemoryEditor({ memory, target, data, mutate, close }: {
-  memory?: MemoryEntry; target?: Pick<MemoryEntry, "scope" | "ownerId">;
-  data: Snapshot; mutate: Mutate; close: () => void;
+export function MemoryEditor({
+  memory,
+  target,
+  data,
+  mutate,
+  close,
+}: {
+  memory?: MemoryEntry;
+  target?: Pick<MemoryEntry, 'scope' | 'ownerId'>;
+  data: Snapshot;
+  mutate: Mutate;
+  close: () => void;
 }) {
-  const [content, setContent] = useState(memory?.content || "");
-  const [topic, setTopic] = useState(memory?.topic || "");
-  const [summary, setSummary] = useState(memory?.summary || "");
-  const [tagsText, setTagsText] = useState(memory?.tags?.join("、") || "");
+  const [content, setContent] = useState(memory?.content || '');
+  const [topic, setTopic] = useState(memory?.topic || '');
+  const [summary, setSummary] = useState(memory?.summary || '');
+  const [tagsText, setTagsText] = useState(memory?.tags?.join('、') || '');
   const [pinned, setPinned] = useState(Boolean(memory?.pinned));
-  const [scope, setScope] = useState<MemoryEntry["scope"]>(memory?.scope || target?.scope || "bot");
-  const [ownerId, setOwner] = useState(memory?.ownerId || target?.ownerId || data.settings.mainBotId || "");
-  const [allowed, setAllowed] = useState<string[]>((memory?.scope === "team" ? [memory.ownerId] : memory?.allowedConversationIds || [])
-    .filter((id) => data.conversations.some((room) => room.id === id)));
-  const [error, setError] = useState("");
+  const [scope, setScope] = useState<MemoryEntry['scope']>(memory?.scope || target?.scope || 'bot');
+  const [ownerId, setOwner] = useState(
+    memory?.ownerId || target?.ownerId || data.settings.mainBotId || '',
+  );
+  const [allowed, setAllowed] = useState<string[]>(
+    (memory?.scope === 'team' ? [memory.ownerId] : memory?.allowedConversationIds || []).filter(
+      (id) => data.conversations.some((room) => room.id === id),
+    ),
+  );
+  const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
   async function save(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
-    setError("");
+    setError('');
     try {
       const tags = tagsText
         .split(/[、,，\s]+/)
-        .map(tag => tag.trim())
+        .map((tag) => tag.trim())
         .filter(Boolean);
-      await mutate("memories.save", {
+      await mutate('memories.save', {
         id: memory?.id,
         ...(memory ? { expectedRevision: memory.revision } : {}),
         content,
@@ -38,8 +52,14 @@ export function MemoryEditor({ memory, target, data, mutate, close }: {
         tags,
         pinned,
         scope,
-        ownerId: scope === "team" ? allowed[0] || "" : scope === "shared"
-          ? memory?.scope === "shared" ? memory.ownerId : "shared" : ownerId,
+        ownerId:
+          scope === 'team'
+            ? allowed[0] || ''
+            : scope === 'shared'
+              ? memory?.scope === 'shared'
+                ? memory.ownerId
+                : 'shared'
+              : ownerId,
         allowedConversationIds: allowed,
         sourceIds: memory?.sourceIds || [],
       });
@@ -52,11 +72,7 @@ export function MemoryEditor({ memory, target, data, mutate, close }: {
   }
 
   return (
-    <Modal
-      open
-      onOpenChange={(open) => !open && close()}
-      title={memory ? "编辑记忆" : "添加记忆"}
-    >
+    <Modal open onOpenChange={(open) => !open && close()} title={memory ? '编辑记忆' : '添加记忆'}>
       <form className="grid gap-4" onSubmit={(event) => void save(event)}>
         <Field label="内容">
           <textarea
@@ -106,21 +122,26 @@ export function MemoryEditor({ memory, target, data, mutate, close }: {
           <select
             className={inputClass}
             value={scope}
-            disabled={target?.scope === "bot"}
+            disabled={target?.scope === 'bot'}
             onChange={(event) => {
               setScope(event.target.value as typeof scope);
               setAllowed([]);
             }}
           >
-            {target?.scope !== "shared" && <option value="bot">成员专用</option>}
-            {target?.scope !== "bot" && <option value="team">团队会话</option>}
-            {target?.scope !== "bot" && <option value="shared">共享资料</option>}
+            {target?.scope !== 'shared' && <option value="bot">成员专用</option>}
+            {target?.scope !== 'bot' && <option value="team">团队会话</option>}
+            {target?.scope !== 'bot' && <option value="shared">共享资料</option>}
           </select>
         </Field>
-        {scope === "bot" && (
+        {scope === 'bot' && (
           <Field label="所属成员">
-            <select required className={inputClass} value={ownerId} disabled={target?.scope === "bot"}
-              onChange={(event) => setOwner(event.target.value)}>
+            <select
+              required
+              className={inputClass}
+              value={ownerId}
+              disabled={target?.scope === 'bot'}
+              onChange={(event) => setOwner(event.target.value)}
+            >
               <option value="">选择成员</option>
               {data.bots
                 .filter((item) => !item.archived || item.id === ownerId)
@@ -134,20 +155,24 @@ export function MemoryEditor({ memory, target, data, mutate, close }: {
         )}
         <fieldset>
           <legend className="mb-2 text-sm font-medium text-slate-700">
-            {scope === "team" ? "所属团队会话" : "授权会话"}
+            {scope === 'team' ? '所属团队会话' : '授权会话'}
           </legend>
           <div className="grid max-h-40 gap-2 overflow-auto rounded-lg border border-slate-200 p-3">
             {data.conversations
-              .filter((item) => (!item.archived || allowed.includes(item.id)) && (scope !== "team" || item.kind === "group"))
+              .filter(
+                (item) =>
+                  (!item.archived || allowed.includes(item.id)) &&
+                  (scope !== 'team' || item.kind === 'group'),
+              )
               .map((item) => (
                 <label key={item.id} className="flex items-center gap-2 text-sm text-slate-600">
                   <input
-                    type={scope === "team" ? "radio" : "checkbox"}
+                    type={scope === 'team' ? 'radio' : 'checkbox'}
                     name="memory-conversation"
                     checked={allowed.includes(item.id)}
                     onChange={() =>
                       setAllowed(
-                        scope === "team"
+                        scope === 'team'
                           ? [item.id]
                           : allowed.includes(item.id)
                             ? allowed.filter((value) => value !== item.id)
@@ -158,8 +183,11 @@ export function MemoryEditor({ memory, target, data, mutate, close }: {
                   {item.name}
                 </label>
               ))}
-            {!data.conversations.some((item) => (!item.archived || allowed.includes(item.id)) && (scope !== "team" || item.kind === "group")) &&
-              <p className="text-sm text-slate-500">创建会话后可设置使用范围。</p>}
+            {!data.conversations.some(
+              (item) =>
+                (!item.archived || allowed.includes(item.id)) &&
+                (scope !== 'team' || item.kind === 'group'),
+            ) && <p className="text-sm text-slate-500">创建会话后可设置使用范围。</p>}
           </div>
         </fieldset>
         <ErrorNote error={error} />
@@ -167,8 +195,8 @@ export function MemoryEditor({ memory, target, data, mutate, close }: {
           <Button type="button" onClick={close}>
             取消
           </Button>
-          <Button variant="primary" disabled={busy || (scope === "team" && !allowed.length)}>
-            {busy ? "保存中…" : "保存记忆"}
+          <Button variant="primary" disabled={busy || (scope === 'team' && !allowed.length)}>
+            {busy ? '保存中…' : '保存记忆'}
           </Button>
         </div>
       </form>

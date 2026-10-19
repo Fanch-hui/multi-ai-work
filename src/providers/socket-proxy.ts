@@ -15,20 +15,31 @@ export type ProviderSocketEvent = { type: 'provider-socket'; id: string } & (
 class ProxySocket extends EventTarget {
   readyState: 0 | 1 | 2 | 3 = 0;
 
-  constructor(readonly id: string, private readonly transmit: (message: ProviderSocketCommand) => void) { super(); }
+  constructor(
+    readonly id: string,
+    private readonly transmit: (message: ProviderSocketCommand) => void,
+  ) {
+    super();
+  }
 
   send(data: string | ArrayBufferLike | Blob | ArrayBufferView): void {
     if (this.readyState !== 1) throw new Error('模型 WebSocket 尚未连接');
     if (typeof data !== 'string') throw new Error('模型 WebSocket 仅支持文本帧');
-    try { this.transmit({ type: 'provider-socket', id: this.id, command: 'send', data }); }
-    catch { throw new Error('模型 WebSocket 消息发送失败'); }
+    try {
+      this.transmit({ type: 'provider-socket', id: this.id, command: 'send', data });
+    } catch {
+      throw new Error('模型 WebSocket 消息发送失败');
+    }
   }
 
   close(): void {
     if (this.readyState >= 2) return;
     this.readyState = 2;
-    try { this.transmit({ type: 'provider-socket', id: this.id, command: 'close' }); }
-    catch { this.receive({ type: 'provider-socket', id: this.id, event: 'close' }); }
+    try {
+      this.transmit({ type: 'provider-socket', id: this.id, command: 'close' });
+    } catch {
+      this.receive({ type: 'provider-socket', id: this.id, event: 'close' });
+    }
   }
 
   receive(message: ProviderSocketEvent): void {
@@ -38,7 +49,8 @@ class ProxySocket extends EventTarget {
       this.readyState = 1;
     } else if (message.event === 'close') this.readyState = 3;
     else if (message.event === 'message') {
-      if (this.readyState === 1) this.dispatchEvent(new MessageEvent('message', { data: message.data }));
+      if (this.readyState === 1)
+        this.dispatchEvent(new MessageEvent('message', { data: message.data }));
       return;
     }
     this.dispatchEvent(new Event(message.event));
@@ -55,9 +67,15 @@ export function createProviderSocketProxy(send: (message: ProviderSocketCommand)
       sockets.set(socket.id, socket);
       queueMicrotask(() => {
         if (socket.readyState !== 0) return;
-        try { send({ type: 'provider-socket', id: socket.id, command: 'open', url, headers }); }
-        catch {
-          socket.receive({ type: 'provider-socket', id: socket.id, event: 'error', message: '模型 WebSocket 连接失败' });
+        try {
+          send({ type: 'provider-socket', id: socket.id, command: 'open', url, headers });
+        } catch {
+          socket.receive({
+            type: 'provider-socket',
+            id: socket.id,
+            event: 'error',
+            message: '模型 WebSocket 连接失败',
+          });
           socket.receive({ type: 'provider-socket', id: socket.id, event: 'close' });
           sockets.delete(socket.id);
         }
@@ -65,9 +83,19 @@ export function createProviderSocketProxy(send: (message: ProviderSocketCommand)
       return socket;
     },
     receive(message: unknown): boolean {
-      if (!message || typeof message !== 'object' || !('type' in message) || message.type !== 'provider-socket') return false;
+      if (
+        !message ||
+        typeof message !== 'object' ||
+        !('type' in message) ||
+        message.type !== 'provider-socket'
+      )
+        return false;
       const value = message as ProviderSocketEvent;
-      if (typeof value.id !== 'string' || !['open', 'message', 'error', 'close'].includes(value.event)) return false;
+      if (
+        typeof value.id !== 'string' ||
+        !['open', 'message', 'error', 'close'].includes(value.event)
+      )
+        return false;
       if (value.event === 'message' && typeof value.data !== 'string') return false;
       sockets.get(value.id)?.receive(value);
       if (value.event === 'close') sockets.delete(value.id);

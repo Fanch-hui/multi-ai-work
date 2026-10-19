@@ -1,40 +1,52 @@
-import { useState, type FormEvent } from "react";
-import type { ToolConnection } from "../../../src/domain/types.js";
-import { httpSearchConfiguration } from "../../../src/domain/tool-connection.js";
-import type { Mutate } from "./store.js";
-import { errorMessage } from "./api.js";
-import { Button, ErrorNote, Field, Modal, inputClass } from "./components.js";
-export function ToolEditor({ tool, mutate, close }: { tool?: ToolConnection; mutate: Mutate; close: () => void }) {
-  const [name, setName] = useState(tool?.name || "");
-  const [kind, setKind] = useState<ToolConnection["kind"]>(tool?.kind || "mcp");
-  const [searchBackend, setSearchBackend] = useState(tool?.searchBackend || (tool?.kind === "search" ? "http" : ""));
+import { useState, type FormEvent } from 'react';
+import type { ToolConnection } from '../../../src/domain/types.js';
+import { httpSearchConfiguration } from '../../../src/domain/tool-connection.js';
+import type { Mutate } from './store.js';
+import { errorMessage } from './api.js';
+import { Button, ErrorNote, Field, Modal, inputClass } from './components.js';
+export function ToolEditor({
+  tool,
+  mutate,
+  close,
+}: {
+  tool?: ToolConnection;
+  mutate: Mutate;
+  close: () => void;
+}) {
+  const [name, setName] = useState(tool?.name || '');
+  const [kind, setKind] = useState<ToolConnection['kind']>(tool?.kind || 'mcp');
+  const [searchBackend, setSearchBackend] = useState(
+    tool?.searchBackend || (tool?.kind === 'search' ? 'http' : ''),
+  );
   const [searchMethod, setSearchMethod] = useState(() => httpSearchConfiguration(tool).method);
-  const [searchQueryField, setSearchQueryField] = useState(() => httpSearchConfiguration(tool).queryField);
-  const [transport, setTransport] = useState(tool?.transport || "http");
-  const [url, setUrl] = useState(tool?.url || "");
-  const [command, setCommand] = useState(tool?.command || "");
-  const [args, setArgs] = useState((tool?.args || []).join("\n"));
-  const [secret, setSecret] = useState("");
+  const [searchQueryField, setSearchQueryField] = useState(
+    () => httpSearchConfiguration(tool).queryField,
+  );
+  const [transport, setTransport] = useState(tool?.transport || 'http');
+  const [url, setUrl] = useState(tool?.url || '');
+  const [command, setCommand] = useState(tool?.command || '');
+  const [args, setArgs] = useState((tool?.args || []).join('\n'));
+  const [secret, setSecret] = useState('');
   const [enabled, setEnabled] = useState(tool?.enabled ?? true);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   async function save(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
-    setError("");
+    setError('');
     try {
-      await mutate("tools.save", {
+      await mutate('tools.save', {
         input: {
           ...tool,
           name,
           kind,
-          searchBackend: kind === "search" ? "http" : searchBackend || undefined,
-          searchMethod: kind === "search" ? searchMethod : undefined,
-          searchQueryField: kind === "search" ? searchQueryField.trim() : undefined,
+          searchBackend: kind === 'search' ? 'http' : searchBackend || undefined,
+          searchMethod: kind === 'search' ? searchMethod : undefined,
+          searchQueryField: kind === 'search' ? searchQueryField.trim() : undefined,
           transport,
-          url: transport === "http" ? url : undefined,
-          command: transport === "stdio" ? command : undefined,
-          args: transport === "stdio" ? args.split("\n").filter(Boolean) : undefined,
+          url: transport === 'http' ? url : undefined,
+          command: transport === 'stdio' ? command : undefined,
+          args: transport === 'stdio' ? args.split('\n').filter(Boolean) : undefined,
           enabled,
           secret: secret || undefined,
         },
@@ -47,20 +59,30 @@ export function ToolEditor({ tool, mutate, close }: { tool?: ToolConnection; mut
     }
   }
   return (
-    <Modal open onOpenChange={(open) => !open && close()} title={tool ? "编辑工具连接" : "添加工具连接"}>
+    <Modal
+      open
+      onOpenChange={(open) => !open && close()}
+      title={tool ? '编辑工具连接' : '添加工具连接'}
+    >
       <form className="grid gap-4" onSubmit={(event) => void save(event)}>
         <Field label="名称">
-          <input className={inputClass} required value={name} onChange={(event) => setName(event.target.value)} />
+          <input
+            className={inputClass}
+            required
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+          />
         </Field>
         <div className="grid grid-cols-2 gap-4">
           <Field label="类型">
             <select
               className={inputClass}
-              value={kind === "bridge" ? "mcp" : kind}
+              value={kind === 'bridge' ? 'mcp' : kind}
               onChange={(event) => {
                 const value = event.target.value as typeof kind;
-                setKind(value); setSearchBackend(value === "search" ? "http" : "");
-                if (value === "search") setTransport("http");
+                setKind(value);
+                setSearchBackend(value === 'search' ? 'http' : '');
+                if (value === 'search') setTransport('http');
               }}
             >
               <option value="mcp">MCP</option>
@@ -71,7 +93,7 @@ export function ToolEditor({ tool, mutate, close }: { tool?: ToolConnection; mut
             <select
               className={inputClass}
               value={transport}
-              disabled={kind === "search"}
+              disabled={kind === 'search'}
               onChange={(event) => setTransport(event.target.value as typeof transport)}
             >
               <option value="http">HTTP</option>
@@ -79,33 +101,58 @@ export function ToolEditor({ tool, mutate, close }: { tool?: ToolConnection; mut
             </select>
           </Field>
         </div>
-        {kind === "search" ? <div className="grid grid-cols-2 gap-4">
-          <Field label="请求方式">
-            <select className={inputClass} value={searchMethod} onChange={event => {
-              const method = event.target.value as typeof searchMethod;
-              const previousDefault = searchMethod === "POST" ? "query" : "q";
-              setSearchMethod(method);
-              setSearchQueryField(current => !current.trim() || current.trim() === previousDefault
-                ? method === "POST" ? "query" : "q" : current);
-            }}>
-              <option value="GET">GET</option>
-              <option value="POST">POST</option>
+        {kind === 'search' ? (
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="请求方式">
+              <select
+                className={inputClass}
+                value={searchMethod}
+                onChange={(event) => {
+                  const method = event.target.value as typeof searchMethod;
+                  const previousDefault = searchMethod === 'POST' ? 'query' : 'q';
+                  setSearchMethod(method);
+                  setSearchQueryField((current) =>
+                    !current.trim() || current.trim() === previousDefault
+                      ? method === 'POST'
+                        ? 'query'
+                        : 'q'
+                      : current,
+                  );
+                }}
+              >
+                <option value="GET">GET</option>
+                <option value="POST">POST</option>
+              </select>
+            </Field>
+            <Field label="关键词字段名">
+              <input
+                className={inputClass}
+                required
+                value={searchQueryField}
+                onChange={(event) => setSearchQueryField(event.target.value)}
+              />
+            </Field>
+          </div>
+        ) : (
+          <Field label="搜索适配" hint="Tavily 也会在检测到 tavily-search 工具后自动识别。">
+            <select
+              className={inputClass}
+              value={searchBackend}
+              onChange={(event) => setSearchBackend(event.target.value as typeof searchBackend)}
+            >
+              <option value="">自动识别</option>
+              <option value="tavily">Tavily MCP</option>
             </select>
           </Field>
-          <Field label="关键词字段名">
-            <input className={inputClass} required value={searchQueryField}
-              onChange={event => setSearchQueryField(event.target.value)} />
-          </Field>
-        </div> : <Field label="搜索适配" hint="Tavily 也会在检测到 tavily-search 工具后自动识别。">
-          <select className={inputClass} value={searchBackend} onChange={event => setSearchBackend(event.target.value as typeof searchBackend)}>
-            <option value="">自动识别</option>
-            <option value="tavily">Tavily MCP</option>
-          </select>
-        </Field>}
-        {kind === "search" && <p className="text-xs leading-5 text-slate-500">{searchMethod === "POST"
-          ? "POST 将关键词放在 JSON 正文中。"
-          : "GET 将关键词放在网址参数中。"}</p>}
-        {transport === "http" ? (
+        )}
+        {kind === 'search' && (
+          <p className="text-xs leading-5 text-slate-500">
+            {searchMethod === 'POST'
+              ? 'POST 将关键词放在 JSON 正文中。'
+              : 'GET 将关键词放在网址参数中。'}
+          </p>
+        )}
+        {transport === 'http' ? (
           <>
             <Field label="服务地址">
               <input
@@ -114,10 +161,12 @@ export function ToolEditor({ tool, mutate, close }: { tool?: ToolConnection; mut
                 className={inputClass}
                 value={url}
                 onChange={(event) => setUrl(event.target.value)}
-                placeholder={kind === "search" ? "https://example.com/search" : "https://example.com/mcp"}
+                placeholder={
+                  kind === 'search' ? 'https://example.com/search' : 'https://example.com/mcp'
+                }
               />
             </Field>
-            <Field label="Bearer 凭据" hint={tool?.secretRef ? "留空保留已保存凭据。" : undefined}>
+            <Field label="Bearer 凭据" hint={tool?.secretRef ? '留空保留已保存凭据。' : undefined}>
               <input
                 type="password"
                 autoComplete="new-password"
@@ -149,7 +198,11 @@ export function ToolEditor({ tool, mutate, close }: { tool?: ToolConnection; mut
           </>
         )}
         <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={(event) => setEnabled(event.target.checked)}
+          />
           启用工具连接
         </label>
         <ErrorNote error={error} />
@@ -158,7 +211,7 @@ export function ToolEditor({ tool, mutate, close }: { tool?: ToolConnection; mut
             取消
           </Button>
           <Button variant="primary" disabled={busy}>
-            {busy ? "保存中…" : "保存"}
+            {busy ? '保存中…' : '保存'}
           </Button>
         </div>
       </form>

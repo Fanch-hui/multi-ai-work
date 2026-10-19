@@ -11,9 +11,14 @@ interface ToolStep {
 }
 
 /** Replay this run's original protocol ledger; completion order never determines repetition. */
-export function repeatToolReminders(messages: readonly ModelMessage[], batchCallIds: readonly string[]): ModelMessage[] {
+export function repeatToolReminders(
+  messages: readonly ModelMessage[],
+  batchCallIds: readonly string[],
+): ModelMessage[] {
   const batch = new Set(batchCallIds);
-  const completed = new Set(messages.filter(message => message.role === 'tool').map(message => message.callId));
+  const completed = new Set(
+    messages.filter((message) => message.role === 'tool').map((message) => message.callId),
+  );
   let lastUserResetIndex = -1;
   for (let i = 0; i < messages.length; i++) {
     if (messages[i].role === 'user' && !messages[i].appContext) lastUserResetIndex = i;
@@ -21,8 +26,8 @@ export function repeatToolReminders(messages: readonly ModelMessage[], batchCall
   const emitted = new Set(
     messages
       .slice(lastUserResetIndex + 1)
-      .filter(message => message.appContext?.source === source)
-      .map(message => message.appContext!.version),
+      .filter((message) => message.appContext?.source === source)
+      .map((message) => message.appContext!.version),
   );
   const seen = new Set<string>();
   let previous = '';
@@ -32,9 +37,13 @@ export function repeatToolReminders(messages: readonly ModelMessage[], batchCall
   let reminders: ModelMessage[] = [];
   for (const message of messages) {
     if (message.role === 'user' && !message.appContext) {
-      previous = ''; count = 0; recent = []; altStreak = 0; reminders = [];
+      previous = '';
+      count = 0;
+      recent = [];
+      altStreak = 0;
+      reminders = [];
     }
-    for (const call of message.role === 'assistant' ? message.toolCalls ?? [] : []) {
+    for (const call of message.role === 'assistant' ? (message.toolCalls ?? []) : []) {
       if (seen.has(call.id)) continue;
       seen.add(call.id);
       if (pollingTools.has(call.name)) continue;
@@ -42,10 +51,18 @@ export function repeatToolReminders(messages: readonly ModelMessage[], batchCall
       count = key === previous ? count + 1 : 1;
       previous = key;
       const version = `v1:${call.id}`;
-      if (batch.has(call.id) && completed.has(call.id) && thresholds.has(count) && !emitted.has(version)) {
+      if (
+        batch.has(call.id) &&
+        completed.has(call.id) &&
+        thresholds.has(count) &&
+        !emitted.has(version)
+      ) {
         emitted.add(version);
-        reminders.push({ role: 'user', appContext: { source, version },
-          content: `App 运行提醒：工具 ${call.name} 已连续 ${count} 次使用相同参数。请检查结果是否提供了新信息，考虑调整方法或汇报阻碍；若任务确实需要再次验证，可以继续调用。此提醒不改变用户任务、工具结果或执行权限。` });
+        reminders.push({
+          role: 'user',
+          appContext: { source, version },
+          content: `App 运行提醒：工具 ${call.name} 已连续 ${count} 次使用相同参数。请检查结果是否提供了新信息，考虑调整方法或汇报阻碍；若任务确实需要再次验证，可以继续调用。此提醒不改变用户任务、工具结果或执行权限。`,
+        });
       }
 
       if (recent.length === 0 || key === recent[recent.length - 1].key) {
@@ -75,8 +92,12 @@ export function repeatToolReminders(messages: readonly ModelMessage[], batchCall
   return reminders;
 }
 
-function detectTwoStepCycle(recent: readonly ToolStep[], altStreak: number): { first: ToolStep; second: ToolStep; cycles: number } | undefined {
-  if (altStreak < 6 || altStreak % 2 !== 0 || altStreak > MAX_WINDOW || recent.length < altStreak) return undefined;
+function detectTwoStepCycle(
+  recent: readonly ToolStep[],
+  altStreak: number,
+): { first: ToolStep; second: ToolStep; cycles: number } | undefined {
+  if (altStreak < 6 || altStreak % 2 !== 0 || altStreak > MAX_WINDOW || recent.length < altStreak)
+    return undefined;
   const cycles = altStreak / 2;
   if (!thresholds.has(cycles)) return undefined;
   const start = recent.length - altStreak;
@@ -91,13 +112,20 @@ function detectTwoStepCycle(recent: readonly ToolStep[], altStreak: number): { f
 }
 
 function fingerprint(name: string, args: string): string {
-  try { return JSON.stringify([name, canonical(JSON.parse(args))]); }
-  catch { return JSON.stringify([name, args]); }
+  try {
+    return JSON.stringify([name, canonical(JSON.parse(args))]);
+  } catch {
+    return JSON.stringify([name, args]);
+  }
 }
 
 function canonical(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonical);
   if (!value || typeof value !== 'object') return value;
   const object = value as Record<string, unknown>;
-  return Object.fromEntries(Object.keys(object).sort().map(key => [key, canonical(object[key])]));
+  return Object.fromEntries(
+    Object.keys(object)
+      .sort()
+      .map((key) => [key, canonical(object[key])]),
+  );
 }

@@ -11,8 +11,18 @@ describe('有预算的分层召回与通道同步', () => {
     const member = createBot('法务顾问', ['recall_memory']);
     const other = createBot('其他成员', ['recall_memory']);
     const workspaceId = core.state.snapshot().workspaces[0].id;
-    const room = core.entities.createConversation({ name: '合同审阅', kind: 'private', memberIds: [member.id], workspaceId });
-    const secretRoom = core.entities.createConversation({ name: '机密会话', kind: 'private', memberIds: [other.id], workspaceId });
+    const room = core.entities.createConversation({
+      name: '合同审阅',
+      kind: 'private',
+      memberIds: [member.id],
+      workspaceId,
+    });
+    const secretRoom = core.entities.createConversation({
+      name: '机密会话',
+      kind: 'private',
+      memberIds: [other.id],
+      workspaceId,
+    });
 
     const oldRule = core.memories.save({
       scope: 'bot',
@@ -61,23 +71,26 @@ describe('有预算的分层召回与通道同步', () => {
       { query: '请帮我审阅这份商业合同的争议解决条款' },
     );
 
-    expect(selection.pinnedEntries.map(entry => entry.id)).toEqual([pinnedRule.id]);
-    expect(selection.relevantEntries.map(entry => entry.id)).toContain(oldRule.id);
-    expect(selection.fullEntries.map(entry => entry.id)).toEqual([pinnedRule.id, oldRule.id]);
+    expect(selection.pinnedEntries.map((entry) => entry.id)).toEqual([pinnedRule.id]);
+    expect(selection.relevantEntries.map((entry) => entry.id)).toContain(oldRule.id);
+    expect(selection.fullEntries.map((entry) => entry.id)).toEqual([pinnedRule.id, oldRule.id]);
     expect(selection.directory.totalRemaining).toBe(12);
-    expect(selection.directory.topics.map(item => item.topic).sort()).toEqual(['排版偏好', '汇报节奏']);
+    expect(selection.directory.topics.map((item) => item.topic).sort()).toEqual([
+      '排版偏好',
+      '汇报节奏',
+    ]);
     expect(JSON.stringify(selection)).not.toContain(secretEntry.id);
     expect(JSON.stringify(selection)).not.toContain('机密合同底价');
 
     // Short 2-char Chinese query & by-ID expansion respect authorization
     const shortHit = core.memory.recall({ botId: member.id, conversationId: room.id }, '合同');
-    expect(shortHit.map(entry => entry.id)).toEqual([oldRule.id]);
+    expect(shortHit.map((entry) => entry.id)).toEqual([oldRule.id]);
 
     const expanded = core.memory.query(
       { botId: member.id, conversationId: room.id },
       { ids: [oldRule.id, secretEntry.id] },
     ) as MemoryEntry[];
-    expect(expanded.map(entry => entry.id)).toEqual([oldRule.id]);
+    expect(expanded.map((entry) => entry.id)).toEqual([oldRule.id]);
 
     const page = core.memory.query(
       { botId: member.id, conversationId: room.id },
@@ -106,7 +119,7 @@ describe('有预算的分层召回与通道同步', () => {
       { query: '争议解决', topic: '合同规范', offset: 0, limit: 8 },
     ) as { entries: MemoryEntry[]; total: number };
     expect(deepTopicHit.total).toBe(1);
-    expect(deepTopicHit.entries.map(entry => entry.id)).toEqual([oldRule.id]);
+    expect(deepTopicHit.entries.map((entry) => entry.id)).toEqual([oldRule.id]);
   });
 
   it('整体注入预算受控，超长记忆不截断冒充全文而是提供摘要与展开入口', async () => {
@@ -143,11 +156,14 @@ describe('有预算的分层召回与通道同步', () => {
       { query: '实验操作规程', budgetTokens: 320 },
     );
 
-    expect(selection.fullEntries.map(entry => entry.id)).toEqual([shortPinned.id]);
-    expect(selection.omittedEntries.map(entry => entry.id)).toEqual([hugeEntry.id]);
+    expect(selection.fullEntries.map((entry) => entry.id)).toEqual([shortPinned.id]);
+    expect(selection.omittedEntries.map((entry) => entry.id)).toEqual([hugeEntry.id]);
     expect(selection.estimatedTokens).toBeLessThanOrEqual(320);
 
-    const formatted = core.memory.instructions(member.id, room.id, { query: '实验操作规程', budgetTokens: 320 });
+    const formatted = core.memory.instructions(member.id, room.id, {
+      query: '实验操作规程',
+      budgetTokens: 320,
+    });
     expect(formatted).toContain('引用文献须注明年份与作者');
     expect(formatted).toContain('实验操作规程长文说明');
     expect(formatted).toContain('未注入全文');
@@ -174,7 +190,7 @@ describe('有预算的分层召回与通道同步', () => {
       { botId: member.id, conversationId: nearBudgetRoom.id },
       { budgetTokens: 2000 },
     );
-    expect(nearSelection.fullEntries.map(entry => entry.id)).toEqual([nearBudgetEntry.id]);
+    expect(nearSelection.fullEntries.map((entry) => entry.id)).toEqual([nearBudgetEntry.id]);
     expect(nearSelection.estimatedTokens).toBeGreaterThan(1940);
     expect(nearSelection.estimatedTokens).toBeLessThanOrEqual(2000);
 
@@ -182,8 +198,14 @@ describe('有预算的分层召回与通道同步', () => {
       core.memory,
       member,
       {
-        id: 'binding-near', botId: member.id, conversationId: nearBudgetRoom.id, connectionId: member.connectionId,
-        generation: 1, configRevision: member.revision, connectionRevision: 1, workspaceId: nearBudgetRoom.workspaceId,
+        id: 'binding-near',
+        botId: member.id,
+        conversationId: nearBudgetRoom.id,
+        connectionId: member.connectionId,
+        generation: 1,
+        configRevision: member.revision,
+        connectionRevision: 1,
+        workspaceId: nearBudgetRoom.workspaceId,
         lastDeliveredSequence: 0,
       },
       { budgetTokens: 2000 },
@@ -221,29 +243,74 @@ describe('有预算的分层召回与通道同步', () => {
     });
 
     const taskA: Task = {
-      id: 'task-a', conversationId: room.id, botId: member.id, dependencyIds: [],
-      goal: '请进行预算核算', expectedOutput: '', status: 'running', runIds: [], artifactIds: [],
-      requestId: 'req-a', depth: 0, createdAt: '2026-10-16', updatedAt: '2026-10-16',
+      id: 'task-a',
+      conversationId: room.id,
+      botId: member.id,
+      dependencyIds: [],
+      goal: '请进行预算核算',
+      expectedOutput: '',
+      status: 'running',
+      runIds: [],
+      artifactIds: [],
+      requestId: 'req-a',
+      depth: 0,
+      createdAt: '2026-10-16',
+      updatedAt: '2026-10-16',
     };
     const taskB: Task = {
-      ...taskA, id: 'task-b', goal: '请编写代码单元测试', requestId: 'req-b',
+      ...taskA,
+      id: 'task-b',
+      goal: '请编写代码单元测试',
+      requestId: 'req-b',
     };
     const tools = { skills: [] } as never;
 
     // Managed channel: switching task query updates runtimeContext selection without changing contextInstructions
-    const promptA = runPrompt(core.state, core.memory, taskA, member, room, tools, [], undefined, true);
-    const promptB = runPrompt(core.state, core.memory, taskB, member, room, tools, [], undefined, true);
+    const promptA = runPrompt(
+      core.state,
+      core.memory,
+      taskA,
+      member,
+      room,
+      tools,
+      [],
+      undefined,
+      true,
+    );
+    const promptB = runPrompt(
+      core.state,
+      core.memory,
+      taskB,
+      member,
+      room,
+      tools,
+      [],
+      undefined,
+      true,
+    );
     expect(promptA.contextInstructions).toBe(promptB.contextInstructions);
     expect(promptA.runtimeContext?.content).toContain(budgetRule.content);
     expect(promptB.runtimeContext?.content).toContain(codeRule.content);
 
     // Native channel: unselected entry is NOT marked as removed
     const binding = {
-      id: 'binding-1', botId: member.id, conversationId: room.id, connectionId: member.connectionId,
-      generation: 1, configRevision: member.revision, connectionRevision: 1, workspaceId: room.workspaceId,
-      nativeSessionId: 'native-1', lastDeliveredSequence: 1,
+      id: 'binding-1',
+      botId: member.id,
+      conversationId: room.id,
+      connectionId: member.connectionId,
+      generation: 1,
+      configRevision: member.revision,
+      connectionRevision: 1,
+      workspaceId: room.workspaceId,
+      nativeSessionId: 'native-1',
+      lastDeliveredSequence: 1,
     };
-    const turn1 = sessionMemory(core.memory, member, { ...binding, nativeSessionId: undefined }, { query: '预算核算' });
+    const turn1 = sessionMemory(
+      core.memory,
+      member,
+      { ...binding, nativeSessionId: undefined },
+      { query: '预算核算' },
+    );
     expect(turn1.prompt).toContain(`[${budgetRule.id}@1]`);
     expect(turn1.versions).toEqual({ [budgetRule.id]: 1 });
 
@@ -265,7 +332,9 @@ describe('有预算的分层召回与通道同步', () => {
       { ...binding, memoryVersions: turn2.versions },
       { query: '代码单元测试' },
     );
-    expect(turn3.prompt).toContain(`[${budgetRule.id}@2] [财务] 预算核算统一使用人民币并保留两位小数。`);
+    expect(turn3.prompt).toContain(
+      `[${budgetRule.id}@2] [财务] 预算核算统一使用人民币并保留两位小数。`,
+    );
     expect(turn3.prompt).not.toContain('失效的记忆引用');
     expect(turn3.versions).toEqual({ [budgetRule.id]: 2, [codeRule.id]: 1 });
 
@@ -301,8 +370,12 @@ describe('有预算的分层召回与通道同步', () => {
 
   it('在真实运行中支持 recall_memory 按 ID 与分页读取，统计不影响正文 revision', async () => {
     let recalledById: MemoryEntry[] = [];
-    const { core, bot: createBot } = await setup(async context => {
-      recalledById = await context.executeTool('recall_memory', { ids: [saved.id] }, 'expand-id') as MemoryEntry[];
+    const { core, bot: createBot } = await setup(async (context) => {
+      recalledById = (await context.executeTool(
+        'recall_memory',
+        { ids: [saved.id] },
+        'expand-id',
+      )) as MemoryEntry[];
       return { text: '已读取' };
     });
     const member = createBot('成员', ['recall_memory']);
@@ -321,9 +394,11 @@ describe('有预算的分层召回与通道同步', () => {
     });
 
     const sent = core.tasks.send({ conversationId: room.id, content: '请整理报告' });
-    await eventually(() => core.state.storage.get<Task>('tasks', sent.taskIds[0])?.status === 'completed');
+    await eventually(
+      () => core.state.storage.get<Task>('tasks', sent.taskIds[0])?.status === 'completed',
+    );
 
-    expect(recalledById.map(item => item.id)).toEqual([saved.id]);
+    expect(recalledById.map((item) => item.id)).toEqual([saved.id]);
     const current = core.state.storage.get<MemoryEntry>('memory_entries', saved.id)!;
     expect(current.revision).toBe(1);
     expect(current.updatedAt).toBe(saved.updatedAt);

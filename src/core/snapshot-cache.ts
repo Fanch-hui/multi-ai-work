@@ -2,7 +2,10 @@ import type { Storage } from './storage.js';
 
 export type SnapshotTable = 'connections' | 'bots' | 'workspaces' | 'skills' | 'tool_connections';
 
-interface CachedRows { version: number; rows: unknown[]; }
+interface CachedRows {
+  version: number;
+  rows: unknown[];
+}
 
 export class SnapshotCache {
   private readonly tables = new Map<SnapshotTable, CachedRows>();

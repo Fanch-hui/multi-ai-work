@@ -16,12 +16,25 @@ export function runMessageSources(storage: Storage, runId: string): Set<string> 
   return sources;
 }
 
-export function completeRunMessage(storage: Storage, draft: Message, content: string, artifactIds: string[]): Message {
+export function completeRunMessage(
+  storage: Storage,
+  draft: Message,
+  content: string,
+  artifactIds: string[],
+): Message {
   const message = currentDraft(storage, draft.id);
   if (!message || !content.trim()) {
     const sources = runMessageSources(storage, draft.runId!);
-    const previous = storage.messages(draft.conversationId).filter(message => message.runId && sources.has(message.runId)
-      && message.authorBotId === draft.authorBotId && message.status === 'committed').at(-1);
+    const previous = storage
+      .messages(draft.conversationId)
+      .filter(
+        (message) =>
+          message.runId &&
+          sources.has(message.runId) &&
+          message.authorBotId === draft.authorBotId &&
+          message.status === 'committed',
+      )
+      .at(-1);
     if (previous || !message || !artifactIds.length) {
       if (message) storage.deleteMessage(message.id);
       return previous ?? draft;
@@ -35,6 +48,7 @@ export function completeRunMessage(storage: Storage, draft: Message, content: st
 export function interruptRunMessage(storage: Storage, messageId: string) {
   const message = currentDraft(storage, messageId);
   if (!message) return;
-  if (message.content.trim() || message.artifactIds.length) storage.updateMessage({ ...message, status: 'interrupted' });
+  if (message.content.trim() || message.artifactIds.length)
+    storage.updateMessage({ ...message, status: 'interrupted' });
   else storage.deleteMessage(message.id);
 }

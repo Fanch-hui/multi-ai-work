@@ -5,14 +5,18 @@ import { join } from 'node:path';
 import { Vault, type CipherHost } from '../src/security/vault.js';
 
 const cipher: CipherHost = {
-  encrypt: async value => Buffer.from(value).toString('base64'),
-  decrypt: async value => Buffer.from(value, 'base64').toString('utf8')
+  encrypt: async (value) => Buffer.from(value).toString('base64'),
+  decrypt: async (value) => Buffer.from(value, 'base64').toString('utf8'),
 };
 
 describe('vault persistence', () => {
   let directory: string;
-  beforeEach(async () => { directory = await mkdtemp(join(tmpdir(), 'team-vault-')); });
-  afterEach(async () => { await rm(directory, { recursive: true, force: true }); });
+  beforeEach(async () => {
+    directory = await mkdtemp(join(tmpdir(), 'team-vault-'));
+  });
+  afterEach(async () => {
+    await rm(directory, { recursive: true, force: true });
+  });
 
   it('reports a failed write and allows later writes and deletes to persist', async () => {
     const target = join(directory, 'vault.json');
@@ -36,7 +40,10 @@ describe('vault persistence', () => {
   it('keeps concurrent writes serialized and readable after reload', async () => {
     const target = join(directory, 'vault.json');
     const vault = new Vault(target, cipher);
-    await Promise.all([vault.set('first', 'synthetic-first'), vault.set('second', 'synthetic-second')]);
+    await Promise.all([
+      vault.set('first', 'synthetic-first'),
+      vault.set('second', 'synthetic-second'),
+    ]);
     const restored = new Vault(target, cipher);
     await restored.load();
     expect(await restored.get('first')).toBe('synthetic-first');
@@ -49,17 +56,21 @@ describe('vault persistence', () => {
     let shouldFail = false;
     let delayMs = 15;
     const trackedCipher: CipherHost = {
-      encrypt: async value => `${Buffer.from(value).toString('base64')}:${decryptCalls}`,
-      decrypt: async value => {
+      encrypt: async (value) => `${Buffer.from(value).toString('base64')}:${decryptCalls}`,
+      decrypt: async (value) => {
         decryptCalls++;
-        await new Promise(resolve => setTimeout(resolve, delayMs));
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
         if (shouldFail) throw new Error('decrypt failed');
         return Buffer.from(value.split(':')[0]!, 'base64').toString('utf8');
       },
     };
     const vault = new Vault(target, trackedCipher);
     await vault.set('token', 'synthetic-v1');
-    const [a, b, c] = await Promise.all([vault.get('token'), vault.get('token'), vault.get('token')]);
+    const [a, b, c] = await Promise.all([
+      vault.get('token'),
+      vault.get('token'),
+      vault.get('token'),
+    ]);
     expect([a, b, c]).toEqual(['synthetic-v1', 'synthetic-v1', 'synthetic-v1']);
     expect(decryptCalls).toBe(1);
     expect(await vault.get('token')).toBe('synthetic-v1');
@@ -76,7 +87,7 @@ describe('vault persistence', () => {
     delayMs = 40;
     vault.clear();
     const staleRead = vault.get('token');
-    await new Promise(resolve => setTimeout(resolve, 5));
+    await new Promise((resolve) => setTimeout(resolve, 5));
     delayMs = 1;
     await vault.set('token', 'synthetic-v3');
     expect(await staleRead).toBe('synthetic-v2');

@@ -17,16 +17,27 @@ export async function readDocument(target: string): Promise<unknown> {
     const result = await mammoth.extractRawText({ path: target });
     const paragraphs = result.value.split(/\n\s*\n/).filter(Boolean);
     let remaining = MAX_TEXT;
-    return { format: 'docx', paragraphs: paragraphs.map((text, index) => {
-      const content = text.slice(0, Math.max(0, remaining)); remaining -= content.length;
-      return { paragraph: index + 1, text: content };
-    }).filter(item => item.text), truncated: result.value.length > MAX_TEXT };
+    return {
+      format: 'docx',
+      paragraphs: paragraphs
+        .map((text, index) => {
+          const content = text.slice(0, Math.max(0, remaining));
+          remaining -= content.length;
+          return { paragraph: index + 1, text: content };
+        })
+        .filter((item) => item.text),
+      truncated: result.value.length > MAX_TEXT,
+    };
   }
   if (extension === '.xlsx') return readWorkbook(target);
   const bytes = await readFile(target);
   if (bytes.includes(0)) throw new Error('不支持读取此二进制格式');
   const content = bytes.toString('utf8');
-  return { format: 'text', content: content.slice(0, MAX_TEXT), truncated: content.length > MAX_TEXT };
+  return {
+    format: 'text',
+    content: content.slice(0, MAX_TEXT),
+    truncated: content.length > MAX_TEXT,
+  };
 }
 
 async function readPdf(target: string): Promise<unknown> {
@@ -34,7 +45,10 @@ async function readPdf(target: string): Promise<unknown> {
   const worker = createRequire(import.meta.url).resolve('pdfjs-dist/legacy/build/pdf.worker.mjs');
   await import(pathToFileURL(worker).href);
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-  const loading = pdfjs.getDocument({ data: new Uint8Array(await readFile(target)), useSystemFonts: true });
+  const loading = pdfjs.getDocument({
+    data: new Uint8Array(await readFile(target)),
+    useSystemFonts: true,
+  });
   const document = await loading.promise;
   const pages: { page: number; text: string }[] = [];
   let remaining = MAX_TEXT;
@@ -42,26 +56,39 @@ async function readPdf(target: string): Promise<unknown> {
     for (let pageNumber = 1; pageNumber <= document.numPages && remaining > 0; pageNumber++) {
       const page = await document.getPage(pageNumber);
       const content = await page.getTextContent();
-      const text = content.items.map(item => 'str' in item ? `${item.str}${item.hasEOL ? '\n' : ' '}` : '').join('').slice(0, remaining);
+      const text = content.items
+        .map((item) => ('str' in item ? `${item.str}${item.hasEOL ? '\n' : ' '}` : ''))
+        .join('')
+        .slice(0, remaining);
       remaining -= text.length;
       pages.push({ page: pageNumber, text });
       page.cleanup();
     }
-    return { format: 'pdf', totalPages: document.numPages, pages, truncated: remaining <= 0, needsOcr: pages.every(page => !page.text.trim()) };
-  } finally { await loading.destroy(); }
+    return {
+      format: 'pdf',
+      totalPages: document.numPages,
+      pages,
+      truncated: remaining <= 0,
+      needsOcr: pages.every((page) => !page.text.trim()),
+    };
+  } finally {
+    await loading.destroy();
+  }
 }
 
 async function readWorkbook(target: string): Promise<unknown> {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(target);
   let remaining = MAX_TEXT;
-  const sheets = workbook.worksheets.map(sheet => {
+  const sheets = workbook.worksheets.map((sheet) => {
     const rows: { row: number; values: string[] }[] = [];
     sheet.eachRow((row, number) => {
       if (remaining <= 0) return;
       const values: string[] = [];
-      row.eachCell({ includeEmpty: true }, cell => {
-        const text = workbookCellText(cell).slice(0, Math.max(0, remaining)); remaining -= text.length; values.push(text);
+      row.eachCell({ includeEmpty: true }, (cell) => {
+        const text = workbookCellText(cell).slice(0, Math.max(0, remaining));
+        remaining -= text.length;
+        values.push(text);
       });
       rows.push({ row: number, values });
     });
@@ -81,8 +108,9 @@ function workbookValueText(value: ExcelJS.CellValue): string {
   if (value == null) return '';
   if (value instanceof Date) return value.toISOString();
   if (typeof value !== 'object') return String(value);
-  if ('richText' in value) return value.richText.map(part => part.text).join('');
-  if ('hyperlink' in value) return value.text === value.hyperlink ? value.hyperlink : `${value.text} (${value.hyperlink})`;
+  if ('richText' in value) return value.richText.map((part) => part.text).join('');
+  if ('hyperlink' in value)
+    return value.text === value.hyperlink ? value.hyperlink : `${value.text} (${value.hyperlink})`;
   if ('error' in value) return value.error;
   return JSON.stringify(value);
 }

@@ -1,13 +1,40 @@
 import type {
-  MemoryDirectory, MemoryEntry, MemorySelection, MemoryTopicDirectoryItem, MemoryUsage,
+  MemoryDirectory,
+  MemoryEntry,
+  MemorySelection,
+  MemoryTopicDirectoryItem,
+  MemoryUsage,
 } from '../domain/memory.js';
 import { memorySummary, memoryTopic } from '../domain/memory.js';
 import { estimateTokens } from './model-history.js';
 
 const stopWords = new Set([
-  '请帮我', '帮我', '请问', '一下', '一个', '我们', '你们', '他们', '这个', '那个',
-  '进行', '完成', '处理', '当前', '任务', '用户', '以后', '需要', '可以', '什么',
-  '怎么', '如何', '继续', '工作', '当前任务', '交付要求',
+  '请帮我',
+  '帮我',
+  '请问',
+  '一下',
+  '一个',
+  '我们',
+  '你们',
+  '他们',
+  '这个',
+  '那个',
+  '进行',
+  '完成',
+  '处理',
+  '当前',
+  '任务',
+  '用户',
+  '以后',
+  '需要',
+  '可以',
+  '什么',
+  '怎么',
+  '如何',
+  '继续',
+  '工作',
+  '当前任务',
+  '交付要求',
 ]);
 
 export interface QueryTerms {
@@ -71,7 +98,7 @@ export function extractQueryTerms(query: string): QueryTerms {
   const shortTerms = [...shortSet].slice(0, 32);
   const allTerms = [...new Set([...ftsTerms, ...shortTerms])];
   const ftsQuery = ftsTerms.length
-    ? ftsTerms.map(term => `"${term.replaceAll('"', '""')}"`).join(' OR ')
+    ? ftsTerms.map((term) => `"${term.replaceAll('"', '""')}"`).join(' OR ')
     : undefined;
   return { ftsTerms, shortTerms, allTerms, ftsQuery };
 }
@@ -80,7 +107,7 @@ function stripHanStopWords(word: string): string[] {
   let result = [word];
   for (const stop of stopWords) {
     if (Array.from(stop).length < 2) continue;
-    result = result.flatMap(part => part.split(stop).filter(Boolean));
+    result = result.flatMap((part) => part.split(stop).filter(Boolean));
   }
   return result.length ? result : [word];
 }
@@ -99,14 +126,13 @@ export function scoreMemoryEntry(
   const content = entry.content.toLocaleLowerCase();
   const topic = (entry.topic ?? '').toLocaleLowerCase();
   const summary = memorySummary(entry).toLocaleLowerCase();
-  const tags = (entry.tags ?? []).map(tag => tag.toLocaleLowerCase());
-  const ftsScore = options?.ftsRank !== undefined
-    ? Math.min(12, Math.max(0.2, -options.ftsRank)) * 3
-    : 0;
+  const tags = (entry.tags ?? []).map((tag) => tag.toLocaleLowerCase());
+  const ftsScore =
+    options?.ftsRank !== undefined ? Math.min(12, Math.max(0.2, -options.ftsRank)) * 3 : 0;
   let keywordScore = 0;
   for (const term of terms.allTerms) {
     if (topic && topic.includes(term)) keywordScore += 6;
-    if (tags.some(tag => tag.includes(term) || term.includes(tag))) keywordScore += 5;
+    if (tags.some((tag) => tag.includes(term) || term.includes(tag))) keywordScore += 5;
     if (summary.includes(term)) keywordScore += 4;
     if (content.includes(term)) keywordScore += 3;
   }
@@ -114,7 +140,10 @@ export function scoreMemoryEntry(
   for (const rawRole of options?.roleTerms ?? []) {
     const role = rawRole.toLocaleLowerCase().trim();
     if (!role) continue;
-    if (tags.some(tag => tag.includes(role) || role.includes(tag)) || (topic && topic.includes(role))) {
+    if (
+      tags.some((tag) => tag.includes(role) || role.includes(tag)) ||
+      (topic && topic.includes(role))
+    ) {
       roleScore += 2;
     }
   }
@@ -159,7 +188,9 @@ function formatFullEntryLine(entry: MemoryEntry): string {
   const badges = [
     entry.pinned ? '[置顶]' : '',
     entry.topic?.trim() ? `[${entry.topic.trim()}]` : '',
-  ].filter(Boolean).join('');
+  ]
+    .filter(Boolean)
+    .join('');
   return `[${entry.id}@${entry.revision}]${badges ? ` ${badges}` : ''} ${entry.content}`;
 }
 
@@ -167,7 +198,9 @@ function formatOmittedLine(entry: MemoryEntry): string {
   const badges = [
     entry.pinned ? '[置顶]' : '',
     entry.topic?.trim() ? `[${entry.topic.trim()}]` : '',
-  ].filter(Boolean).join('');
+  ]
+    .filter(Boolean)
+    .join('');
   return `[${entry.id}@${entry.revision}]${badges ? ` ${badges}` : ''} 摘要：${memorySummary(entry)}（未注入全文，可用 recall_memory 按 ID 展开）`;
 }
 
@@ -184,58 +217,73 @@ function buildTopicItems(entries: MemoryEntry[]): MemoryTopicDirectoryItem[] {
     groups.set(topic, list);
   }
   return [...groups.entries()].map(([topic, list]) => {
-    const previews = list.slice(0, 2).map(item => memorySummary(item, 36)).join('；');
+    const previews = list
+      .slice(0, 2)
+      .map((item) => memorySummary(item, 36))
+      .join('；');
     return {
       topic,
       count: list.length,
       summary: previews,
-      ids: list.slice(0, 4).map(item => item.id),
+      ids: list.slice(0, 4).map((item) => item.id),
     };
   });
 }
 
-export function selectMemoryContext(entries: MemoryEntry[], options: MemorySelectOptions = {}): MemorySelection {
+export function selectMemoryContext(
+  entries: MemoryEntry[],
+  options: MemorySelectOptions = {},
+): MemorySelection {
   const budgetTokens = Math.max(120, options.budgetTokens ?? 2000);
   if (!entries.length) return emptyMemorySelection(budgetTokens);
   const maxRelevant = Math.max(1, options.maxRelevantEntries ?? 6);
   const terms = extractQueryTerms(options.query ?? '');
-  const score = (entry: MemoryEntry) => scoreMemoryEntry(entry, terms, {
-    ftsRank: options.ftsRanks?.get(entry.id),
-    roleTerms: options.roleTerms,
-    usage: options.usageById?.get(entry.id),
-  });
+  const score = (entry: MemoryEntry) =>
+    scoreMemoryEntry(entry, terms, {
+      ftsRank: options.ftsRanks?.get(entry.id),
+      roleTerms: options.roleTerms,
+      usage: options.usageById?.get(entry.id),
+    });
 
   const pinnedCandidates = entries
-    .filter(entry => entry.pinned)
+    .filter((entry) => entry.pinned)
     .map(score)
-    .sort((a, b) => b.totalScore - a.totalScore || b.entry.updatedAt.localeCompare(a.entry.updatedAt))
-    .map(item => item.entry);
+    .sort(
+      (a, b) => b.totalScore - a.totalScore || b.entry.updatedAt.localeCompare(a.entry.updatedAt),
+    )
+    .map((item) => item.entry);
 
   const scoredUnpinned = entries
-    .filter(entry => !entry.pinned)
+    .filter((entry) => !entry.pinned)
     .map(score)
-    .sort((a, b) => b.totalScore - a.totalScore || b.entry.updatedAt.localeCompare(a.entry.updatedAt));
+    .sort(
+      (a, b) => b.totalScore - a.totalScore || b.entry.updatedAt.localeCompare(a.entry.updatedAt),
+    );
 
-  const matched = scoredUnpinned.filter(item => item.relevanceScore > 0);
-  const unmatched = scoredUnpinned.filter(item => item.relevanceScore === 0);
+  const matched = scoredUnpinned.filter((item) => item.relevanceScore > 0);
+  const unmatched = scoredUnpinned.filter((item) => item.relevanceScore === 0);
   const relevantCandidates = (matched.length > 0 ? matched : unmatched)
     .slice(0, maxRelevant)
-    .map(item => item.entry);
-  const directoryPool = (matched.length > 0
-    ? [...matched.slice(maxRelevant), ...unmatched]
-    : unmatched.slice(maxRelevant)
-  ).map(item => item.entry);
+    .map((item) => item.entry);
+  const directoryPool = (
+    matched.length > 0
+      ? [...matched.slice(maxRelevant), ...unmatched]
+      : unmatched.slice(maxRelevant)
+  ).map((item) => item.entry);
 
   const initialBodyBudget = options.bodyBudgetTokens ?? Math.floor(budgetTokens * 0.75);
-  const initialDirBudget = options.directoryBudgetTokens ?? (budgetTokens - initialBodyBudget);
+  const initialDirBudget = options.directoryBudgetTokens ?? budgetTokens - initialBodyBudget;
   const headerTokens = estimateTokens('长期记忆（背景资料）：\n') + 16;
 
   const rawTopics = buildTopicItems(directoryPool);
   const dirHeaderTokens = rawTopics.length
-    ? estimateTokens('其他获准记忆主题目录（未注入全文，需要时用 recall_memory 按关键词、主题或 ID 展开）：\n')
+    ? estimateTokens(
+        '其他获准记忆主题目录（未注入全文，需要时用 recall_memory 按关键词、主题或 ID 展开）：\n',
+      )
     : 0;
   const rawDirTokens = rawTopics.length
-    ? dirHeaderTokens + rawTopics.reduce((sum, item) => sum + estimateTokens(formatTopicLine(item)) + 2, 0)
+    ? dirHeaderTokens +
+      rawTopics.reduce((sum, item) => sum + estimateTokens(formatTopicLine(item)) + 2, 0)
     : 0;
   const reservedDirTokens = Math.min(initialDirBudget, rawDirTokens);
   const effectiveBodyBudget = Math.max(40, budgetTokens - headerTokens - reservedDirTokens);
@@ -276,8 +324,14 @@ export function selectMemoryContext(entries: MemoryEntry[], options: MemorySelec
   let omittedHeaderCounted = false;
 
   for (const entry of overflowCandidates) {
-    const cost = estimateTokens(formatOmittedLine(entry)) + 2 + (omittedHeaderCounted ? 0 : omittedHeaderTokens);
-    if (usedTokens + cost <= budgetTokens - reservedDirTokens || (!directoryPool.length && usedTokens + cost <= budgetTokens)) {
+    const cost =
+      estimateTokens(formatOmittedLine(entry)) +
+      2 +
+      (omittedHeaderCounted ? 0 : omittedHeaderTokens);
+    if (
+      usedTokens + cost <= budgetTokens - reservedDirTokens ||
+      (!directoryPool.length && usedTokens + cost <= budgetTokens)
+    ) {
       if (!omittedHeaderCounted) {
         usedTokens += omittedHeaderTokens;
         omittedHeaderCounted = true;
@@ -293,7 +347,9 @@ export function selectMemoryContext(entries: MemoryEntry[], options: MemorySelec
   const allTopics = buildTopicItems(finalDirectoryPool);
   const selectedTopics: MemoryTopicDirectoryItem[] = [];
   if (allTopics.length) {
-    const dirHeaderCost = estimateTokens(`其他获准记忆主题目录（共 ${finalDirectoryPool.length} 条未注入全文，可用 recall_memory 搜索或按 ID 展开）：\n`);
+    const dirHeaderCost = estimateTokens(
+      `其他获准记忆主题目录（共 ${finalDirectoryPool.length} 条未注入全文，可用 recall_memory 搜索或按 ID 展开）：\n`,
+    );
     if (usedTokens + dirHeaderCost < budgetTokens) {
       usedTokens += dirHeaderCost;
       for (const topicItem of allTopics) {
@@ -330,7 +386,11 @@ export function selectMemoryContext(entries: MemoryEntry[], options: MemorySelec
 }
 
 export function formatMemorySelection(selection: MemorySelection): string {
-  if (!selection.fullEntries.length && !selection.omittedEntries.length && !selection.directory.topics.length) {
+  if (
+    !selection.fullEntries.length &&
+    !selection.omittedEntries.length &&
+    !selection.directory.topics.length
+  ) {
     return '';
   }
   const sections: string[] = ['长期记忆（背景资料）：'];
@@ -338,18 +398,24 @@ export function formatMemorySelection(selection: MemorySelection): string {
     sections.push(selection.fullEntries.map(formatFullEntryLine).join('\n'));
   }
   if (selection.omittedEntries.length) {
-    sections.push([
-      '未注入全文的记忆摘要（可用 recall_memory 按 ID 读取完整正文）：',
-      ...selection.omittedEntries.map(formatOmittedLine),
-    ].join('\n'));
+    sections.push(
+      [
+        '未注入全文的记忆摘要（可用 recall_memory 按 ID 读取完整正文）：',
+        ...selection.omittedEntries.map(formatOmittedLine),
+      ].join('\n'),
+    );
   }
   if (selection.directory.topics.length) {
-    sections.push([
-      `其他获准记忆主题目录（共 ${selection.directory.totalRemaining} 条未注入全文，可用 recall_memory 搜索或按 ID 展开${selection.directory.hasMore ? '，更多条目可分页检索' : ''}）：`,
-      ...selection.directory.topics.map(formatTopicLine),
-    ].join('\n'));
+    sections.push(
+      [
+        `其他获准记忆主题目录（共 ${selection.directory.totalRemaining} 条未注入全文，可用 recall_memory 搜索或按 ID 展开${selection.directory.hasMore ? '，更多条目可分页检索' : ''}）：`,
+        ...selection.directory.topics.map(formatTopicLine),
+      ].join('\n'),
+    );
   } else if (selection.directory.totalRemaining > 0) {
-    sections.push(`另有 ${selection.directory.totalRemaining} 条获准记忆因预算限制未展示，可用 recall_memory 检索。`);
+    sections.push(
+      `另有 ${selection.directory.totalRemaining} 条获准记忆因预算限制未展示，可用 recall_memory 检索。`,
+    );
   }
   return sections.join('\n');
 }

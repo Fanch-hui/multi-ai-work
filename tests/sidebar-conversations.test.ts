@@ -6,13 +6,26 @@ import { SidebarConversationList } from '../apps/ui/src/SidebarConversationList.
 import { ArchivedConversations } from '../apps/ui/src/ArchivedConversations.js';
 
 const conversations: Conversation[] = Array.from({ length: 7 }, (_, index) => ({
-  id: `room-${index}`, name: `对话 ${index}`, purpose: 'chief', kind: 'private', memberIds: [],
-  workspaceId: 'workspace', createdAt: `2026-10-14T12:0${index}:00Z`,
+  id: `room-${index}`,
+  name: `对话 ${index}`,
+  purpose: 'chief',
+  kind: 'private',
+  memberIds: [],
+  workspaceId: 'workspace',
+  createdAt: `2026-10-14T12:0${index}:00Z`,
 }));
 const data = { conversations, bots: [], tasks: [] } as unknown as Snapshot;
-const render = (selectedId?: string, query = '') => renderToStaticMarkup(createElement(SidebarConversationList, {
-  data, selectedId, query, archived: false, onSelect: () => undefined, onManage: () => undefined,
-}));
+const render = (selectedId?: string, query = '') =>
+  renderToStaticMarkup(
+    createElement(SidebarConversationList, {
+      data,
+      selectedId,
+      query,
+      archived: false,
+      onSelect: () => undefined,
+      onManage: () => undefined,
+    }),
+  );
 
 describe('sidebar conversation limits', () => {
   it('shows five recent conversations with an expansion action', () => {
@@ -39,8 +52,13 @@ describe('sidebar conversation limits', () => {
   it('keeps archived conversations in their separate settings list', () => {
     const archived = { ...conversations[0]!, id: 'archived', name: '历史会话', archived: true };
     const snapshot = { ...data, conversations: [...conversations, archived] };
-    const html = renderToStaticMarkup(createElement(ArchivedConversations, { data: snapshot,
-      mutate: async () => undefined as never, onSelectConversation: () => undefined }));
+    const html = renderToStaticMarkup(
+      createElement(ArchivedConversations, {
+        data: snapshot,
+        mutate: async () => undefined as never,
+        onSelectConversation: () => undefined,
+      }),
+    );
     expect(html).toContain('历史会话');
     expect(html).toContain('管理归档会话 历史会话');
     expect(html).not.toContain('对话 6');

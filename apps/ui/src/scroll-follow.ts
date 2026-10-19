@@ -20,7 +20,11 @@ export class ScrollFollow {
   userIntent(direction: number, position: ScrollPosition) {
     this.direction = Math.sign(direction);
     if (this.direction < 0) this.following = false;
-    if (this.direction > 0 && position.scrollHeight - position.scrollTop - position.clientHeight <= 2) this.following = true;
+    if (
+      this.direction > 0 &&
+      position.scrollHeight - position.scrollTop - position.clientHeight <= 2
+    )
+      this.following = true;
   }
 
   beginDrag() {
@@ -41,8 +45,12 @@ export class ScrollFollow {
     const movement = position.scrollTop - this.previousTop;
     if (this.dragging || this.direction !== 0) {
       if (movement < 0) this.following = false;
-      if (movement > 0 && (this.dragging || this.direction > 0)
-        && position.scrollHeight - position.scrollTop - position.clientHeight <= 2) this.following = true;
+      if (
+        movement > 0 &&
+        (this.dragging || this.direction > 0) &&
+        position.scrollHeight - position.scrollTop - position.clientHeight <= 2
+      )
+        this.following = true;
     }
     this.previousTop = position.scrollTop;
   }
@@ -54,7 +62,8 @@ export class ScrollFollow {
   }
 
   private follow(position: ScrollPosition) {
-    if (this.following) position.scrollTop = Math.max(0, position.scrollHeight - position.clientHeight);
+    if (this.following)
+      position.scrollTop = Math.max(0, position.scrollHeight - position.clientHeight);
     this.previousTop = position.scrollTop;
   }
 }

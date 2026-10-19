@@ -11,7 +11,8 @@ afterEach(() => {
   vi.unstubAllEnvs();
   if (resourcesDescriptor) Object.defineProperty(process, 'resourcesPath', resourcesDescriptor);
   else Reflect.deleteProperty(process, 'resourcesPath');
-  for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
+  for (const directory of directories.splice(0))
+    rmSync(directory, { recursive: true, force: true });
 });
 
 describe('official market source', () => {
@@ -19,15 +20,20 @@ describe('official market source', () => {
     vi.stubEnv('MULTI_AI_MARKET_CATALOG_URL', '');
     Object.defineProperty(process, 'resourcesPath', { value: undefined, configurable: true });
     expect(configuredCatalogUrl()).toBe(defaultMarketConfig.catalogUrl);
-    const directory = mkdtempSync(join(tmpdir(), 'market-source-')); directories.push(directory);
+    const directory = mkdtempSync(join(tmpdir(), 'market-source-'));
+    directories.push(directory);
     Object.defineProperty(process, 'resourcesPath', { value: directory, configurable: true });
     expect(configuredCatalogUrl()).toBe(defaultMarketConfig.catalogUrl);
   });
 
   it('prefers runtime overrides over packaged configuration and packaged configuration over the default', () => {
     vi.stubEnv('MULTI_AI_MARKET_CATALOG_URL', '');
-    const directory = mkdtempSync(join(tmpdir(), 'market-source-')); directories.push(directory);
-    writeFileSync(join(directory, 'market-config.json'), JSON.stringify({ catalogUrl: 'https://distribution.test/catalog.json' }));
+    const directory = mkdtempSync(join(tmpdir(), 'market-source-'));
+    directories.push(directory);
+    writeFileSync(
+      join(directory, 'market-config.json'),
+      JSON.stringify({ catalogUrl: 'https://distribution.test/catalog.json' }),
+    );
     Object.defineProperty(process, 'resourcesPath', { value: directory, configurable: true });
     expect(configuredCatalogUrl()).toBe('https://distribution.test/catalog.json');
     vi.stubEnv('MULTI_AI_MARKET_CATALOG_URL', 'https://override.test/catalog.json');

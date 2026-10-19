@@ -1,9 +1,27 @@
 import type { ModelRecovery } from './recovery.js';
 
-export type ModelActivityKind = 'waiting' | 'thinking' | 'responding' | 'tool' | 'working' | 'finishing';
+export type ModelActivityKind =
+  | 'waiting'
+  | 'thinking'
+  | 'responding'
+  | 'tool'
+  | 'working'
+  | 'finishing';
 
 export interface TaskActivity {
-  phase: 'preparing' | 'model' | 'responding' | 'tool' | 'compacting' | 'queued' | 'recovering' | 'children' | 'approval' | 'input' | 'stopping' | 'finished';
+  phase:
+    | 'preparing'
+    | 'model'
+    | 'responding'
+    | 'tool'
+    | 'compacting'
+    | 'queued'
+    | 'recovering'
+    | 'children'
+    | 'approval'
+    | 'input'
+    | 'stopping'
+    | 'finished';
   lastActivityAt?: string;
   lastModelActivityAt?: string;
   lastToolActivityAt?: string;

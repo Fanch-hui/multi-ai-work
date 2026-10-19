@@ -1,5 +1,12 @@
 import type { ModelMessage, ProviderAdapter, RunContext } from '../domain/provider.js';
-import type { ContextCheckpoint, Message, Usage, Run, Task, Conversation } from '../domain/types.js';
+import type {
+  ContextCheckpoint,
+  Message,
+  Usage,
+  Run,
+  Task,
+  Conversation,
+} from '../domain/types.js';
 import { ContextManager, contextSourceHash, contextCompatibilityHash } from '../runtime/context.js';
 import { modelMessageHistory, type ModelHistoryEntry } from '../runtime/model-history.js';
 import { State, id } from './state.js';
@@ -10,37 +17,79 @@ import { runMessageSources } from './run-message.js';
 import { compactRunMessages } from '../runtime/run-compaction.js';
 import { estimateTokens, estimateModelMessagesTokens } from '../runtime/model-history.js';
 import { ContextReferences } from './context-references.js';
-import { needsRuntimeContext, prepareRuntimeContext, retainRuntimeContext } from './run-runtime-context.js';
+import {
+  needsRuntimeContext,
+  prepareRuntimeContext,
+  retainRuntimeContext,
+} from './run-runtime-context.js';
 import { prepareToolResultBudget } from './tool-result-budget.js';
 import { prepareImageInputBudget } from './image-input-budget.js';
 
 export { addUsage } from '../domain/usage.js';
 
-export interface ProviderArchive { id: string; bindingId: string; entries: ModelHistoryEntry[]; output?: string; }
+export interface ProviderArchive {
+  id: string;
+  bindingId: string;
+  entries: ModelHistoryEntry[];
+  output?: string;
+}
 
 interface ManagedContextPreparation {
   usage(): Usage | undefined;
   compaction?: { outcome: NonNullable<Task['contextCompactionOutcome']>; result: string };
 }
 
-export async function prepareManagedContext(input: RunContext, archive: Message[], delivered: number,
-  state: State, manager: ContextManager, adapter: ProviderAdapter, force = false): Promise<ManagedContextPreparation> {
+export async function prepareManagedContext(
+  input: RunContext,
+  archive: Message[],
+  delivered: number,
+  state: State,
+  manager: ContextManager,
+  adapter: ProviderAdapter,
+  force = false,
+): Promise<ManagedContextPreparation> {
   const s = state.storage;
   const savedHistory = s.metadata<ModelHistoryEntry[]>(`history:${input.binding.id}`);
-  let history = savedHistory
-    ?? modelMessageHistory(archive.filter(message => message.sequence <= delivered), input.bot.id, artifactId => modelImage(s.get('artifacts', artifactId)));
+  let history =
+    savedHistory ??
+    modelMessageHistory(
+      archive.filter((message) => message.sequence <= delivered),
+      input.bot.id,
+      (artifactId) => modelImage(s.get('artifacts', artifactId)),
+    );
   const loadArchiveHistory = () => {
-    const entries = s.byField<ProviderArchive>('provider_archive', 'bindingId', input.binding.id).flatMap(record => record.entries);
+    const entries = s
+      .byField<ProviderArchive>('provider_archive', 'bindingId', input.binding.id)
+      .flatMap((record) => record.entries);
     return entries.length ? cleanHistory(entries) : undefined;
   };
-  const window = input.bot.contextWindow ?? defaultContextWindow(input.connection.provider,
-    input.connection.models.find(model => model.id === input.bot.model));
-  const settings = managedContextBudget(window, input.bot.compactionThreshold, input.bot.outputReserve);
+  const window =
+    input.bot.contextWindow ??
+    defaultContextWindow(
+      input.connection.provider,
+      input.connection.models.find((model) => model.id === input.bot.model),
+    );
+  const settings = managedContextBudget(
+    window,
+    input.bot.compactionThreshold,
+    input.bot.outputReserve,
+  );
   const { availableTokens: budget, triggerTokens } = settings;
   const run = s.get<Run>('runs', input.runId);
-  const task = run && s.get<Task>('tasks', run.taskId), room = s.get<Conversation>('conversations', input.binding.conversationId);
-  const references = task && room ? new ContextReferences(state, { runId: input.runId, task, room, bot: input.bot,
-    toolNames: input.tools.map(tool => tool.name), signal: input.signal, inlineToolLimit: budget ? Math.min(32000, Math.floor(budget * 0.5)) : 32000 }) : undefined;
+  const task = run && s.get<Task>('tasks', run.taskId),
+    room = s.get<Conversation>('conversations', input.binding.conversationId);
+  const references =
+    task && room
+      ? new ContextReferences(state, {
+          runId: input.runId,
+          task,
+          room,
+          bot: input.bot,
+          toolNames: input.tools.map((tool) => tool.name),
+          signal: input.signal,
+          inlineToolLimit: budget ? Math.min(32000, Math.floor(budget * 0.5)) : 32000,
+        })
+      : undefined;
   input.prepareToolResults = prepareToolResultBudget(input, references, budget);
   input.prepareImageInputs = prepareImageInputBudget(input);
   const preserveReferences = references?.preserveReferences.bind(references);
@@ -49,73 +98,175 @@ export async function prepareManagedContext(input: RunContext, archive: Message[
   input.contextSignature = signature;
   const validity = s.metadata<HistoryValidity>(`history-validity:${input.binding.id}`);
   const sourceIds = new Set(validity?.sourceIds);
-  const sources = validity && archive.filter(message => sourceIds.has(message.id));
-  const historyIsCurrent = !!(savedHistory && validity && validity.generation === input.binding.generation && validity.signature === signature
-    && sources?.length === validity.sourceIds.length && contextSourceHash(sources) === validity.sourceHash);
+  const sources = validity && archive.filter((message) => sourceIds.has(message.id));
+  const historyIsCurrent = !!(
+    savedHistory &&
+    validity &&
+    validity.generation === input.binding.generation &&
+    validity.signature === signature &&
+    sources?.length === validity.sourceIds.length &&
+    contextSourceHash(sources) === validity.sourceHash
+  );
   const currentRuntime = input.runtimeContext;
-  const cleanHistory = (entries: ModelHistoryEntry[]) => historyIsCurrent ? entries
-    : entries.filter(entry => entry.message.appContext?.source !== 'app.runtime');
+  const cleanHistory = (entries: ModelHistoryEntry[]) =>
+    historyIsCurrent
+      ? entries
+      : entries.filter((entry) => entry.message.appContext?.source !== 'app.runtime');
   history = cleanHistory(history);
-  const prepare = (force: boolean, currentInput: string) => manager.prepare({ binding: input.binding,
-    messages: archive, instructions: input.instructions, contextInstructions: input.contextInstructions,
-    protocol: input.connection.protocol, tools: input.tools, history, historyIsCurrent,
-    loadArchiveHistory, currentInput: `${currentInput}${needsRuntimeContext(history.map(entry => entry.message), currentRuntime) ? `\n${currentRuntime!.content}` : ''}`, preserveReferences,
-    contextWindow: budget, triggerTokens, force, signal: input.signal, summarize,
-    isSourceCurrent: (ids, hash) => {
-      const expected = new Set(ids);
-      return contextSourceHash(s.messages(input.binding.conversationId).filter(message => expected.has(message.id))) === hash;
-    } });
+  const prepare = (force: boolean, currentInput: string) =>
+    manager.prepare({
+      binding: input.binding,
+      messages: archive,
+      instructions: input.instructions,
+      contextInstructions: input.contextInstructions,
+      protocol: input.connection.protocol,
+      tools: input.tools,
+      history,
+      historyIsCurrent,
+      loadArchiveHistory,
+      currentInput: `${currentInput}${
+        needsRuntimeContext(
+          history.map((entry) => entry.message),
+          currentRuntime,
+        )
+          ? `\n${currentRuntime!.content}`
+          : ''
+      }`,
+      preserveReferences,
+      contextWindow: budget,
+      triggerTokens,
+      force,
+      signal: input.signal,
+      summarize,
+      isSourceCurrent: (ids, hash) => {
+        const expected = new Set(ids);
+        return (
+          contextSourceHash(
+            s.messages(input.binding.conversationId).filter((message) => expected.has(message.id)),
+          ) === hash
+        );
+      },
+    });
   const prepared = await prepare(force, input.prompt);
   prepareRuntimeContext(input, prepared.messages, signature);
-  input.emit({ type: 'context', data: { estimatedTokens: prepared.estimatedTokens, ...settings, source: 'app-estimated', owner: 'app' } });
+  input.emit({
+    type: 'context',
+    data: {
+      estimatedTokens: prepared.estimatedTokens,
+      ...settings,
+      source: 'app-estimated',
+      owner: 'app',
+    },
+  });
   if (force) {
     const { status, reason } = prepared.compaction ?? { status: 'unchanged', reason: 'no_history' };
     if (status === 'failed') {
-      throw new Error(reason === 'summary_failed' || reason === 'needs_split' ? '摘要生成未完成，请稍后重试'
-        : reason === 'source_changed' ? '对话内容已变化，请重新压缩'
-        : reason === 'over_budget' ? '压缩后仍超过上下文预算，请减少本轮资料或调整上下文设置'
-        : '上下文压缩未完成，请稍后重试');
+      throw new Error(
+        reason === 'summary_failed' || reason === 'needs_split'
+          ? '摘要生成未完成，请稍后重试'
+          : reason === 'source_changed'
+            ? '对话内容已变化，请重新压缩'
+            : reason === 'over_budget'
+              ? '压缩后仍超过上下文预算，请减少本轮资料或调整上下文设置'
+              : '上下文压缩未完成，请稍后重试',
+      );
     }
-    if (status === 'unchanged') return { usage, compaction: { outcome: 'unchanged', result: reason === 'not_smaller'
-      ? '本次摘要未减少上下文占用，已保留原上下文'
-      : '当前没有可压缩的较早历史，可继续对话后再试' } };
+    if (status === 'unchanged')
+      return {
+        usage,
+        compaction: {
+          outcome: 'unchanged',
+          result:
+            reason === 'not_smaller'
+              ? '本次摘要未减少上下文占用，已保留原上下文'
+              : '当前没有可压缩的较早历史，可继续对话后再试',
+        },
+      };
     s.transaction(() => {
       const source = archive.at(-1)!;
-      s.setMetadata(`history:${input.binding.id}`, workingHistory(state, input, input.messages, source, source.sequence));
+      s.setMetadata(
+        `history:${input.binding.id}`,
+        workingHistory(state, input, input.messages, source, source.sequence),
+      );
       saveHistoryValidity(state, input);
     });
-    return { usage, compaction: { outcome: 'compressed', result: '上下文已压缩，完整聊天记录已保留' } };
+    return {
+      usage,
+      compaction: { outcome: 'compressed', result: '上下文已压缩，完整聊天记录已保留' },
+    };
   }
   input.compactContext = async (messages, options) => {
     if (!budget || !triggerTokens) return undefined;
-    const originalTokens = estimateTokens(input.instructions) + estimateTokens(input.tools) + 256
-      + estimateModelMessagesTokens(messages, input.connection.protocol);
+    const originalTokens =
+      estimateTokens(input.instructions) +
+      estimateTokens(input.tools) +
+      256 +
+      estimateModelMessagesTokens(messages, input.connection.protocol);
     let next;
-    try { next = await compactRunMessages(messages, { ...options, budget, trigger: triggerTokens,
-      fixedTokens: estimateTokens(input.instructions) + estimateTokens(input.tools) + 256,
-      protocol: input.connection.protocol ?? 'responses', signal: input.signal, summarize, preserveReferences,
-      preserveToolOutput: references ? async message => {
-        const reference = await references.preserveToolOutput(message);
-        if (!reference) return undefined;
-        message.contextArtifactIds = [...new Set([reference.id, ...(message.contextArtifactIds ?? [])])];
-        const preserved = await references.preserveReferences([message], [reference.id]);
-        if (!preserved.artifactIds.includes(reference.id)) return undefined;
-        return { ...preserved, artifactIds: [...new Set([reference.id, ...preserved.artifactIds])] };
-      } : undefined });
+    try {
+      next = await compactRunMessages(messages, {
+        ...options,
+        budget,
+        trigger: triggerTokens,
+        fixedTokens: estimateTokens(input.instructions) + estimateTokens(input.tools) + 256,
+        protocol: input.connection.protocol ?? 'responses',
+        signal: input.signal,
+        summarize,
+        preserveReferences,
+        preserveToolOutput: references
+          ? async (message) => {
+              const reference = await references.preserveToolOutput(message);
+              if (!reference) return undefined;
+              message.contextArtifactIds = [
+                ...new Set([reference.id, ...(message.contextArtifactIds ?? [])]),
+              ];
+              const preserved = await references.preserveReferences([message], [reference.id]);
+              if (!preserved.artifactIds.includes(reference.id)) return undefined;
+              return {
+                ...preserved,
+                artifactIds: [...new Set([reference.id, ...preserved.artifactIds])],
+              };
+            }
+          : undefined,
+      });
     } catch {
       input.signal.throwIfAborted();
-      input.emit({ type: 'compaction', data: { status: 'failed', reason: 'summary_failed', scope: 'run' } });
-      if (originalTokens > budget && !options.force) throw new Error('模型上下文超过输入预算，摘要未能完成，需要分割资料');
+      input.emit({
+        type: 'compaction',
+        data: { status: 'failed', reason: 'summary_failed', scope: 'run' },
+      });
+      if (originalTokens > budget && !options.force)
+        throw new Error('模型上下文超过输入预算，摘要未能完成，需要分割资料');
       return undefined;
     }
     if (next) {
       next = retainRuntimeContext(next.messages, next.currentStart, currentRuntime);
-      if (estimateTokens(input.instructions) + estimateTokens(input.tools) + 256
-        + estimateModelMessagesTokens(next.messages, input.connection.protocol) > triggerTokens) next = undefined;
+      if (
+        estimateTokens(input.instructions) +
+          estimateTokens(input.tools) +
+          256 +
+          estimateModelMessagesTokens(next.messages, input.connection.protocol) >
+        triggerTokens
+      )
+        next = undefined;
     }
-    if (!next && originalTokens > budget && !options.force) throw new Error('模型上下文超过输入预算，无法继续缩小，需要分割资料');
-    if (next) input.emit({ type: 'context', data: { estimatedTokens: estimateTokens(input.instructions) + estimateTokens(input.tools)
-      + 256 + estimateModelMessagesTokens(next.messages, input.connection.protocol), ...settings, source: 'app-estimated', owner: 'app', recovery: options.force } });
+    if (!next && originalTokens > budget && !options.force)
+      throw new Error('模型上下文超过输入预算，无法继续缩小，需要分割资料');
+    if (next)
+      input.emit({
+        type: 'context',
+        data: {
+          estimatedTokens:
+            estimateTokens(input.instructions) +
+            estimateTokens(input.tools) +
+            256 +
+            estimateModelMessagesTokens(next.messages, input.connection.protocol),
+          ...settings,
+          source: 'app-estimated',
+          owner: 'app',
+          recovery: options.force,
+        },
+      });
     return next;
   };
   return { usage };
@@ -125,55 +276,112 @@ function summaryRunner(input: RunContext, adapter: ProviderAdapter) {
   let summaryUsage: Usage | undefined;
   const summarize = async (prompt: string, signal: AbortSignal) => {
     const runId = `${input.runId}:summary:${id()}`;
-    const summary = await adapter.run({ ...input, runId, prompt, messages: [], images: [], tools: [],
-      instructions: '将提供的历史整理为摘要，只输出摘要，不执行操作。', signal, compactContext: undefined,
-      userInput: undefined, progress: undefined, saveProgress: undefined, runtimeContext: undefined, prepareToolResults: undefined, prepareImageInputs: undefined, deferRecovery: false,
-      emit: event => {
-        if (event.type === 'usage') input.emit({ ...event, data: { ...event.data, phase: 'compaction' } });
-        if (event.type === 'status' && String(event.data.phase).startsWith('model-')) input.emit({ ...event,
-          data: { ...event.data, scope: 'compaction',
-            requestId: event.data.requestId ?? `${runId}:${event.data.step}` } });
+    const summary = await adapter.run({
+      ...input,
+      runId,
+      prompt,
+      messages: [],
+      images: [],
+      tools: [],
+      instructions: '将提供的历史整理为摘要，只输出摘要，不执行操作。',
+      signal,
+      compactContext: undefined,
+      userInput: undefined,
+      progress: undefined,
+      saveProgress: undefined,
+      runtimeContext: undefined,
+      prepareToolResults: undefined,
+      prepareImageInputs: undefined,
+      deferRecovery: false,
+      emit: (event) => {
+        if (event.type === 'usage')
+          input.emit({ ...event, data: { ...event.data, phase: 'compaction' } });
+        if (event.type === 'status' && String(event.data.phase).startsWith('model-'))
+          input.emit({
+            ...event,
+            data: {
+              ...event.data,
+              scope: 'compaction',
+              requestId: event.data.requestId ?? `${runId}:${event.data.step}`,
+            },
+          });
       },
-      executeTool: async () => { throw new Error('摘要任务不执行工具'); } });
+      executeTool: async () => {
+        throw new Error('摘要任务不执行工具');
+      },
+    });
     summaryUsage = addUsage(summaryUsage, summary.usage ?? { source: 'unknown' });
     return summary.text;
   };
   return { summarize, usage: () => summaryUsage };
 }
 
-export function workingHistory(state: State, input: RunContext, messages: ModelMessage[], draft: Message, cutoff: number): ModelHistoryEntry[] {
+export function workingHistory(
+  state: State,
+  input: RunContext,
+  messages: ModelMessage[],
+  draft: Message,
+  cutoff: number,
+): ModelHistoryEntry[] {
   const s = state.storage;
   const conversation = s.messages(draft.conversationId);
-  const previous = s.metadata<ModelHistoryEntry[]>(`history:${input.binding.id}`)
-    ?? modelMessageHistory(conversation.filter(message => message.sequence <= cutoff), input.bot.id, artifactId => modelImage(s.get('artifacts', artifactId)));
-  const source = conversation.filter(message => message.sequence <= cutoff).at(-1) ?? draft;
-  const checkpoint = s.byField<ContextCheckpoint>('context_checkpoints', 'bindingId', input.binding.id).at(-1);
+  const previous =
+    s.metadata<ModelHistoryEntry[]>(`history:${input.binding.id}`) ??
+    modelMessageHistory(
+      conversation.filter((message) => message.sequence <= cutoff),
+      input.bot.id,
+      (artifactId) => modelImage(s.get('artifacts', artifactId)),
+    );
+  const source = conversation.filter((message) => message.sequence <= cutoff).at(-1) ?? draft;
+  const checkpoint = s
+    .byField<ContextCheckpoint>('context_checkpoints', 'bindingId', input.binding.id)
+    .at(-1);
   const matchHistory = historyMatcher(previous);
   let currentSource = source;
   const sources = runMessageSources(s, input.runId);
-  const replies = conversation.filter(message => message.runId && sources.has(message.runId) && message.authorBotId === input.bot.id);
-  const userSequences = messages.flatMap(message => message.sourceSequence !== undefined ? [message.sourceSequence] : []);
-  const initialUser = messages.findIndex((message, index) => index >= input.messages.length && message.role === 'user' && !message.appContext);
+  const replies = conversation.filter(
+    (message) =>
+      message.runId && sources.has(message.runId) && message.authorBotId === input.bot.id,
+  );
+  const userSequences = messages.flatMap((message) =>
+    message.sourceSequence !== undefined ? [message.sourceSequence] : [],
+  );
+  const initialUser = messages.findIndex(
+    (message, index) =>
+      index >= input.messages.length && message.role === 'user' && !message.appContext,
+  );
   return messages.map((message, index) => {
     if (message.sourceMessageId && message.sourceSequence !== undefined) {
-      if (index >= input.messages.length) currentSource = s.getMessage(message.sourceMessageId) ?? currentSource;
+      if (index >= input.messages.length)
+        currentSource = s.getMessage(message.sourceMessageId) ?? currentSource;
       return { messageId: message.sourceMessageId, sequence: message.sourceSequence, message };
     }
     if (index < input.messages.length || message.contextSummary) {
       if (checkpoint && message.content === `此前对话摘要（历史资料）：\n${checkpoint.content}`)
-        return { messageId: checkpoint.sourceMessageIds.at(-1) ?? source.id, sequence: checkpoint.throughSequence, message };
+        return {
+          messageId: checkpoint.sourceMessageIds.at(-1) ?? source.id,
+          sequence: checkpoint.throughSequence,
+          message,
+        };
       const match = matchHistory(message);
       if (match >= 0) return previous[match];
       return { messageId: source.id, sequence: source.sequence, message };
     }
-    if (message.appContext || index === initialUser) return { messageId: source.id, sequence: source.sequence, message };
-    const nextUser = userSequences.find(sequence => sequence > currentSource.sequence) ?? Infinity;
-    const reply = replies.find(item => item.sequence > currentSource.sequence && item.sequence < nextUser) ?? currentSource;
+    if (message.appContext || index === initialUser)
+      return { messageId: source.id, sequence: source.sequence, message };
+    const nextUser =
+      userSequences.find((sequence) => sequence > currentSource.sequence) ?? Infinity;
+    const reply =
+      replies.find((item) => item.sequence > currentSource.sequence && item.sequence < nextUser) ??
+      currentSource;
     return { messageId: reply.id, sequence: reply.sequence, message };
   });
 }
 
-export function projectedHistory(history: ModelHistoryEntry[], messages: ModelMessage[]): ModelHistoryEntry[] {
+export function projectedHistory(
+  history: ModelHistoryEntry[],
+  messages: ModelMessage[],
+): ModelHistoryEntry[] {
   const matchHistory = historyMatcher(history);
   const matches = messages.map(matchHistory);
   let next = history.length;
@@ -190,25 +398,37 @@ export function projectedHistory(history: ModelHistoryEntry[], messages: ModelMe
 function historyMatcher(history: ModelHistoryEntry[]) {
   const positions = new Map<string, { indices: number[]; offset: number }>();
   history.forEach((entry, index) => {
-    const key = JSON.stringify(entry.message), value = positions.get(key) ?? { indices: [], offset: 0 };
-    value.indices.push(index); positions.set(key, value);
+    const key = JSON.stringify(entry.message),
+      value = positions.get(key) ?? { indices: [], offset: 0 };
+    value.indices.push(index);
+    positions.set(key, value);
   });
   let cursor = 0;
   return (message: ModelMessage) => {
     const value = positions.get(JSON.stringify(message));
     if (!value) return -1;
-    while (value.offset < value.indices.length && value.indices[value.offset] < cursor) value.offset++;
+    while (value.offset < value.indices.length && value.indices[value.offset] < cursor)
+      value.offset++;
     const match = value.indices[value.offset++] ?? -1;
     if (match >= 0) cursor = match + 1;
     return match;
   };
 }
 
-interface HistoryValidity { generation: number; signature: string; sourceIds: string[]; sourceHash: string; }
+interface HistoryValidity {
+  generation: number;
+  signature: string;
+  sourceIds: string[];
+  sourceHash: string;
+}
 export function saveHistoryValidity(state: State, input: RunContext) {
-  const sources = state.storage.messages(input.binding.conversationId).filter(message => message.status === 'committed');
+  const sources = state.storage
+    .messages(input.binding.conversationId)
+    .filter((message) => message.status === 'committed');
   state.storage.setMetadata(`history-validity:${input.binding.id}`, {
-    generation: input.binding.generation, signature: contextCompatibilityHash({ ...input, protocol: input.connection.protocol }),
-    sourceIds: sources.map(message => message.id), sourceHash: contextSourceHash(sources),
+    generation: input.binding.generation,
+    signature: contextCompatibilityHash({ ...input, protocol: input.connection.protocol }),
+    sourceIds: sources.map((message) => message.id),
+    sourceHash: contextSourceHash(sources),
   } satisfies HistoryValidity);
 }

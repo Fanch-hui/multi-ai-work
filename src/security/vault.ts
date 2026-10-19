@@ -18,7 +18,10 @@ export class Vault {
   private pending: Promise<void> = Promise.resolve();
   readonly path: string;
   private cipher?: CipherHost;
-  constructor(path: string, cipher?: CipherHost) { this.path = path; this.cipher = cipher; }
+  constructor(path: string, cipher?: CipherHost) {
+    this.path = path;
+    this.cipher = cipher;
+  }
   async load() {
     this.cache.clear();
     if (!this.cipher) return;
@@ -26,7 +29,8 @@ export class Vault {
       const record = JSON.parse(await readFile(this.path, 'utf8')) as Record<string, string>;
       this.values = new Map(Object.entries(record));
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new Error('凭据存储无法读取，请检查本机保护后端。');
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT')
+        throw new Error('凭据存储无法读取，请检查本机保护后端。');
       this.values = new Map();
     } finally {
       this.cache.clear();
@@ -46,16 +50,19 @@ export class Vault {
       if (cached.pending) return cached.pending;
     }
     const entry: CacheEntry = { ciphertext: value };
-    const pending = this.cipher.decrypt(value).then(decrypted => {
-      if (this.cache.get(ref) === entry && this.values.get(ref) === value) {
-        entry.value = decrypted;
-        entry.pending = undefined;
-      }
-      return decrypted;
-    }, error => {
-      if (this.cache.get(ref) === entry) this.cache.delete(ref);
-      throw error;
-    });
+    const pending = this.cipher.decrypt(value).then(
+      (decrypted) => {
+        if (this.cache.get(ref) === entry && this.values.get(ref) === value) {
+          entry.value = decrypted;
+          entry.pending = undefined;
+        }
+        return decrypted;
+      },
+      (error) => {
+        if (this.cache.get(ref) === entry) this.cache.delete(ref);
+        throw error;
+      },
+    );
     entry.pending = pending;
     this.cache.set(ref, entry);
     return pending;
@@ -67,9 +74,17 @@ export class Vault {
     this.values.set(ref, stored);
     await this.persist();
   }
-  async delete(ref: string) { this.cache.delete(ref); this.values.delete(ref); await this.persist(); }
-  clear() { this.cache.clear(); }
-  async flush() { await this.pending; }
+  async delete(ref: string) {
+    this.cache.delete(ref);
+    this.values.delete(ref);
+    await this.persist();
+  }
+  clear() {
+    this.cache.clear();
+  }
+  async flush() {
+    await this.pending;
+  }
   private persist() {
     if (!this.cipher) return Promise.resolve();
     const operation = this.pending.then(async () => {

@@ -8,8 +8,12 @@ import type { State } from './state.js';
 
 export function modelImage(artifact?: Artifact): ModelImage | undefined {
   if (!artifact || !imageMimeTypes.has(artifact.mimeType)) return undefined;
-  return { artifactId: artifact.id, mimeType: artifact.image?.mimeType ?? artifact.mimeType,
-    width: artifact.image?.width, height: artifact.image?.height };
+  return {
+    artifactId: artifact.id,
+    mimeType: artifact.image?.mimeType ?? artifact.mimeType,
+    width: artifact.image?.width,
+    height: artifact.image?.height,
+  };
 }
 
 type EncodedImage = Awaited<ReturnType<typeof resolveModelArtifactImage>>;
@@ -66,11 +70,16 @@ export function imageResolver(state: State, context: ToolExecutionContext) {
       normalizing.set(key, work);
     }
     let image: ImageMetadata;
-    try { image = await work; }
-    finally { if (normalizing.get(key) === work) normalizing.delete(key); }
+    try {
+      image = await work;
+    } finally {
+      if (normalizing.get(key) === work) normalizing.delete(key);
+    }
     const current = authorized(artifact.id);
-    if (imageVersion({ ...current, image: undefined }) !== key
-      || (current.image && JSON.stringify(current.image) !== JSON.stringify(image))) {
+    if (
+      imageVersion({ ...current, image: undefined }) !== key ||
+      (current.image && JSON.stringify(current.image) !== JSON.stringify(image))
+    ) {
       throw new Error('图片已变化，请重新读取');
     }
     if (!current.image) {
@@ -87,8 +96,16 @@ export function imageResolver(state: State, context: ToolExecutionContext) {
     const identity = artifact.sha256
       ? `sha256:${artifact.sha256}`
       : `path:${artifact.path}:${metadata.mtimeMs}:${metadata.size}`;
-    const key = JSON.stringify([MODEL_IMAGE_ENCODING_VERSION, identity, version, metadata.dev, metadata.ino,
-      metadata.size, metadata.mtimeMs, metadata.ctimeMs]);
+    const key = JSON.stringify([
+      MODEL_IMAGE_ENCODING_VERSION,
+      identity,
+      version,
+      metadata.dev,
+      metadata.ino,
+      metadata.size,
+      metadata.mtimeMs,
+      metadata.ctimeMs,
+    ]);
     let result = readLru(store, key);
     if (!result) {
       let work = pending.get(key);
@@ -96,15 +113,25 @@ export function imageResolver(state: State, context: ToolExecutionContext) {
         work = resolveModelArtifactImage(artifact);
         pending.set(key, work);
       }
-      try { result = await work; }
-      finally { if (pending.get(key) === work) pending.delete(key); }
+      try {
+        result = await work;
+      } finally {
+        if (pending.get(key) === work) pending.delete(key);
+      }
     }
-    if (imageVersion(authorized(image.artifactId)) !== version) throw new Error('图片已变化，请重新读取');
+    if (imageVersion(authorized(image.artifactId)) !== version)
+      throw new Error('图片已变化，请重新读取');
     writeLru(store, key, result);
     return { ...result };
   };
 }
 
 function imageVersion(artifact: Artifact) {
-  return JSON.stringify([artifact.id, artifact.path, artifact.mimeType, artifact.sha256, artifact.image]);
+  return JSON.stringify([
+    artifact.id,
+    artifact.path,
+    artifact.mimeType,
+    artifact.sha256,
+    artifact.image,
+  ]);
 }

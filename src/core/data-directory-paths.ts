@@ -3,17 +3,20 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'nod
 
 export function withinDirectory(root: string, path: string) {
   const rest = relative(root, path);
-  return rest === '' || rest !== '..' && !rest.startsWith(`..${sep}`) && !isAbsolute(rest);
+  return rest === '' || (rest !== '..' && !rest.startsWith(`..${sep}`) && !isAbsolute(rest));
 }
 
 async function canonicalPath(path: string): Promise<string> {
   const suffix: string[] = [];
   let parent = path;
   while (true) {
-    try { return join(await realpath(parent), ...suffix.reverse()); }
-    catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || parent === dirname(parent)) throw error;
-      suffix.push(basename(parent)); parent = dirname(parent);
+    try {
+      return join(await realpath(parent), ...suffix.reverse());
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || parent === dirname(parent))
+        throw error;
+      suffix.push(basename(parent));
+      parent = dirname(parent);
     }
   }
 }
@@ -41,6 +44,6 @@ export async function validateDataDirectory(source: string, input: string) {
 
 export function relocatePath(value: unknown, roots: string[], target: string): unknown {
   if (typeof value !== 'string' || !isAbsolute(value)) return value;
-  const root = roots.find(root => withinDirectory(root, value));
+  const root = roots.find((root) => withinDirectory(root, value));
   return root ? join(target, relative(root, value)) : value;
 }

@@ -14,7 +14,17 @@ export function taskPlanPrompt(state: State, task: Task, bot: Bot, tools: ToolEx
     };
   }
   const plan = task.planId ? taskPlanFor(state.storage, task) : undefined;
-  const step = plan?.id === task.planId ? plan?.steps.find(item => item.id === task.planStepId) : undefined;
-  return { prompt: step ? `你参与的安排步骤（工作数据）：${JSON.stringify({ id: step.id, title: step.title,
-    description: step.description, kind: step.kind, memberIds: step.memberIds })}。按本任务目标实际执行；讨论步骤请在当前群内发表观点和回应。` : undefined };
+  const step =
+    plan?.id === task.planId ? plan?.steps.find((item) => item.id === task.planStepId) : undefined;
+  return {
+    prompt: step
+      ? `你参与的安排步骤（工作数据）：${JSON.stringify({
+          id: step.id,
+          title: step.title,
+          description: step.description,
+          kind: step.kind,
+          memberIds: step.memberIds,
+        })}。按本任务目标实际执行；讨论步骤请在当前群内发表观点和回应。`
+      : undefined,
+  };
 }

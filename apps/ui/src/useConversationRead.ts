@@ -4,16 +4,27 @@ import type { Mutate } from './store.js';
 import { errorMessage } from './api.js';
 import { ConversationReadReceipts, readableBotMessageIds } from './conversation-read.js';
 
-export function conversationCanBeRead(visible: boolean, focused: boolean, messageView: boolean): boolean {
+export function conversationCanBeRead(
+  visible: boolean,
+  focused: boolean,
+  messageView: boolean,
+): boolean {
   return visible && focused && messageView;
 }
 
 function windowForeground(messageView = true) {
-  return typeof document !== 'undefined'
-    && conversationCanBeRead(document.visibilityState === 'visible', document.hasFocus(), messageView);
+  return (
+    typeof document !== 'undefined' &&
+    conversationCanBeRead(document.visibilityState === 'visible', document.hasFocus(), messageView)
+  );
 }
 
-export function useConversationRead(conversation: Conversation | undefined, messages: Message[], enabled: boolean, mutate: Mutate) {
+export function useConversationRead(
+  conversation: Conversation | undefined,
+  messages: Message[],
+  enabled: boolean,
+  mutate: Mutate,
+) {
   const [foreground, setForeground] = useState(windowForeground);
   const [receipts] = useState(() => new ConversationReadReceipts());
   const [revision, setRevision] = useState(0);
@@ -30,17 +41,22 @@ export function useConversationRead(conversation: Conversation | undefined, mess
     };
   }, []);
   useEffect(() => {
-    if (!conversation || !foreground || !windowForeground(enabled) || !conversation.unreadCount) return;
+    if (!conversation || !foreground || !windowForeground(enabled) || !conversation.unreadCount)
+      return;
     const id = conversation.id;
-    void receipts.mark(id, readableBotMessageIds(messages, id), params => mutate('conversations.read', params))
-      .then(changed => {
+    void receipts
+      .mark(id, readableBotMessageIds(messages, id), (params) =>
+        mutate('conversations.read', params),
+      )
+      .then((changed) => {
         if (!changed) return;
         setFailure(undefined);
-        setRevision(value => value + 1);
-      }).catch(cause => setFailure({ id, message: errorMessage(cause) }));
+        setRevision((value) => value + 1);
+      })
+      .catch((cause) => setFailure({ id, message: errorMessage(cause) }));
   }, [conversation, messages, enabled, foreground, mutate, receipts, revision]);
   return {
     error: failure && failure.id === conversation?.id ? failure.message : '',
-    retry: () => setRevision(value => value + 1),
+    retry: () => setRevision((value) => value + 1),
   };
 }

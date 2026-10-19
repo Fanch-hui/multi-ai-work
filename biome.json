@@ -1,0 +1,164 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "includes": [
+      "src/**/*.{js,mjs,cjs,ts,tsx,mts,cts}",
+      "apps/**/*.{js,mjs,cjs,ts,tsx,mts,cts}",
+      "scripts/**/*.{js,mjs,cjs,ts,tsx,mts,cts}",
+      "tests/**/*.{js,mjs,cjs,ts,tsx,mts,cts}",
+      "*.{js,mjs,cjs,ts,tsx,mts,cts}",
+      "!tests/fixtures/**"
+    ]
+  },
+  "formatter": {
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "semicolons": "always"
+    }
+  },
+  "assist": {
+    "enabled": false
+  },
+  "linter": {
+    "rules": {
+      "recommended": false,
+      "style": {
+        "noNestedTernary": "error"
+      },
+      "suspicious": {
+        "noImportCycles": {
+          "level": "error",
+          "options": {
+            "ignoreTypes": true
+          }
+        }
+      }
+    }
+  },
+  "overrides": [
+    {
+      "includes": [
+        "src/domain/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "electron": "Domain must stay independent of Electron.",
+                  "better-sqlite3": "Domain must stay independent of storage."
+                },
+                "patterns": [
+                  {
+                    "group": [
+                      "**/core/**",
+                      "**/runtime/**",
+                      "**/providers/**",
+                      "**/tools/**",
+                      "**/security/**",
+                      "**/apps/**",
+                      "@qodercn-ai/**"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "src/runtime/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**/core/**",
+                      "**/providers/**",
+                      "**/tools/**",
+                      "**/security/**",
+                      "**/apps/**"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "src/providers/**",
+        "src/tools/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**/core/**",
+                      "**/security/**",
+                      "**/apps/**"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/ui/src/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**/core/**",
+                      "**/runtime/**",
+                      "**/providers/**",
+                      "**/tools/**",
+                      "**/security/**",
+                      "**/desktop/**"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

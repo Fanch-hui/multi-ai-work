@@ -9,14 +9,18 @@ type WorkbookDocument = { sheets: { name: string; rows: { row: number; values: s
 
 describe('workbook document reading', () => {
   let root: string;
-  beforeEach(async () => { root = await mkdtemp(path.join(tmpdir(), 'document-workbook-')); });
-  afterEach(async () => { await rm(root, { recursive: true, force: true }); });
+  beforeEach(async () => {
+    root = await mkdtemp(path.join(tmpdir(), 'document-workbook-'));
+  });
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
 
   async function readWorkbook(workbook: ExcelJS.Workbook) {
     const target = path.join(root, 'input.xlsx');
     await workbook.xlsx.writeFile(target);
     const original = await readFile(target);
-    const result = await readDocument(target) as WorkbookDocument;
+    const result = (await readDocument(target)) as WorkbookDocument;
     expect(await readFile(target)).toEqual(original);
     return result.sheets[0].rows;
   }
@@ -25,10 +29,14 @@ describe('workbook document reading', () => {
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('缓存');
     sheet.addRow([
-      { formula: '1-1', result: 0 }, null,
-      { formula: '1=2', result: false }, false, 0,
+      { formula: '1-1', result: 0 },
+      null,
+      { formula: '1=2', result: false },
+      false,
+      0,
       { formula: '1/0', result: { error: '#DIV/0!' } },
-      { formula: 'SUM(A1:E1)' }, { error: '#N/A' },
+      { formula: 'SUM(A1:E1)' },
+      { error: '#N/A' },
     ]);
     sheet.getCell('A2').value = { sharedFormula: 'A1', result: 0 };
     sheet.mergeCells('A2:B2');
@@ -41,7 +49,9 @@ describe('workbook document reading', () => {
   it('reads merged rich text, hyperlinks, formulas and dates as readable values', async () => {
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('合并');
-    sheet.getCell('A1').value = { richText: [{ text: '预算' }, { text: '260元', font: { bold: true } }] };
+    sheet.getCell('A1').value = {
+      richText: [{ text: '预算' }, { text: '260元', font: { bold: true } }],
+    };
     sheet.mergeCells('A1:B1');
     sheet.getCell('A2').value = { text: '资料', hyperlink: 'https://example.com/materials' };
     sheet.mergeCells('A2:B2');
@@ -51,7 +61,10 @@ describe('workbook document reading', () => {
     sheet.mergeCells('A4:B4');
     expect(await readWorkbook(workbook)).toEqual([
       { row: 1, values: ['预算260元', '预算260元'] },
-      { row: 2, values: ['资料 (https://example.com/materials)', '资料 (https://example.com/materials)'] },
+      {
+        row: 2,
+        values: ['资料 (https://example.com/materials)', '资料 (https://example.com/materials)'],
+      },
       { row: 3, values: ['2', '2'] },
       { row: 4, values: ['2026-10-14T00:00:00.000Z', '2026-10-14T00:00:00.000Z'] },
     ]);

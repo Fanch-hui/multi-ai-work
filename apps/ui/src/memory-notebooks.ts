@@ -1,6 +1,8 @@
 import type { Bot, MemoryEntry, Snapshot, Task } from '../../../src/domain/types.js';
 import {
-  computeMemoryBudgetTokens, estimateMemoryTokens, memoryTopic,
+  computeMemoryBudgetTokens,
+  estimateMemoryTokens,
+  memoryTopic,
 } from '../../../src/domain/memory.js';
 
 export interface MemoryTopicGroup {
@@ -29,7 +31,7 @@ export function matchesMemoryQuery(entry: MemoryEntry, rawQuery: string): boolea
   if (entry.content.toLocaleLowerCase().includes(needle)) return true;
   if (entry.topic?.toLocaleLowerCase().includes(needle)) return true;
   if (entry.summary?.toLocaleLowerCase().includes(needle)) return true;
-  if (entry.tags?.some(tag => tag.toLocaleLowerCase().includes(needle))) return true;
+  if (entry.tags?.some((tag) => tag.toLocaleLowerCase().includes(needle))) return true;
   return false;
 }
 
@@ -50,13 +52,21 @@ export function groupMemoriesByTopic(entries: MemoryEntry[]): MemoryTopicGroup[]
     .map(([topic, items]) => ({ topic, entries: items }));
 }
 
-function enrichNotebook(notebook: Omit<MemoryNotebookData, 'pinnedCount' | 'pinnedTokens' | 'budgetTokens' | 'pinnedCapTokens' | 'overflowIds'>, mainBot?: Bot): MemoryNotebookData {
-  notebook.entries.sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || b.updatedAt.localeCompare(a.updatedAt));
+function enrichNotebook(
+  notebook: Omit<
+    MemoryNotebookData,
+    'pinnedCount' | 'pinnedTokens' | 'budgetTokens' | 'pinnedCapTokens' | 'overflowIds'
+  >,
+  mainBot?: Bot,
+): MemoryNotebookData {
+  notebook.entries.sort(
+    (a, b) => Number(!!b.pinned) - Number(!!a.pinned) || b.updatedAt.localeCompare(a.updatedAt),
+  );
   const budgetOwner = notebook.bot ?? mainBot;
   const budgetTokens = computeMemoryBudgetTokens(budgetOwner?.contextWindow);
   const pinnedCapTokens = Math.floor(budgetTokens * 0.6);
   const pinnedEntries = notebook.entries
-    .filter(entry => entry.pinned)
+    .filter((entry) => entry.pinned)
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   let pinnedTokens = 0;
   let usedPinnedTokens = 0;
@@ -81,15 +91,35 @@ function enrichNotebook(notebook: Omit<MemoryNotebookData, 'pinnedCount' | 'pinn
 }
 
 export function memoryNotebooks(data: Data, query = ''): MemoryNotebookData[] {
-  const entries = data.memories.filter(entry => entry.status === 'approved' || entry.status === 'candidate');
-  const groups = new Map<string, Omit<MemoryNotebookData, 'pinnedCount' | 'pinnedTokens' | 'budgetTokens' | 'pinnedCapTokens' | 'overflowIds'>>();
-  const bots = [...data.bots].sort((a, b) => Number(b.id === data.settings.mainBotId) - Number(a.id === data.settings.mainBotId));
-  const mainBot = data.bots.find(bot => bot.id === data.settings.mainBotId);
+  const entries = data.memories.filter(
+    (entry) => entry.status === 'approved' || entry.status === 'candidate',
+  );
+  const groups = new Map<
+    string,
+    Omit<
+      MemoryNotebookData,
+      'pinnedCount' | 'pinnedTokens' | 'budgetTokens' | 'pinnedCapTokens' | 'overflowIds'
+    >
+  >();
+  const bots = [...data.bots].sort(
+    (a, b) => Number(b.id === data.settings.mainBotId) - Number(a.id === data.settings.mainBotId),
+  );
+  const mainBot = data.bots.find((bot) => bot.id === data.settings.mainBotId);
   for (const bot of bots) {
-    if (bot.archived && !entries.some(entry => entry.scope === 'bot' && entry.ownerId === bot.id)) continue;
-    groups.set(bot.id, { id: bot.id, name: bot.name, bot, entries: [], target: { scope: 'bot', ownerId: bot.id } });
+    if (bot.archived && !entries.some((entry) => entry.scope === 'bot' && entry.ownerId === bot.id))
+      continue;
+    groups.set(bot.id, {
+      id: bot.id,
+      name: bot.name,
+      bot,
+      entries: [],
+      target: { scope: 'bot', ownerId: bot.id },
+    });
   }
-  const publicNotebook: Omit<MemoryNotebookData, 'pinnedCount' | 'pinnedTokens' | 'budgetTokens' | 'pinnedCapTokens' | 'overflowIds'> = {
+  const publicNotebook: Omit<
+    MemoryNotebookData,
+    'pinnedCount' | 'pinnedTokens' | 'budgetTokens' | 'pinnedCapTokens' | 'overflowIds'
+  > = {
     id: 'public',
     name: '团队公共记忆',
     entries: [],
@@ -109,13 +139,16 @@ export function memoryNotebooks(data: Data, query = ''): MemoryNotebookData[] {
     group.entries.push(entry);
     groups.set(entry.ownerId, group);
   }
-  const notebooks = [...groups.values(), publicNotebook].map(item => enrichNotebook(item, mainBot));
+  const notebooks = [...groups.values(), publicNotebook].map((item) =>
+    enrichNotebook(item, mainBot),
+  );
   const needle = query.trim().toLocaleLowerCase();
   if (!needle) return notebooks;
-  return notebooks.filter(notebook =>
-    notebook.name.toLocaleLowerCase().includes(needle)
-    || notebook.bot?.role.toLocaleLowerCase().includes(needle)
-    || notebook.entries.some(entry => matchesMemoryQuery(entry, needle)),
+  return notebooks.filter(
+    (notebook) =>
+      notebook.name.toLocaleLowerCase().includes(needle) ||
+      notebook.bot?.role.toLocaleLowerCase().includes(needle) ||
+      notebook.entries.some((entry) => matchesMemoryQuery(entry, needle)),
   );
 }
 
@@ -126,14 +159,16 @@ export function notebookReviewTasks(
   const isBotNotebook = notebook.target.scope === 'bot';
   const notebookMemoryIds = new Set(
     data.memories
-      .filter(entry => isBotNotebook
-        ? entry.scope === 'bot' && entry.ownerId === notebook.target.ownerId
-        : entry.scope !== 'bot')
-      .map(entry => entry.id),
+      .filter((entry) =>
+        isBotNotebook
+          ? entry.scope === 'bot' && entry.ownerId === notebook.target.ownerId
+          : entry.scope !== 'bot',
+      )
+      .map((entry) => entry.id),
   );
-  const allMemoryIds = data.memories.map(entry => entry.id);
+  const allMemoryIds = data.memories.map((entry) => entry.id);
 
-  return data.tasks.filter(task => {
+  return data.tasks.filter((task) => {
     if (task.kind !== 'memory-review') return false;
     if (task.requestId.startsWith('memory:bot:')) {
       const ownerId = task.requestId.split(':')[2];
@@ -143,9 +178,11 @@ export function notebookReviewTasks(
       return !isBotNotebook;
     }
     const text = `${task.requestId} ${task.goal}`;
-    const matchedNotebookEntry = [...notebookMemoryIds].some(id => text.includes(id));
+    const matchedNotebookEntry = [...notebookMemoryIds].some((id) => text.includes(id));
     if (matchedNotebookEntry) return true;
-    const matchedOtherEntry = allMemoryIds.some(id => !notebookMemoryIds.has(id) && text.includes(id));
+    const matchedOtherEntry = allMemoryIds.some(
+      (id) => !notebookMemoryIds.has(id) && text.includes(id),
+    );
     if (matchedOtherEntry) return false;
     return isBotNotebook && task.botId === notebook.target.ownerId;
   });

@@ -2,7 +2,8 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 
 const cookieName = 'ma_work_web_session';
 const matches = (actual: string, expected: string) => {
-  const left = Buffer.from(actual), right = Buffer.from(expected);
+  const left = Buffer.from(actual),
+    right = Buffer.from(expected);
   return left.length === right.length && timingSafeEqual(left, right);
 };
 
@@ -21,7 +22,10 @@ export function createWebSession() {
     },
     authorized(cookies: string | undefined): boolean {
       if (!session || !cookies) return false;
-      const cookie = cookies.split(';').map(value => value.trim()).find(value => value.startsWith(`${cookieName}=`));
+      const cookie = cookies
+        .split(';')
+        .map((value) => value.trim())
+        .find((value) => value.startsWith(`${cookieName}=`));
       return !!cookie && matches(cookie.slice(cookieName.length + 1), session);
     },
   };

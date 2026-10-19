@@ -5,25 +5,75 @@ import type { Bot, MemoryEntry, Snapshot } from '../src/domain/types.js';
 import { MemoryEditor } from '../apps/ui/src/MemoryEditor.js';
 
 vi.mock('../apps/ui/src/components.js', async (importOriginal) => ({
-  ...await importOriginal<typeof import('../apps/ui/src/components.js')>(),
+  ...(await importOriginal<typeof import('../apps/ui/src/components.js')>()),
   Modal: ({ children }: { children: ReactNode }) => children,
 }));
 
-const bot = (id: string): Bot => ({ id, name: id, role: '', instructions: '', connectionId: 'connection',
-  model: 'model', color: 'blue', toolNames: [], skillIds: [], memoryMode: 'propose', revision: 1, archived: false });
+const bot = (id: string): Bot => ({
+  id,
+  name: id,
+  role: '',
+  instructions: '',
+  connectionId: 'connection',
+  model: 'model',
+  color: 'blue',
+  toolNames: [],
+  skillIds: [],
+  memoryMode: 'propose',
+  revision: 1,
+  archived: false,
+});
 const data: Snapshot = {
-  bots: [bot('chief'), bot('member')], connections: [],
-  conversations: [{ id: 'team', name: '归档团队', kind: 'group', memberIds: ['chief', 'member'],
-    workspaceId: 'workspace', archived: true, createdAt: '2026-10-13T12:00:00Z' }],
-  settings: { maxActiveRuns: 6, maxChildren: 5, maxCoordinationRounds: 0, trayEnabled: true,
-    mainBotId: 'chief', autoAnswerMemberQuestions: true },
-  tasks: [], workspaces: [], messages: [], runs: [], approvals: [], artifacts: [], questions: [], processes: [],
-  memories: [], events: [], toolConnections: [], skills: [], dataDirectory: '', bindings: [], checkpoints: [], compactions: [], taskPlans: [], taskInputs: [],
+  bots: [bot('chief'), bot('member')],
+  connections: [],
+  conversations: [
+    {
+      id: 'team',
+      name: '归档团队',
+      kind: 'group',
+      memberIds: ['chief', 'member'],
+      workspaceId: 'workspace',
+      archived: true,
+      createdAt: '2026-10-13T12:00:00Z',
+    },
+  ],
+  settings: {
+    maxActiveRuns: 6,
+    maxChildren: 5,
+    maxCoordinationRounds: 0,
+    trayEnabled: true,
+    mainBotId: 'chief',
+    autoAnswerMemberQuestions: true,
+  },
+  tasks: [],
+  workspaces: [],
+  messages: [],
+  runs: [],
+  approvals: [],
+  artifacts: [],
+  questions: [],
+  processes: [],
+  memories: [],
+  events: [],
+  toolConnections: [],
+  skills: [],
+  dataDirectory: '',
+  bindings: [],
+  checkpoints: [],
+  compactions: [],
+  taskPlans: [],
+  taskInputs: [],
 };
 const render = (target?: Pick<MemoryEntry, 'scope' | 'ownerId'>, memory?: MemoryEntry) =>
-  renderToStaticMarkup(createElement(MemoryEditor, {
-    data, target, memory, mutate: async () => undefined as never, close: () => undefined,
-  }));
+  renderToStaticMarkup(
+    createElement(MemoryEditor, {
+      data,
+      target,
+      memory,
+      mutate: async () => undefined as never,
+      close: () => undefined,
+    }),
+  );
 
 describe('memory editor notebook target', () => {
   it('starts a member notebook addition with that member and fixes its ownership', () => {
@@ -43,9 +93,18 @@ describe('memory editor notebook target', () => {
   });
 
   it('retains a team entry and its owner conversation when editing from public memory', () => {
-    const memory: MemoryEntry = { id: 'memory', scope: 'team', ownerId: 'team', content: '已确认的约定',
-      allowedConversationIds: ['team'], sourceIds: ['source'], status: 'approved', revision: 1,
-      createdAt: '2026-10-13T12:00:00Z', updatedAt: '2026-10-13T12:00:00Z' };
+    const memory: MemoryEntry = {
+      id: 'memory',
+      scope: 'team',
+      ownerId: 'team',
+      content: '已确认的约定',
+      allowedConversationIds: ['team'],
+      sourceIds: ['source'],
+      status: 'approved',
+      revision: 1,
+      createdAt: '2026-10-13T12:00:00Z',
+      updatedAt: '2026-10-13T12:00:00Z',
+    };
     const html = render({ scope: 'shared', ownerId: 'shared' }, memory);
     expect(html).toContain('<option value="team" selected="">团队会话</option>');
     expect(html).toContain('归档团队');

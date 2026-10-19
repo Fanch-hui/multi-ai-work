@@ -10,7 +10,10 @@ export interface PlanStepInput {
   memberIds: string[];
   dependencyIds: string[];
 }
-export interface TaskPlanInput { title: string; steps: PlanStepInput[]; }
+export interface TaskPlanInput {
+  title: string;
+  steps: PlanStepInput[];
+}
 export interface PlanStepUpdate {
   stepId: string;
   status?: 'running' | 'completed' | 'skipped';
@@ -32,19 +35,40 @@ export interface TaskPlan {
   updatedAt: string;
 }
 export interface TaskPlanRecord extends Omit<TaskPlan, 'steps'> {
-  steps: (PlanStepInput & { chiefStatus?: 'pending' | 'running' | 'completed' | 'skipped'; note?: string })[];
+  steps: (PlanStepInput & {
+    chiefStatus?: 'pending' | 'running' | 'completed' | 'skipped';
+    note?: string;
+  })[];
 }
 
-export const taskPlanSchema = z.object({
-  title: z.string().trim().min(1).max(160),
-  steps: z.array(z.object({
-    id: z.string().trim().min(1).max(80), title: z.string().trim().min(1).max(160),
-    description: z.string().trim().max(2000).optional(), kind: z.enum(['work', 'discussion']),
-    memberIds: z.array(z.string().min(1)).min(1).max(50),
-    dependencyIds: z.array(z.string().min(1)).max(30).default([]),
-  }).strict()).min(1).max(30),
-}).strict();
-export const planStepUpdateSchema = z.object({
-  stepId: z.string().min(1).max(80), status: z.enum(['running', 'completed', 'skipped']).optional(),
-  note: z.string().trim().max(2000).optional(),
-}).strict().refine(input => input.status !== undefined || input.note !== undefined, '请提供进展状态或说明');
+export const taskPlanSchema = z
+  .object({
+    title: z.string().trim().min(1).max(160),
+    steps: z
+      .array(
+        z
+          .object({
+            id: z.string().trim().min(1).max(80),
+            title: z.string().trim().min(1).max(160),
+            description: z.string().trim().max(2000).optional(),
+            kind: z.enum(['work', 'discussion']),
+            memberIds: z.array(z.string().min(1)).min(1).max(50),
+            dependencyIds: z.array(z.string().min(1)).max(30).default([]),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(30),
+  })
+  .strict();
+export const planStepUpdateSchema = z
+  .object({
+    stepId: z.string().min(1).max(80),
+    status: z.enum(['running', 'completed', 'skipped']).optional(),
+    note: z.string().trim().max(2000).optional(),
+  })
+  .strict()
+  .refine(
+    (input) => input.status !== undefined || input.note !== undefined,
+    '请提供进展状态或说明',
+  );

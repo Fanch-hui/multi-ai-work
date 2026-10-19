@@ -8,11 +8,18 @@ export function ModalPresence({ show, children }: { show: boolean; children: Rea
   const lastChildren = useRef(children);
   if (show) lastChildren.current = children;
   useEffect(() => {
-    if (show) { setRetained(true); return; }
+    if (show) {
+      setRetained(true);
+      return;
+    }
     const delay = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 80 : 160;
     const timer = window.setTimeout(() => setRetained(false), delay);
     return () => window.clearTimeout(timer);
   }, [show]);
   if (!show && !retained) return null;
-  return <ModalVisibility.Provider value={show}>{show ? children : lastChildren.current}</ModalVisibility.Provider>;
+  return (
+    <ModalVisibility.Provider value={show}>
+      {show ? children : lastChildren.current}
+    </ModalVisibility.Provider>
+  );
 }

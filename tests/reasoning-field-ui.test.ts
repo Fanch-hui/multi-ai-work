@@ -5,7 +5,9 @@ import type { ModelInfo } from '../src/domain/types.js';
 import { ReasoningField } from '../apps/ui/src/ReasoningField.js';
 
 function render(model?: ModelInfo, value = '', provider: 'custom' | 'chatgpt' = 'custom') {
-  return renderToStaticMarkup(createElement(ReasoningField, { provider, model, value, onChange: () => {} }));
+  return renderToStaticMarkup(
+    createElement(ReasoningField, { provider, model, value, onChange: () => {} }),
+  );
 }
 
 describe('reasoning configuration field', () => {
@@ -16,16 +18,22 @@ describe('reasoning configuration field', () => {
       expect(html).toContain('<input');
       expect(html).toContain('<datalist');
       expect(html).toContain('value=""');
-      for (const level of ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']) expect(html).toContain(`value="${level}"`);
+      for (const level of ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'])
+        expect(html).toContain(`value="${level}"`);
     }
   });
 
   it('retains a provider-specific value in the free input without requiring a generic match', () => {
-    expect(render({ id: 'vendor-model', name: 'Vendor model' }, 'vendor-intensive')).toContain('value="vendor-intensive"');
+    expect(render({ id: 'vendor-model', name: 'Vendor model' }, 'vendor-intensive')).toContain(
+      'value="vendor-intensive"',
+    );
   });
 
   it('uses only the real declared levels, including an explicit empty list', () => {
-    const html = render({ id: 'gpt-5', name: 'Service model', reasoning: ['vendor-intensive'] }, 'vendor-intensive');
+    const html = render(
+      { id: 'gpt-5', name: 'Service model', reasoning: ['vendor-intensive'] },
+      'vendor-intensive',
+    );
     expect(html).toContain('<select');
     expect(html).toContain('vendor-intensive');
     expect(html).not.toContain('<datalist');

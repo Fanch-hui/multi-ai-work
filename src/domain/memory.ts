@@ -112,14 +112,25 @@ export interface MemoryConsolidationStatus {
 }
 
 export function normalizeMemoryContent(content: string): string {
-  return content.replace(/\r\n?/g, '\n').split('\n').map(line => line.trimEnd()).join('\n').trim();
+  return content
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .join('\n')
+    .trim();
 }
 
-export function normalizedAllowedConversations(entry: Pick<MemoryEntry, 'scope' | 'ownerId' | 'allowedConversationIds'>): string[] {
-  return entry.scope === 'team' ? [entry.ownerId] : [...new Set(entry.allowedConversationIds)].sort();
+export function normalizedAllowedConversations(
+  entry: Pick<MemoryEntry, 'scope' | 'ownerId' | 'allowedConversationIds'>,
+): string[] {
+  return entry.scope === 'team'
+    ? [entry.ownerId]
+    : [...new Set(entry.allowedConversationIds)].sort();
 }
 
-export function memoryPartitionKey(entry: Pick<MemoryEntry, 'scope' | 'ownerId' | 'allowedConversationIds'>): string {
+export function memoryPartitionKey(
+  entry: Pick<MemoryEntry, 'scope' | 'ownerId' | 'allowedConversationIds'>,
+): string {
   return `${entry.scope}:${entry.ownerId}:${normalizedAllowedConversations(entry).join(',')}`;
 }
 
@@ -129,25 +140,43 @@ export function memoryTopic(entry: Pick<MemoryEntry, 'topic' | 'scope'>): string
   return entry.scope === 'team' ? '团队约定' : entry.scope === 'shared' ? '共享资料' : '常用偏好';
 }
 
-export function memorySummary(entry: Pick<MemoryEntry, 'content' | 'summary' | 'summaryRevision' | 'revision'>, maxLength = 80): string {
-  const validSummary = entry.summary?.trim() && (entry.summaryRevision === undefined || entry.summaryRevision === entry.revision)
-    ? entry.summary.trim() : '';
+export function memorySummary(
+  entry: Pick<MemoryEntry, 'content' | 'summary' | 'summaryRevision' | 'revision'>,
+  maxLength = 80,
+): string {
+  const validSummary =
+    entry.summary?.trim() &&
+    (entry.summaryRevision === undefined || entry.summaryRevision === entry.revision)
+      ? entry.summary.trim()
+      : '';
   const source = (validSummary || entry.content).replace(/\s+/g, ' ').trim();
   if (source.length <= maxLength) return source;
   const firstSentence = source.match(/^[^。！？.!?\n]+[。！？.!?]?/)?.[0]?.trim();
-  if (firstSentence && firstSentence.length <= maxLength && firstSentence.length >= 8) return firstSentence;
+  if (firstSentence && firstSentence.length <= maxLength && firstSentence.length >= 8)
+    return firstSentence;
   return `${source.slice(0, Math.max(1, maxLength - 1)).trimEnd()}…`;
 }
 
-export function searchableMemoryText(entry: Pick<MemoryEntry, 'content' | 'topic' | 'summary' | 'summaryRevision' | 'revision' | 'tags'>): string {
-  const validSummary = entry.summary?.trim() && (entry.summaryRevision === undefined || entry.summaryRevision === entry.revision)
-    ? entry.summary.trim() : '';
-  return [entry.topic?.trim(), validSummary, ...(entry.tags ?? []), entry.content].filter(Boolean).join('\n');
+export function searchableMemoryText(
+  entry: Pick<
+    MemoryEntry,
+    'content' | 'topic' | 'summary' | 'summaryRevision' | 'revision' | 'tags'
+  >,
+): string {
+  const validSummary =
+    entry.summary?.trim() &&
+    (entry.summaryRevision === undefined || entry.summaryRevision === entry.revision)
+      ? entry.summary.trim()
+      : '';
+  return [entry.topic?.trim(), validSummary, ...(entry.tags ?? []), entry.content]
+    .filter(Boolean)
+    .join('\n');
 }
 
 export function estimateMemoryTokens(text: string): number {
   if (!text) return 0;
-  const cjkCount = (text.match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/gu) ?? []).length;
+  const cjkCount = (text.match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/gu) ?? [])
+    .length;
   return Math.ceil(cjkCount + (text.length - cjkCount) / 4);
 }
 

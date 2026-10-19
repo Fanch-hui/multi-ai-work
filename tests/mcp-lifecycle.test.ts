@@ -26,7 +26,9 @@ describe('MCP session lifecycle', () => {
     mcp = new McpConnections();
     const require = createRequire(import.meta.url);
     const moduleUrl = (name: string) => pathToFileURL(require.resolve(name)).href;
-    await writeFile(script, `
+    await writeFile(
+      script,
+      `
       import { Server } from ${JSON.stringify(moduleUrl('@modelcontextprotocol/sdk/server/index.js'))};
       import { StdioServerTransport } from ${JSON.stringify(moduleUrl('@modelcontextprotocol/sdk/server/stdio.js'))};
       import { ListToolsRequestSchema, CallToolRequestSchema } from ${JSON.stringify(moduleUrl('@modelcontextprotocol/sdk/types.js'))};
@@ -45,7 +47,8 @@ describe('MCP session lifecycle', () => {
         return { content: [{ type: 'text', text: String(process.pid) }] };
       });
       await server.connect(new StdioServerTransport());
-    `);
+    `,
+    );
     await writeFile(gatePath, 'ready');
   });
 
@@ -56,18 +59,35 @@ describe('MCP session lifecycle', () => {
   });
 
   function connection(id = 'shared', name = 'query'): ToolConnection {
-    return { id, name: 'Test', kind: 'mcp', enabled: true, transport: 'stdio', command: process.execPath,
-      args: [script, startedPath, closedPath, gatePath, name], toolNames: [], status: 'ready' };
+    return {
+      id,
+      name: 'Test',
+      kind: 'mcp',
+      enabled: true,
+      transport: 'stdio',
+      command: process.execPath,
+      args: [script, startedPath, closedPath, gatePath, name],
+      toolNames: [],
+      status: 'ready',
+    };
   }
 
   function context(connections = [connection()]): ToolExecutionContext {
-    return { toolConnections: connections, getSecret: async () => undefined, signal: new AbortController().signal,
-      requestApproval: async () => true } as unknown as ToolExecutionContext;
+    return {
+      toolConnections: connections,
+      getSecret: async () => undefined,
+      signal: new AbortController().signal,
+      requestApproval: async () => true,
+    } as unknown as ToolExecutionContext;
   }
 
   async function pids(file: string): Promise<number[]> {
-    try { return (await readFile(file, 'utf8')).trim().split('\n').filter(Boolean).map(Number); }
-    catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []; throw error; }
+    try {
+      return (await readFile(file, 'utf8')).trim().split('\n').filter(Boolean).map(Number);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+      throw error;
+    }
   }
 
   async function waitForCount(file: string, count: number): Promise<void> {
@@ -76,8 +96,10 @@ describe('MCP session lifecycle', () => {
 
   it('shares one process for concurrent initial connections and closed-session reconnects', async () => {
     const ctx = context();
-    const descriptions = await Promise.all(Array.from({ length: 8 }, () => mcp.describe('shared', ctx)));
-    expect(descriptions.every(tools => Array.isArray(tools) && tools.length === 1)).toBe(true);
+    const descriptions = await Promise.all(
+      Array.from({ length: 8 }, () => mcp.describe('shared', ctx)),
+    );
+    expect(descriptions.every((tools) => Array.isArray(tools) && tools.length === 1)).toBe(true);
     expect(await pids(startedPath)).toHaveLength(1);
     await expect(mcp.call('shared', 'query', { disconnect: true }, ctx)).rejects.toThrow();
     await waitForCount(closedPath, 1);
@@ -92,7 +114,10 @@ describe('MCP session lifecycle', () => {
     const second = context([connection('shared', 'second')]);
     const third = context([connection('shared', 'third')]);
     await mcp.describe('shared', first);
-    const [secondTools, thirdTools] = await Promise.all([mcp.describe('shared', second), mcp.describe('shared', third)]);
+    const [secondTools, thirdTools] = await Promise.all([
+      mcp.describe('shared', second),
+      mcp.describe('shared', third),
+    ]);
     expect(secondTools).toEqual([expect.objectContaining({ name: 'second' })]);
     expect(thirdTools).toEqual([expect.objectContaining({ name: 'third' })]);
     expect(await pids(startedPath)).toHaveLength(3);
@@ -109,7 +134,9 @@ describe('MCP session lifecycle', () => {
     await mcp.remove('shared');
     expect(mcp.resolve(alias, ctx)).toBeUndefined();
     await waitForCount(closedPath, 1);
-    const unavailable = context([{ ...connection('unavailable'), command: path.join(directory, 'missing') }]);
+    const unavailable = context([
+      { ...connection('unavailable'), command: path.join(directory, 'missing') },
+    ]);
     expect(await mcp.catalog(unavailable)).toEqual([]);
     expect(mcp.diagnostics(unavailable)).toHaveLength(1);
     await mcp.remove('unavailable');

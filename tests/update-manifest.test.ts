@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { compareUpdateVersions, selectUpdate } from '../src/updates/manifest.js';
 
-const asset = { platform: 'macos', architecture: 'arm64', kind: 'app-zip', size: 42, sha256: 'a'.repeat(64),
-  url: 'https://github.com/Fanch-hui/multi-ai-work/releases/download/v0.10.0/multi-AI-work-0.10.0-arm64.zip' };
-const select = (assets: unknown[], version = '0.10.0') => selectUpdate({ version, assets }, '0.9.9', 'macos', 'arm64');
+const asset = {
+  platform: 'macos',
+  architecture: 'arm64',
+  kind: 'app-zip',
+  size: 42,
+  sha256: 'a'.repeat(64),
+  url: 'https://github.com/Fanch-hui/multi-ai-work/releases/download/v0.10.0/multi-AI-work-0.10.0-arm64.zip',
+};
+const select = (assets: unknown[], version = '0.10.0') =>
+  selectUpdate({ version, assets }, '0.9.9', 'macos', 'arm64');
 
 describe('update manifest admission', () => {
   it('compares stable numeric versions and ignores old releases', () => {
@@ -21,8 +28,9 @@ describe('update manifest admission', () => {
     { url: asset.url.replace('https:', 'http:') },
     { url: asset.url + '?override=1' },
     { url: asset.url.replace('v0.10.0/', 'v0.9.9/') },
-    { size: 0 }, { sha256: 'unknown' },
-  ])('rejects invalid package identity or integrity metadata: %j', change => {
+    { size: 0 },
+    { sha256: 'unknown' },
+  ])('rejects invalid package identity or integrity metadata: %j', (change) => {
     expect(() => select([{ ...asset, ...change }])).toThrow();
   });
 });

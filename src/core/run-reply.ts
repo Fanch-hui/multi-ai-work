@@ -9,10 +9,18 @@ export class RunReplyWriter {
   private key?: string;
   private prefix: string;
 
-  constructor(private storage: Storage, private draft: Message, failed: (error: Error) => void, previousText = '') {
+  constructor(
+    private storage: Storage,
+    private draft: Message,
+    failed: (error: Error) => void,
+    previousText = '',
+  ) {
     this.writer = new RunTextWriter(storage, failed);
     const content = storage.getMessage(draft.id)?.content ?? '';
-    this.prefix = content && previousText.endsWith(content) ? previousText.slice(0, -content.length) : previousText;
+    this.prefix =
+      content && previousText.endsWith(content)
+        ? previousText.slice(0, -content.length)
+        : previousText;
   }
 
   append(event: RunEvent) {
@@ -21,8 +29,10 @@ export class RunReplyWriter {
     if (key) this.key = key;
     if (this.storage.getMessage(this.draft.id)?.status !== 'draft') this.next();
     const replace = event.data.replace;
-    const recorded = typeof replace === 'string' && !key && replace.startsWith(this.prefix)
-      ? { ...event, data: { ...event.data, replace: replace.slice(this.prefix.length) } } : event;
+    const recorded =
+      typeof replace === 'string' && !key && replace.startsWith(this.prefix)
+        ? { ...event, data: { ...event.data, replace: replace.slice(this.prefix.length) } }
+        : event;
     this.writer.append(recorded, this.draft.id);
   }
 
@@ -30,19 +40,37 @@ export class RunReplyWriter {
     this.flush();
     this.storage.transaction(() => {
       const current = this.storage.getMessage(this.draft.id);
-      if (current?.status === 'draft' && !current.content.trim() && !current.artifactIds.length) return;
+      if (current?.status === 'draft' && !current.content.trim() && !current.artifactIds.length)
+        return;
       if (current) {
-        if (current.status === 'draft') this.storage.updateMessage({ ...current, status: 'committed' });
+        if (current.status === 'draft')
+          this.storage.updateMessage({ ...current, status: 'committed' });
         this.prefix += current.content;
       }
-      Object.assign(this.draft, this.storage.appendMessage({ id: id(), conversationId: this.draft.conversationId,
-        authorType: 'bot', authorBotId: this.draft.authorBotId, runId: this.draft.runId,
-        content: '', artifactIds: [], status: 'draft', createdAt: now() }));
+      Object.assign(
+        this.draft,
+        this.storage.appendMessage({
+          id: id(),
+          conversationId: this.draft.conversationId,
+          authorType: 'bot',
+          authorBotId: this.draft.authorBotId,
+          runId: this.draft.runId,
+          content: '',
+          artifactIds: [],
+          status: 'draft',
+          createdAt: now(),
+        }),
+      );
     });
   }
 
-  beginReply() { this.prefix = ''; this.key = undefined; }
-  get prefixLength() { return this.prefix.length; }
+  beginReply() {
+    this.prefix = '';
+    this.key = undefined;
+  }
+  get prefixLength() {
+    return this.prefix.length;
+  }
 
   finalText(output: string) {
     const current = this.storage.getMessage(this.draft.id)?.content ?? '';
@@ -50,7 +78,13 @@ export class RunReplyWriter {
     return output || current;
   }
 
-  check() { this.writer.check(); }
-  flush() { this.writer.flush(); }
-  close() { this.writer.close(); }
+  check() {
+    this.writer.check();
+  }
+  flush() {
+    this.writer.flush();
+  }
+  close() {
+    this.writer.close();
+  }
 }

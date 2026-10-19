@@ -13,19 +13,30 @@ export function useAppUpdate() {
     let active = true;
     mounted.current = true;
     const bridge = appUpdateBridge();
-    if (!bridge) return () => { active = false; mounted.current = false; };
-    const unsubscribe = bridge.subscribe(value => {
+    if (!bridge)
+      return () => {
+        active = false;
+        mounted.current = false;
+      };
+    const unsubscribe = bridge.subscribe((value) => {
       revision.current++;
       setState(value);
       setError('');
     });
     const initialRevision = revision.current;
-    void bridge.request('state').then(value => {
-      if (active && revision.current === initialRevision) setState(value);
-    }).catch(cause => {
-      if (active && revision.current === initialRevision) setError(errorMessage(cause));
-    });
-    return () => { active = false; mounted.current = false; unsubscribe(); };
+    void bridge
+      .request('state')
+      .then((value) => {
+        if (active && revision.current === initialRevision) setState(value);
+      })
+      .catch((cause) => {
+        if (active && revision.current === initialRevision) setError(errorMessage(cause));
+      });
+    return () => {
+      active = false;
+      mounted.current = false;
+      unsubscribe();
+    };
   }, []);
   async function run(command: AppUpdateCommand) {
     const bridge = appUpdateBridge();
@@ -36,7 +47,12 @@ export function useAppUpdate() {
     setError('');
     try {
       const value = await bridge.request(command);
-      if (mounted.current && operation.current === currentOperation && revision.current === currentRevision) setState(value);
+      if (
+        mounted.current &&
+        operation.current === currentOperation &&
+        revision.current === currentRevision
+      )
+        setState(value);
       return value;
     } catch (cause) {
       if (mounted.current && operation.current === currentOperation) setError(errorMessage(cause));

@@ -7,6 +7,10 @@
   "main": "dist/apps/desktop/main.js",
   "description": "本地 AI 团队工作台",
   "scripts": {
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "lint": "biome lint .",
+    "check": "biome ci .",
     "dev": "concurrently -k \"tsx src/core/entry.ts --web\" \"vite --host 127.0.0.1\"",
     "dev:core": "tsx src/core/entry.ts --web",
     "dev:ui": "vite --host 127.0.0.1",
@@ -50,6 +54,7 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.15",
     "@tailwindcss/vite": "4.3.3",
     "@types/better-sqlite3": "9.6.0",
     "@types/node": "26.6.5",

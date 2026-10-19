@@ -9,18 +9,35 @@ export interface ModelHistoryEntry {
 }
 
 /** Plain conversation fallback; native protocol items must come from persisted provider history. */
-export function modelMessageHistory(messages: Message[], botId?: string,
-  resolveImage?: (artifactId: string) => ModelImage | undefined): ModelHistoryEntry[] {
-  return messages.filter(message => message.status === 'committed' && message.authorType !== 'system')
-    .sort((a, b) => a.sequence - b.sequence).map(message => ({
+export function modelMessageHistory(
+  messages: Message[],
+  botId?: string,
+  resolveImage?: (artifactId: string) => ModelImage | undefined,
+): ModelHistoryEntry[] {
+  return messages
+    .filter((message) => message.status === 'committed' && message.authorType !== 'system')
+    .sort((a, b) => a.sequence - b.sequence)
+    .map((message) => ({
       sequence: message.sequence,
       messageId: message.id,
       message: {
-        role: message.authorType === 'bot' && (!botId || message.authorBotId === botId) ? 'assistant' : 'user',
-        content: message.authorType === 'bot' && botId && message.authorBotId !== botId
-          ? `[成员 ${message.authorBotId}] ${message.content}` : message.content,
-        ...(resolveImage && message.artifactIds.length && (message.authorType === 'user' || botId && message.authorBotId !== botId) ? { images: message.artifactIds
-          .map(resolveImage).filter((image): image is ModelImage => Boolean(image)) } : {}),
+        role:
+          message.authorType === 'bot' && (!botId || message.authorBotId === botId)
+            ? 'assistant'
+            : 'user',
+        content:
+          message.authorType === 'bot' && botId && message.authorBotId !== botId
+            ? `[成员 ${message.authorBotId}] ${message.content}`
+            : message.content,
+        ...(resolveImage &&
+        message.artifactIds.length &&
+        (message.authorType === 'user' || (botId && message.authorBotId !== botId))
+          ? {
+              images: message.artifactIds
+                .map(resolveImage)
+                .filter((image): image is ModelImage => Boolean(image)),
+            }
+          : {}),
       },
     }));
 }
@@ -28,21 +45,33 @@ export function modelMessageHistory(messages: Message[], botId?: string,
 function isModelMessage(value: unknown): value is ModelMessage {
   if (!value || typeof value !== 'object') return false;
   const item = value as Partial<ModelMessage>;
-  return ['user', 'assistant', 'tool'].includes(item.role ?? '') && typeof item.content === 'string';
+  return (
+    ['user', 'assistant', 'tool'].includes(item.role ?? '') && typeof item.content === 'string'
+  );
 }
 
 function messageProjection(message: ModelMessage, protocol: Protocol): unknown {
   if (protocol === 'responses' && message.providerItems?.length) return message.providerItems;
-  const replay = protocol === 'chat-completions' && message.role === 'assistant' && message.chatReplay?.version === 1
-    ? message.chatReplay : undefined;
-  const reasoning = replay?.reasoningDetails?.length ? { reasoning_details: replay.reasoningDetails }
-    : replay?.reasoningField && replay.reasoningText ? { [replay.reasoningField]: replay.reasoningText } : {};
+  const replay =
+    protocol === 'chat-completions' &&
+    message.role === 'assistant' &&
+    message.chatReplay?.version === 1
+      ? message.chatReplay
+      : undefined;
+  const reasoning = replay?.reasoningDetails?.length
+    ? { reasoning_details: replay.reasoningDetails }
+    : replay?.reasoningField && replay.reasoningText
+      ? { [replay.reasoningField]: replay.reasoningText }
+      : {};
   return {
-    role: message.role, content: modelMessageContent(message),
+    role: message.role,
+    content: modelMessageContent(message),
     ...reasoning,
     ...(message.callId ? { callId: message.callId } : {}),
     ...(message.toolCalls?.length ? { toolCalls: message.toolCalls } : {}),
-    ...(message.images?.length ? { images: message.images.map(image => ({ artifactId: image.artifactId })) } : {}),
+    ...(message.images?.length
+      ? { images: message.images.map((image) => ({ artifactId: image.artifactId })) }
+      : {}),
   };
 }
 
@@ -62,50 +91,76 @@ export function estimateTextTokens(text: string): number {
 }
 
 function estimateValue(value: unknown, protocol: Protocol): number {
-  const text = typeof value === 'string' ? value : JSON.stringify(value, (key, item) => {
-    if (key === 'encrypted_content') return opaqueEstimate;
-    if (item?.type === 'reasoning.encrypted') return { ...item, data: opaqueEstimate };
-    return isModelMessage(item) ? messageProjection(item, protocol) : item;
-  }) ?? '';
+  const text =
+    typeof value === 'string'
+      ? value
+      : (JSON.stringify(value, (key, item) => {
+          if (key === 'encrypted_content') return opaqueEstimate;
+          if (item?.type === 'reasoning.encrypted') return { ...item, data: opaqueEstimate };
+          return isModelMessage(item) ? messageProjection(item, protocol) : item;
+        }) ?? '');
   return estimateTextTokens(text);
 }
 
 export function estimateTokens(value: unknown): number {
-  if (Array.isArray(value) && value.every(isModelMessage)) return estimateModelMessagesTokens(value);
+  if (Array.isArray(value) && value.every(isModelMessage))
+    return estimateModelMessagesTokens(value);
   return estimateValue(value, 'responses');
 }
 
-export function estimateModelMessageTokens(message: ModelMessage, protocol: Protocol = 'responses'): number {
+export function estimateModelMessageTokens(
+  message: ModelMessage,
+  protocol: Protocol = 'responses',
+): number {
   // Images are resolved later by the Provider; keep a conservative allowance per referenced image.
   return 4 + estimateValue(message, protocol) + (message.images?.length ?? 0) * 1024;
 }
 
-export function estimateModelMessagesTokens(messages: ModelMessage[], protocol: Protocol = 'responses'): number {
-  return messages.reduce((total, message) => total + estimateModelMessageTokens(message, protocol), 0);
+export function estimateModelMessagesTokens(
+  messages: ModelMessage[],
+  protocol: Protocol = 'responses',
+): number {
+  return messages.reduce(
+    (total, message) => total + estimateModelMessageTokens(message, protocol),
+    0,
+  );
 }
 
 function providerText(items: unknown[]): string {
-  return items.flatMap(item => {
-    if (!item || typeof item !== 'object') return [];
-    const value = item as Record<string, unknown>;
-    if (value.type === 'reasoning') return [];
-    if (typeof value.text === 'string') return [value.text];
-    if (typeof value.output === 'string') return [value.output];
-    if (typeof value.content === 'string') return [value.content];
-    return Array.isArray(value.content) ? [providerText(value.content)] : [];
-  }).filter(Boolean).join('\n');
+  return items
+    .flatMap((item) => {
+      if (!item || typeof item !== 'object') return [];
+      const value = item as Record<string, unknown>;
+      if (value.type === 'reasoning') return [];
+      if (typeof value.text === 'string') return [value.text];
+      if (typeof value.output === 'string') return [value.output];
+      if (typeof value.content === 'string') return [value.content];
+      return Array.isArray(value.content) ? [providerText(value.content)] : [];
+    })
+    .filter(Boolean)
+    .join('\n');
 }
 
 /** Readable history for summarization; replay continues to use the original protocol records. */
 export function summaryMessageProjection(message: ModelMessage): unknown {
-  const content = modelMessageContent(message, message.content || providerText(message.providerItems ?? []));
-  const imageArtifactIds = [...(message.images ?? []), ...(message.imageReferences ?? [])].map(image => image.artifactId);
+  const content = modelMessageContent(
+    message,
+    message.content || providerText(message.providerItems ?? []),
+  );
+  const imageArtifactIds = [...(message.images ?? []), ...(message.imageReferences ?? [])].map(
+    (image) => image.artifactId,
+  );
   return {
-    role: message.role, content,
-    ...(message.appContext ? { source: message.appContext.source, version: message.appContext.version } : {}),
+    role: message.role,
+    content,
+    ...(message.appContext
+      ? { source: message.appContext.source, version: message.appContext.version }
+      : {}),
     ...(message.callId ? { callId: message.callId } : {}),
     ...(message.toolCalls?.length ? { toolCalls: message.toolCalls } : {}),
-    ...(message.contextArtifactIds?.length ? { contextArtifactIds: message.contextArtifactIds } : {}),
+    ...(message.contextArtifactIds?.length
+      ? { contextArtifactIds: message.contextArtifactIds }
+      : {}),
     ...(imageArtifactIds.length ? { imageArtifactIds } : {}),
   };
 }
@@ -122,8 +177,15 @@ export function balancedHistoryUnits(history: ModelHistoryEntry[]): ModelHistory
       if (pending.has(call.id)) valid = false;
       pending.add(call.id);
     }
-    if (entry.message.role === 'tool' && (!entry.message.callId || !pending.delete(entry.message.callId))) valid = false;
-    if (valid && !pending.size) { units.push(unit); unit = []; }
+    if (
+      entry.message.role === 'tool' &&
+      (!entry.message.callId || !pending.delete(entry.message.callId))
+    )
+      valid = false;
+    if (valid && !pending.size) {
+      units.push(unit);
+      unit = [];
+    }
   }
   if (unit.length) units.push(unit);
   return units;

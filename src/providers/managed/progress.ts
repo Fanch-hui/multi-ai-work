@@ -1,4 +1,9 @@
-import type { ManagedProgress, ManagedProgressChange, ModelMessage, RunContext } from '../../domain/provider.js';
+import type {
+  ManagedProgress,
+  ManagedProgressChange,
+  ModelMessage,
+  RunContext,
+} from '../../domain/provider.js';
 import type { ModelRecovery } from '../../domain/recovery.js';
 
 export class ManagedRunState {
@@ -16,9 +21,19 @@ export class ManagedRunState {
 
   constructor(readonly context: RunContext) {
     const saved = context.progress;
-    this.messages = saved ? [...saved.messages] : [...context.messages, ...(context.runtimeContext ? [context.runtimeContext] : []), { role: 'user', content: context.prompt,
-      ...(context.images?.length ? { images: context.images } : {}) }];
-    this.currentStart = saved?.currentStart ?? context.messages.length + (context.runtimeContext ? 1 : 0);
+    this.messages = saved
+      ? [...saved.messages]
+      : [
+          ...context.messages,
+          ...(context.runtimeContext ? [context.runtimeContext] : []),
+          {
+            role: 'user',
+            content: context.prompt,
+            ...(context.images?.length ? { images: context.images } : {}),
+          },
+        ];
+    this.currentStart =
+      saved?.currentStart ?? context.messages.length + (context.runtimeContext ? 1 : 0);
     this.compaction = saved?.compaction;
     this.archiveStart = saved?.archiveStart ?? saved?.currentStart ?? context.messages.length;
     this.text = saved?.text ?? '';
@@ -29,7 +44,9 @@ export class ManagedRunState {
     this.phase = saved?.phase ?? 'ready';
   }
 
-  waitingForInput() { return !!(this.context.isWaitingForInput?.() || this.context.inputSignal?.aborted); }
+  waitingForInput() {
+    return !!(this.context.isWaitingForInput?.() || this.context.inputSignal?.aborted);
+  }
 
   takeUserInput(): boolean {
     this.context.signal.throwIfAborted();
@@ -40,7 +57,8 @@ export class ManagedRunState {
     this.text = '';
     this.earlyFailures = 0;
     this.messages.push(...input);
-    for (const message of input) if (message.sourceMessageId) this.pendingInputIds.add(message.sourceMessageId);
+    for (const message of input)
+      if (message.sourceMessageId) this.pendingInputIds.add(message.sourceMessageId);
     this.nextTurn();
     return true;
   }
@@ -59,7 +77,9 @@ export class ManagedRunState {
   }
 
   archiveMessages(): ModelMessage[] {
-    return this.compaction ? [...this.compaction.archived, ...this.messages.slice(this.compaction.start)] : this.messages;
+    return this.compaction
+      ? [...this.compaction.archived, ...this.messages.slice(this.compaction.start)]
+      : this.messages;
   }
 
   async applyProjection(messages: ModelMessage[], currentStart: number) {
@@ -70,12 +90,32 @@ export class ManagedRunState {
     await this.save('ready');
   }
 
-  async save(phase: ManagedProgress['phase'], recovery?: ModelRecovery, change?: ManagedProgressChange) {
+  async save(
+    phase: ManagedProgress['phase'],
+    recovery?: ModelRecovery,
+    change?: ManagedProgressChange,
+  ) {
     this.phase = phase;
-    await this.context.saveProgress?.({ messages: this.messages, currentStart: this.currentStart, archiveStart: this.archiveStart, contextSignature: this.context.contextSignature, compaction: this.compaction, text: this.text,
-      pendingInputIds: [...this.pendingInputIds], turnId: this.turnId, attempt: this.attempt, earlyFailures: this.earlyFailures, phase,
-      ...(recovery ? { recovery } : {}) }, change);
+    await this.context.saveProgress?.(
+      {
+        messages: this.messages,
+        currentStart: this.currentStart,
+        archiveStart: this.archiveStart,
+        contextSignature: this.context.contextSignature,
+        compaction: this.compaction,
+        text: this.text,
+        pendingInputIds: [...this.pendingInputIds],
+        turnId: this.turnId,
+        attempt: this.attempt,
+        earlyFailures: this.earlyFailures,
+        phase,
+        ...(recovery ? { recovery } : {}),
+      },
+      change,
+    );
   }
 
-  private newTurnId() { return `${this.context.runId}:turn:${++this.turnSequence}`; }
+  private newTurnId() {
+    return `${this.context.runId}:turn:${++this.turnSequence}`;
+  }
 }

@@ -5,22 +5,34 @@ import type { ModelHistoryEntry } from '../src/runtime/model-history.js';
 import { conversationStatistics } from '../apps/ui/src/conversation-statistics.js';
 import { eventually, setup } from './core-harness.js';
 
-async function turn(core: Awaited<ReturnType<typeof setup>>['core'], conversationId: string, content: string) {
+async function turn(
+  core: Awaited<ReturnType<typeof setup>>['core'],
+  conversationId: string,
+  content: string,
+) {
   const taskId = core.tasks.send({ conversationId, content }).taskIds[0];
   await eventually(() => core.state.storage.get<Task>('tasks', taskId)?.status === 'completed');
 }
 
 function answer(context: RunContext) {
   const text = '整理结果'.repeat(150);
-  return { text, messages: [...context.messages, { role: 'user', content: context.prompt },
-    { role: 'assistant', content: text }] as ModelMessage[] };
+  return {
+    text,
+    messages: [
+      ...context.messages,
+      { role: 'user', content: context.prompt },
+      { role: 'assistant', content: text },
+    ] as ModelMessage[],
+  };
 }
 
 describe('手动上下文压缩', () => {
   it('管家压缩沿用对话配置，保留任务安排且不访问后台任务的安排接口', async () => {
-    let summaries = 0, arranged = false, summaryPrompt = '';
+    let summaries = 0,
+      arranged = false,
+      summaryPrompt = '';
     let latestMessages: ModelMessage[] = [];
-    const { core, connection } = await setup(async context => {
+    const { core, connection } = await setup(async (context) => {
       if (context.runId.includes(':summary:')) {
         summaries++;
         summaryPrompt = context.prompt;
@@ -30,24 +42,63 @@ describe('手动上下文压缩', () => {
       latestMessages = context.messages;
       if (!arranged) {
         arranged = true;
-        await context.executeTool('set_task_plan', { title: '整理资料', steps: [
-          { id: 'deliver', title: '交付资料', kind: 'work', memberIds: [context.bot.id], dependencyIds: [] },
-        ] }, 'arrange');
-        await context.executeTool('update_plan_step', { stepId: 'deliver', status: 'completed' }, 'deliver');
+        await context.executeTool(
+          'set_task_plan',
+          {
+            title: '整理资料',
+            steps: [
+              {
+                id: 'deliver',
+                title: '交付资料',
+                kind: 'work',
+                memberIds: [context.bot.id],
+                dependencyIds: [],
+              },
+            ],
+          },
+          'arrange',
+        );
+        await context.executeTool(
+          'update_plan_step',
+          { stepId: 'deliver', status: 'completed' },
+          'deliver',
+        );
       }
-      return context.prompt === '你好' ? { text: '你好', messages: [...context.messages,
-        { role: 'user', content: context.prompt }, { role: 'assistant', content: '你好' }] as ModelMessage[] } : answer(context);
+      return context.prompt === '你好'
+        ? {
+            text: '你好',
+            messages: [
+              ...context.messages,
+              { role: 'user', content: context.prompt },
+              { role: 'assistant', content: '你好' },
+            ] as ModelMessage[],
+          }
+        : answer(context);
     });
-    await core.request('chief.configure', { input: { connectionId: connection.id, model: 'test',
-      contextWindow: 40000, memoryMode: 'off' } });
+    await core.request('chief.configure', {
+      input: {
+        connectionId: connection.id,
+        model: 'test',
+        contextWindow: 40000,
+        memoryMode: 'off',
+      },
+    });
     const roomId = core.state.settings().mainConversationId!;
     await turn(core, roomId, '你好');
-    await turn(core, roomId, '早期资料'.repeat(250)); await turn(core, roomId, '近期要求');
+    await turn(core, roomId, '早期资料'.repeat(250));
+    await turn(core, roomId, '近期要求');
     const plans = core.state.snapshot().taskPlans;
-    const compact = await core.request('conversations.compact', { id: roomId }) as Task;
-    await eventually(() => ['completed', 'failed'].includes(core.state.storage.get<Task>('tasks', compact.id)?.status ?? ''));
-    expect(core.state.storage.get<Task>('tasks', compact.id)).toMatchObject({ status: 'completed',
-      result: '上下文已压缩，完整聊天记录已保留', contextCompactionOutcome: 'compressed' });
+    const compact = (await core.request('conversations.compact', { id: roomId })) as Task;
+    await eventually(() =>
+      ['completed', 'failed'].includes(
+        core.state.storage.get<Task>('tasks', compact.id)?.status ?? '',
+      ),
+    );
+    expect(core.state.storage.get<Task>('tasks', compact.id)).toMatchObject({
+      status: 'completed',
+      result: '上下文已压缩，完整聊天记录已保留',
+      contextCompactionOutcome: 'compressed',
+    });
     expect(summaries).toBe(1);
     expect(summaryPrompt.includes('早期资料'.repeat(250))).toBe(true);
     expect(summaryPrompt).not.toContain('近期要求');
@@ -59,68 +110,104 @@ describe('手动上下文压缩', () => {
   });
 
   it('提前压缩并持久保存，保留聊天记录，压缩期间的新消息排队后使用摘要', async () => {
-    let started = false, finish!: () => void;
-    const ready = new Promise<void>(resolve => { finish = resolve; });
+    let started = false,
+      finish!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
     const seen: string[] = [];
-    const { core, bot } = await setup(async context => {
+    const { core, bot } = await setup(async (context) => {
       if (context.runId.includes(':summary:')) {
         started = true;
         await ready;
         context.emit({ type: 'status', data: { phase: 'model-request', step: 1 } });
-        context.emit({ type: 'status', data: { phase: 'model-response', step: 1, durationMs: 20,
-          usage: { source: 'reported', inputTokens: 100, outputTokens: 10 } } });
+        context.emit({
+          type: 'status',
+          data: {
+            phase: 'model-response',
+            step: 1,
+            durationMs: 20,
+            usage: { source: 'reported', inputTokens: 100, outputTokens: 10 },
+          },
+        });
         expect(context.tools).toEqual([]);
-        return { text: '较早对话已整理为摘要', usage: { source: 'reported' as const, inputTokens: 100, outputTokens: 10 } };
+        return {
+          text: '较早对话已整理为摘要',
+          usage: { source: 'reported' as const, inputTokens: 100, outputTokens: 10 },
+        };
       }
       seen.push(JSON.stringify(context.messages));
       return answer(context);
     });
     const member = core.entities.saveBot({ ...bot('助手', ['ask_user']), contextWindow: 40000 });
-    const room = core.entities.createConversation({ name: '私聊', kind: 'private', memberIds: [member.id],
-      workspaceId: core.state.snapshot().workspaces[0].id });
+    const room = core.entities.createConversation({
+      name: '私聊',
+      kind: 'private',
+      memberIds: [member.id],
+      workspaceId: core.state.snapshot().workspaces[0].id,
+    });
     await turn(core, room.id, '早期资料'.repeat(250));
     await turn(core, room.id, '近期要求请保留原文');
     const before = core.state.storage.messages(room.id);
     const archiveBefore = core.state.storage.all('provider_archive');
-    const binding = core.state.snapshot().bindings.find(binding => binding.conversationId === room.id)!;
-    const compact = await core.request('conversations.compact', { id: room.id }) as Task;
+    const binding = core.state
+      .snapshot()
+      .bindings.find((binding) => binding.conversationId === room.id)!;
+    const compact = (await core.request('conversations.compact', { id: room.id })) as Task;
     await eventually(() => started);
-    expect((await core.request('conversations.compact', { id: room.id }) as Task).id).toBe(compact.id);
+    expect(((await core.request('conversations.compact', { id: room.id })) as Task).id).toBe(
+      compact.id,
+    );
     const sent = core.tasks.send({ conversationId: room.id, content: '压缩后继续的新消息' });
     expect(sent.taskIds[0]).not.toBe(compact.id);
     expect(core.state.storage.get<Task>('tasks', sent.taskIds[0])?.status).toBe('queued');
     expect(core.state.storage.messages(room.id).slice(0, before.length)).toEqual(before);
     finish();
-    await eventually(() => core.state.storage.get<Task>('tasks', compact.id)?.status === 'completed');
+    await eventually(
+      () => core.state.storage.get<Task>('tasks', compact.id)?.status === 'completed',
+    );
     const checkpoint = core.state.snapshot().checkpoints.at(-1)!;
     expect(checkpoint.content).toContain('较早对话已整理为摘要');
     expect(core.state.storage.messages(room.id).slice(0, before.length)).toEqual(before);
-    expect(core.state.storage.all('provider_archive').slice(0, archiveBefore.length)).toEqual(archiveBefore);
-    await eventually(() => core.state.storage.get<Task>('tasks', sent.taskIds[0])?.status === 'completed');
+    expect(core.state.storage.all('provider_archive').slice(0, archiveBefore.length)).toEqual(
+      archiveBefore,
+    );
+    await eventually(
+      () => core.state.storage.get<Task>('tasks', sent.taskIds[0])?.status === 'completed',
+    );
     expect(seen.at(-1)).toContain('较早对话已整理为摘要');
     expect(seen.at(-1)).toContain('近期要求请保留原文');
     expect(seen.at(-1)).not.toContain('手动压缩上下文');
     const snapshot = core.state.snapshot();
-    expect(snapshot.bindings.find(item => item.id === binding.id)?.generation).toBe(binding.generation);
-    const run = snapshot.runs.find(run => run.taskId === compact.id)!;
+    expect(snapshot.bindings.find((item) => item.id === binding.id)?.generation).toBe(
+      binding.generation,
+    );
+    const run = snapshot.runs.find((run) => run.taskId === compact.id)!;
     expect(run.metrics).toMatchObject({ requests: 1, summaryRequests: 1 });
     expect(run.usage).toMatchObject({ inputTokens: 100, outputTokens: 10 });
     expect(conversationStatistics(snapshot, room).turns).toBe(3);
   });
 
   it('摘要失败保留原工作上下文与聊天记录', async () => {
-    const { core, bot } = await setup(async context => {
+    const { core, bot } = await setup(async (context) => {
       if (context.runId.includes(':summary:')) throw new Error('summary unavailable');
       return answer(context);
     });
     const member = core.entities.saveBot({ ...bot('助手'), contextWindow: 40000 });
-    const room = core.entities.createConversation({ name: '私聊', kind: 'private', memberIds: [member.id],
-      workspaceId: core.state.snapshot().workspaces[0].id });
-    await turn(core, room.id, '早期资料'.repeat(250)); await turn(core, room.id, '近期内容');
+    const room = core.entities.createConversation({
+      name: '私聊',
+      kind: 'private',
+      memberIds: [member.id],
+      workspaceId: core.state.snapshot().workspaces[0].id,
+    });
+    await turn(core, room.id, '早期资料'.repeat(250));
+    await turn(core, room.id, '近期内容');
     const before = core.state.storage.messages(room.id);
-    const binding = core.state.snapshot().bindings.find(binding => binding.conversationId === room.id)!;
+    const binding = core.state
+      .snapshot()
+      .bindings.find((binding) => binding.conversationId === room.id)!;
     const history = core.state.storage.metadata<ModelHistoryEntry[]>(`history:${binding.id}`);
-    const compact = await core.request('conversations.compact', { id: room.id }) as Task;
+    const compact = (await core.request('conversations.compact', { id: room.id })) as Task;
     await eventually(() => core.state.storage.get<Task>('tasks', compact.id)?.status === 'failed');
     expect(core.state.storage.get<Task>('tasks', compact.id)?.error).toContain('摘要生成未完成');
     expect(core.state.storage.metadata(`history:${binding.id}`)).toEqual(history);
@@ -130,27 +217,48 @@ describe('手动上下文压缩', () => {
 
   it('摘要没有缩减上下文时完成检查并保留原文，明确标记未做改动', async () => {
     let latestMessages: ModelMessage[] = [];
-    const { core, bot } = await setup(async context => {
-      if (context.runId.includes(':summary:')) return { text: '这是一份比原对话更长的摘要'.repeat(200) };
+    const { core, bot } = await setup(async (context) => {
+      if (context.runId.includes(':summary:'))
+        return { text: '这是一份比原对话更长的摘要'.repeat(200) };
       latestMessages = context.messages;
-      return { text: '好', messages: [...context.messages, { role: 'user', content: context.prompt },
-        { role: 'assistant', content: '好' }] as ModelMessage[] };
+      return {
+        text: '好',
+        messages: [
+          ...context.messages,
+          { role: 'user', content: context.prompt },
+          { role: 'assistant', content: '好' },
+        ] as ModelMessage[],
+      };
     });
     const member = core.entities.saveBot({ ...bot('助手'), contextWindow: 40000 });
-    const room = core.entities.createConversation({ name: '私聊', kind: 'private', memberIds: [member.id],
-      workspaceId: core.state.snapshot().workspaces[0].id });
-    await turn(core, room.id, '你好'); await turn(core, room.id, '继续');
+    const room = core.entities.createConversation({
+      name: '私聊',
+      kind: 'private',
+      memberIds: [member.id],
+      workspaceId: core.state.snapshot().workspaces[0].id,
+    });
+    await turn(core, room.id, '你好');
+    await turn(core, room.id, '继续');
     const before = core.state.storage.messages(room.id);
-    const binding = core.state.snapshot().bindings.find(binding => binding.conversationId === room.id)!;
+    const binding = core.state
+      .snapshot()
+      .bindings.find((binding) => binding.conversationId === room.id)!;
     const history = core.state.storage.metadata(`history:${binding.id}`);
-    const compact = await core.request('conversations.compact', { id: room.id }) as Task;
-    await eventually(() => core.state.storage.get<Task>('tasks', compact.id)?.status === 'completed');
-    expect(core.state.storage.get<Task>('tasks', compact.id)).toMatchObject({ contextCompactionOutcome: 'unchanged',
-      result: '本次摘要未减少上下文占用，已保留原上下文' });
+    const compact = (await core.request('conversations.compact', { id: room.id })) as Task;
+    await eventually(
+      () => core.state.storage.get<Task>('tasks', compact.id)?.status === 'completed',
+    );
+    expect(core.state.storage.get<Task>('tasks', compact.id)).toMatchObject({
+      contextCompactionOutcome: 'unchanged',
+      result: '本次摘要未减少上下文占用，已保留原上下文',
+    });
     expect(core.state.storage.metadata(`history:${binding.id}`)).toEqual(history);
     expect(core.state.storage.messages(room.id)).toEqual(before);
     expect(core.state.snapshot().checkpoints).toHaveLength(0);
-    expect(core.state.snapshot().compactions.at(-1)).toMatchObject({ status: 'unchanged', reason: 'not_smaller' });
+    expect(core.state.snapshot().compactions.at(-1)).toMatchObject({
+      status: 'unchanged',
+      reason: 'not_smaller',
+    });
     await turn(core, room.id, '接着做');
     expect(JSON.stringify(latestMessages)).toContain('你好');
     expect(JSON.stringify(latestMessages)).toContain('继续');
@@ -159,32 +267,54 @@ describe('手动上下文压缩', () => {
 
   it('没有较早历史时正常完成检查，不请求摘要', async () => {
     let summaries = 0;
-    const { core, bot } = await setup(async context => {
+    const { core, bot } = await setup(async (context) => {
       if (context.runId.includes(':summary:')) summaries++;
       return { text: '完成' };
     });
     const member = core.entities.saveBot({ ...bot('助手'), contextWindow: 40000 });
-    const room = core.entities.createConversation({ name: '私聊', kind: 'private', memberIds: [member.id],
-      workspaceId: core.state.snapshot().workspaces[0].id });
-    const compact = await core.request('conversations.compact', { id: room.id }) as Task;
-    await eventually(() => core.state.storage.get<Task>('tasks', compact.id)?.status === 'completed');
-    expect(core.state.storage.get<Task>('tasks', compact.id)).toMatchObject({ contextCompactionOutcome: 'unchanged',
-      result: '当前没有可压缩的较早历史，可继续对话后再试' });
+    const room = core.entities.createConversation({
+      name: '私聊',
+      kind: 'private',
+      memberIds: [member.id],
+      workspaceId: core.state.snapshot().workspaces[0].id,
+    });
+    const compact = (await core.request('conversations.compact', { id: room.id })) as Task;
+    await eventually(
+      () => core.state.storage.get<Task>('tasks', compact.id)?.status === 'completed',
+    );
+    expect(core.state.storage.get<Task>('tasks', compact.id)).toMatchObject({
+      contextCompactionOutcome: 'unchanged',
+      result: '当前没有可压缩的较早历史，可继续对话后再试',
+    });
     expect(summaries).toBe(0);
     expect(core.state.snapshot().checkpoints).toHaveLength(0);
     expect(core.state.storage.messages(room.id)).toEqual([]);
   });
 
   it('仅接受空闲的托管单成员对话', async () => {
-    const { core, bot, connection } = await setup(async context => answer(context));
+    const { core, bot, connection } = await setup(async (context) => answer(context));
     const member: Bot = bot('助手');
-    const room: Conversation = core.entities.createConversation({ name: '私聊', kind: 'private', memberIds: [member.id],
-      workspaceId: core.state.snapshot().workspaces[0].id });
-    await expect(core.request('conversations.compact', { id: room.id })).rejects.toThrow('设置上下文窗口');
+    const room: Conversation = core.entities.createConversation({
+      name: '私聊',
+      kind: 'private',
+      memberIds: [member.id],
+      workspaceId: core.state.snapshot().workspaces[0].id,
+    });
+    await expect(core.request('conversations.compact', { id: room.id })).rejects.toThrow(
+      '设置上下文窗口',
+    );
     core.entities.saveBot({ ...member, contextWindow: 40000 });
     core.tasks.send({ conversationId: room.id, content: '正在工作' });
-    await expect(core.request('conversations.compact', { id: room.id })).rejects.toThrow('当前对话任务结束');
-    core.state.storage.put('connections', { ...connection, provider: 'qoder', status: 'ready' } as Connection);
-    await expect(core.request('conversations.compact', { id: room.id })).rejects.toThrow('原生运行时管理');
+    await expect(core.request('conversations.compact', { id: room.id })).rejects.toThrow(
+      '当前对话任务结束',
+    );
+    core.state.storage.put('connections', {
+      ...connection,
+      provider: 'qoder',
+      status: 'ready',
+    } as Connection);
+    await expect(core.request('conversations.compact', { id: room.id })).rejects.toThrow(
+      '原生运行时管理',
+    );
   });
 });

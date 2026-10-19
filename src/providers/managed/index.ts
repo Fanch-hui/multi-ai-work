@@ -10,16 +10,30 @@ export class ChatGptAdapter implements ProviderAdapter {
   readonly kind = 'chatgpt' as const;
   private readonly responses = new ResponsesSessionPool();
   async probe(context: ProbeContext) {
-    const record = await getOAuthAccessToken(context.connection.secretRef, context.getSecret, context.saveSecret, context.signal);
-    return { models: await modelCatalog(context, record.access_token, true), capabilities: capabilities(true), accountScope: accountScope(record) };
+    const record = await getOAuthAccessToken(
+      context.connection.secretRef,
+      context.getSecret,
+      context.saveSecret,
+      context.signal,
+    );
+    return {
+      models: await modelCatalog(context, record.access_token, true),
+      capabilities: capabilities(true),
+      accountScope: accountScope(record),
+    };
   }
   async run(context: RunContext) {
     try {
-      return await runManaged(createOAuthClient(context), context, 'responses', undefined, { responses: this.responses });
+      return await runManaged(createOAuthClient(context), context, 'responses', undefined, {
+        responses: this.responses,
+      });
+    } catch (error) {
+      throw providerError(error);
     }
-    catch (error) { throw providerError(error); }
   }
-  async close() { this.responses.close(); }
+  async close() {
+    this.responses.close();
+  }
 }
 export class CustomApiAdapter implements ProviderAdapter {
   readonly kind = 'custom' as const;
@@ -31,16 +45,33 @@ export class CustomApiAdapter implements ProviderAdapter {
   }
   async probe(context: ProbeContext) {
     this.protocol(context);
-    const token = context.connection.authMode === 'none' ? undefined : await context.getSecret(context.connection.secretRef);
+    const token =
+      context.connection.authMode === 'none'
+        ? undefined
+        : await context.getSecret(context.connection.secretRef);
     return { models: await modelCatalog(context, token, false), capabilities: capabilities(false) };
   }
   async run(context: RunContext) {
     const protocol = this.protocol(context);
-    const token = context.connection.authMode === 'none' ? undefined : await context.getSecret(context.connection.secretRef);
+    const token =
+      context.connection.authMode === 'none'
+        ? undefined
+        : await context.getSecret(context.connection.secretRef);
     if (context.connection.authMode !== 'none' && !token) throw new Error('请填写 API 密钥');
-    try { return await runManaged(createClient(endpoint(context.connection), token), context, protocol, undefined,
-      { chatReplay: this.chatReplay, responses: this.responses }); }
-    catch (error) { throw providerError(error); }
+    try {
+      return await runManaged(
+        createClient(endpoint(context.connection), token),
+        context,
+        protocol,
+        undefined,
+        { chatReplay: this.chatReplay, responses: this.responses },
+      );
+    } catch (error) {
+      throw providerError(error);
+    }
   }
-  async close() { this.chatReplay.clear(); this.responses.close(); }
+  async close() {
+    this.chatReplay.clear();
+    this.responses.close();
+  }
 }

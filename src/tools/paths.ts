@@ -4,25 +4,39 @@ import type { ToolExecutionContext } from '../domain/tools.js';
 
 function within(root: string, target: string): boolean {
   const relative = path.relative(root, target);
-  return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
+  return (
+    relative === '' ||
+    (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative))
+  );
 }
 
 export async function resolveCanonicalRoot(workspaceDir: string): Promise<string> {
   return realpath(workspaceDir);
 }
 
-export async function validateExistingWorkspaceCandidate(rootReal: string, workspaceDir: string, candidatePath: string): Promise<string> {
+export async function validateExistingWorkspaceCandidate(
+  rootReal: string,
+  workspaceDir: string,
+  candidatePath: string,
+): Promise<string> {
   const target = path.resolve(rootReal, candidatePath);
-  if (!within(rootReal, target) && !within(path.resolve(workspaceDir), target)) throw new Error('路径超出授权工作目录');
+  if (!within(rootReal, target) && !within(path.resolve(workspaceDir), target))
+    throw new Error('路径超出授权工作目录');
   const canonical = await realpath(target);
   if (!within(rootReal, canonical)) throw new Error('符号链接指向授权目录外');
   return canonical;
 }
 
-export async function workspacePath(input: string, context: ToolExecutionContext, create = false, rootReal?: string): Promise<string> {
-  const root = rootReal ?? await resolveCanonicalRoot(context.workspace.path);
+export async function workspacePath(
+  input: string,
+  context: ToolExecutionContext,
+  create = false,
+  rootReal?: string,
+): Promise<string> {
+  const root = rootReal ?? (await resolveCanonicalRoot(context.workspace.path));
   const target = path.resolve(root, input);
-  if (!within(root, target) && !within(path.resolve(context.workspace.path), target)) throw new Error('路径超出授权工作目录');
+  if (!within(root, target) && !within(path.resolve(context.workspace.path), target))
+    throw new Error('路径超出授权工作目录');
   let current = target;
   while (true) {
     try {
@@ -46,4 +60,6 @@ export async function workspacePath(input: string, context: ToolExecutionContext
   }
 }
 
-export async function ensureParent(target: string): Promise<void> { await mkdir(path.dirname(target), { recursive: true }); }
+export async function ensureParent(target: string): Promise<void> {
+  await mkdir(path.dirname(target), { recursive: true });
+}

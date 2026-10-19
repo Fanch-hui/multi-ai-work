@@ -17,19 +17,45 @@ export async function resolveModelArtifactImage(artifact: Artifact): Promise<Enc
   if (!file.isFile() || file.size <= 0 || file.size > BigInt(attachmentSizeLimit)) {
     throw new Error('图片需为不超过 25 MiB 的普通文件');
   }
-  const identity = [MODEL_IMAGE_ENCODING_VERSION, source, file.dev, file.ino, file.size, file.mtimeNs, file.ctimeNs].join(':');
+  const identity = [
+    MODEL_IMAGE_ENCODING_VERSION,
+    source,
+    file.dev,
+    file.ino,
+    file.size,
+    file.mtimeNs,
+    file.ctimeNs,
+  ].join(':');
   const key = createHash('sha256').update(identity).digest('hex');
-  const format = artifact.mimeType === 'image/jpeg' ? 'jpeg' : artifact.mimeType === 'image/webp' ? 'webp' : 'png';
-  const cache = join(dirname(source), `${artifact.id}-preview`, '.image', `input-v${MODEL_IMAGE_ENCODING_VERSION}-${key}.${format}`);
+  const format =
+    artifact.mimeType === 'image/jpeg'
+      ? 'jpeg'
+      : artifact.mimeType === 'image/webp'
+        ? 'webp'
+        : 'png';
+  const cache = join(
+    dirname(source),
+    `${artifact.id}-preview`,
+    '.image',
+    `input-v${MODEL_IMAGE_ENCODING_VERSION}-${key}.${format}`,
+  );
   const existing = pending.get(cache);
   if (existing) return existing;
   const work = loadOrEncode(source, cache, artifact.mimeType, format);
   pending.set(cache, work);
-  try { return await work; }
-  finally { pending.delete(cache); }
+  try {
+    return await work;
+  } finally {
+    pending.delete(cache);
+  }
 }
 
-async function loadOrEncode(source: string, cache: string, mimeType: string, format: 'jpeg' | 'webp' | 'png'): Promise<EncodedImage> {
+async function loadOrEncode(
+  source: string,
+  cache: string,
+  mimeType: string,
+  format: 'jpeg' | 'webp' | 'png',
+): Promise<EncodedImage> {
   try {
     return { mimeType: `image/${format}`, data: (await readFile(cache)).toString('base64') };
   } catch (error) {
@@ -43,7 +69,9 @@ async function loadOrEncode(source: string, cache: string, mimeType: string, for
   try {
     await writeFile(temporary, encoded, { mode: 0o600, flag: 'wx' });
     await rename(temporary, cache);
-  } finally { await rm(temporary, { force: true }); }
+  } finally {
+    await rm(temporary, { force: true });
+  }
   return { mimeType: `image/${format}`, data: encoded.toString('base64') };
 }
 
@@ -52,9 +80,15 @@ async function encode(original: Buffer, format: 'jpeg' | 'webp' | 'png'): Promis
     const metadata = await sharp(original, decodeOptions).metadata();
     if (!metadata.width || !metadata.height) throw new Error('图片尺寸无效');
     if ((metadata.pages ?? 1) > 1) throw new Error('暂不支持动画图片，请上传静态图片');
-    let pipeline = sharp(original, decodeOptions).rotate().resize({ width: 2048, height: 2048, fit: 'inside', withoutEnlargement: true });
-    pipeline = format === 'jpeg' ? pipeline.jpeg({ quality: 84 }) : format === 'webp' ? pipeline.webp({ quality: 84 })
-      : pipeline.png({ compressionLevel: 9 });
+    let pipeline = sharp(original, decodeOptions)
+      .rotate()
+      .resize({ width: 2048, height: 2048, fit: 'inside', withoutEnlargement: true });
+    pipeline =
+      format === 'jpeg'
+        ? pipeline.jpeg({ quality: 84 })
+        : format === 'webp'
+          ? pipeline.webp({ quality: 84 })
+          : pipeline.png({ compressionLevel: 9 });
     return await pipeline.toBuffer();
   } catch (error) {
     if (error instanceof Error && error.message === '暂不支持动画图片，请上传静态图片') throw error;

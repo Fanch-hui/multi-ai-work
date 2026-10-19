@@ -19,15 +19,17 @@ export function MemoryHistory({ memory, data }: { memory: MemoryEntry; data: Sna
     let active = true;
     setStatus('正在读取历史记录…');
     void request<MemoryHistoryResponse>('memories.history', { id: memory.id })
-      .then(result => {
+      .then((result) => {
         if (!active) return;
         setHistory(result);
         setStatus('');
       })
-      .catch(error => {
+      .catch((error) => {
         if (active) setStatus(`历史记录读取失败：${errorMessage(error)}`);
       });
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [memory.id, memory.revision]);
 
   return (
@@ -40,20 +42,27 @@ export function MemoryHistory({ memory, data }: { memory: MemoryEntry; data: Sna
         <>
           {history.supersededEntries.length > 0 && (
             <div className="space-y-2">
-              <p className="text-xs font-medium text-slate-600">合并替代的原条目（{history.supersededEntries.length} 条）</p>
-              {history.supersededEntries.map(oldEntry => (
-                <div key={oldEntry.id} className="rounded-lg border border-slate-100 bg-slate-50/70 p-3">
+              <p className="text-xs font-medium text-slate-600">
+                合并替代的原条目（{history.supersededEntries.length} 条）
+              </p>
+              {history.supersededEntries.map((oldEntry) => (
+                <div
+                  key={oldEntry.id}
+                  className="rounded-lg border border-slate-100 bg-slate-50/70 p-3"
+                >
                   <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
                     <span>原版本 v{oldEntry.revision}</span>
                     {oldEntry.topic && <span>· {oldEntry.topic}</span>}
                     <span>· {timeLabel(oldEntry.updatedAt)}</span>
                   </div>
-                  <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-slate-600">{oldEntry.content}</p>
-                  {oldEntry.sourceIds.map(sourceId => (
+                  <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-slate-600">
+                    {oldEntry.content}
+                  </p>
+                  {oldEntry.sourceIds.map((sourceId) => (
                     <MemorySource
                       key={sourceId}
                       id={sourceId}
-                      loaded={data.messages.find(msg => msg.id === sourceId)}
+                      loaded={data.messages.find((msg) => msg.id === sourceId)}
                       version={oldEntry}
                     />
                   ))}
@@ -63,8 +72,10 @@ export function MemoryHistory({ memory, data }: { memory: MemoryEntry; data: Sna
           )}
           {history.revisions.length > 0 && (
             <div className="space-y-2">
-              <p className="text-xs font-medium text-slate-600">修订历史（{history.revisions.length} 个历史版本）</p>
-              {history.revisions.map(rev => (
+              <p className="text-xs font-medium text-slate-600">
+                修订历史（{history.revisions.length} 个历史版本）
+              </p>
+              {history.revisions.map((rev) => (
                 <div key={rev.id} className="rounded-lg border border-slate-100 bg-slate-50/50 p-3">
                   <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
                     <span>v{rev.revision}</span>
@@ -72,13 +83,17 @@ export function MemoryHistory({ memory, data }: { memory: MemoryEntry; data: Sna
                     <span>· {actorLabel(rev.updatedBy)}</span>
                     <span>· {timeLabel(rev.createdAt)}</span>
                   </div>
-                  <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-slate-600">{rev.content}</p>
+                  <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-slate-600">
+                    {rev.content}
+                  </p>
                 </div>
               ))}
             </div>
           )}
           {!history.supersededEntries.length && !history.revisions.length && (
-            <p className="text-xs text-slate-400">暂无早期修订或合并记录（当前 v{memory.revision}）。</p>
+            <p className="text-xs text-slate-400">
+              暂无早期修订或合并记录（当前 v{memory.revision}）。
+            </p>
           )}
         </>
       )}

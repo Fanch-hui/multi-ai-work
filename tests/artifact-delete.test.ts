@@ -15,12 +15,26 @@ describe('库成果删除', () => {
     const artifact = await importAttachment(core.state, conversationId, original);
     const other = await importAttachment(core.state, conversationId, original);
     core.state.storage.put('artifacts', { ...artifact, workingPath: original });
-    const cacheKey = 'a'.repeat(64), cache = path.join(root, 'artifact-previews', cacheKey);
-    await mkdir(cache, { recursive: true }); await writeFile(path.join(cache, 'page.png'), '预览');
+    const cacheKey = 'a'.repeat(64),
+      cache = path.join(root, 'artifact-previews', cacheKey);
+    await mkdir(cache, { recursive: true });
+    await writeFile(path.join(cache, 'page.png'), '预览');
     core.state.storage.setMetadata(`artifact-preview:${artifact.id}`, cacheKey);
-    const task = { id: 'completed-task', conversationId, botId: core.state.settings().mainBotId!,
-      status: 'completed', artifactIds: [artifact.id, other.id], runIds: [], dependencyIds: [], goal: '交付',
-      expectedOutput: '', requestId: 'completed-task', depth: 0, createdAt: '', updatedAt: '' } satisfies Task;
+    const task = {
+      id: 'completed-task',
+      conversationId,
+      botId: core.state.settings().mainBotId!,
+      status: 'completed',
+      artifactIds: [artifact.id, other.id],
+      runIds: [],
+      dependencyIds: [],
+      goal: '交付',
+      expectedOutput: '',
+      requestId: 'completed-task',
+      depth: 0,
+      createdAt: '',
+      updatedAt: '',
+    } satisfies Task;
     core.state.storage.put('tasks', task);
     expect(await core.request('artifacts.delete', { id: artifact.id })).toEqual({ ok: true });
     expect(core.state.storage.get('artifacts', artifact.id)).toBeUndefined();
@@ -34,9 +48,18 @@ describe('库成果删除', () => {
 
   it('旧成果的外部路径只删除库记录，不删除该路径的文件', async () => {
     const { core, root } = await setup(async () => ({ text: '完成' }));
-    const original = path.join(root, 'legacy.txt'); await writeFile(original, '原文件');
-    const artifact: Artifact = { id: 'legacy', conversationId: core.state.settings().mainConversationId!,
-      name: 'legacy.txt', path: original, mimeType: 'text/plain', size: 9, sha256: '', createdAt: '' };
+    const original = path.join(root, 'legacy.txt');
+    await writeFile(original, '原文件');
+    const artifact: Artifact = {
+      id: 'legacy',
+      conversationId: core.state.settings().mainConversationId!,
+      name: 'legacy.txt',
+      path: original,
+      mimeType: 'text/plain',
+      size: 9,
+      sha256: '',
+      createdAt: '',
+    };
     core.state.storage.put('artifacts', artifact);
     await core.request('artifacts.delete', { id: artifact.id });
     expect(core.state.storage.get('artifacts', artifact.id)).toBeUndefined();
@@ -45,11 +68,12 @@ describe('库成果删除', () => {
 
   it('恢复后删除精确移除成果副本与图片预览，保留同批其他成果、备份和原文件', async () => {
     const { core, root } = await setup(async () => ({ text: '完成' }));
-    const original = path.join(root, 'restore-original.txt'); await writeFile(original, '备份内容');
+    const original = path.join(root, 'restore-original.txt');
+    await writeFile(original, '备份内容');
     const roomId = core.state.settings().mainConversationId!;
     const artifact = await importAttachment(core.state, roomId, original);
     const other = await importAttachment(core.state, roomId, original);
-    const backup = await core.request('backup.create', {}) as { path: string };
+    const backup = (await core.request('backup.create', {})) as { path: string };
     await core.request('backup.restore', { path: backup.path });
     const restored = core.state.storage.get<Artifact>('artifacts', artifact.id)!;
     const retained = core.state.storage.get<Artifact>('artifacts', other.id)!;
@@ -61,7 +85,9 @@ describe('库成果删除', () => {
     await expect(stat(restored.path)).rejects.toMatchObject({ code: 'ENOENT' });
     await expect(stat(preview)).rejects.toMatchObject({ code: 'ENOENT' });
     expect(await readFile(retained.path, 'utf8')).toBe('备份内容');
-    expect(await readFile(path.join(backup.path, 'artifacts', artifact.id), 'utf8')).toBe('备份内容');
+    expect(await readFile(path.join(backup.path, 'artifacts', artifact.id), 'utf8')).toBe(
+      '备份内容',
+    );
     expect(await readFile(original, 'utf8')).toBe('备份内容');
   });
 });

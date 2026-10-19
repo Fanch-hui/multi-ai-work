@@ -7,8 +7,11 @@ export async function downloadAsset(url, digest, cache, algorithm = 'sha256') {
   await mkdir(cache, { recursive: true });
   const destination = path.join(cache, digest);
   let bytes;
-  try { bytes = await readFile(destination); }
-  catch (error) { if (error.code !== 'ENOENT') throw error; }
+  try {
+    bytes = await readFile(destination);
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+  }
   if (!bytes) {
     const response = await fetch(url, { signal: AbortSignal.timeout(300_000) });
     if (!response.ok) throw new Error(`Runtime download HTTP ${response.status}: ${url}`);
@@ -32,11 +35,13 @@ export async function unpack(archive, destination, strip = 0) {
 }
 
 export async function installNpm(name, record, root, cache) {
-  if (!/^sha512-[A-Za-z0-9+/]+={0,2}$/.test(record.integrity)) throw new Error(`Invalid npm integrity: ${name}`);
+  if (!/^sha512-[A-Za-z0-9+/]+={0,2}$/.test(record.integrity))
+    throw new Error(`Invalid npm integrity: ${name}`);
   const digest = Buffer.from(record.integrity.slice(7), 'base64').toString('hex');
   const archive = await downloadAsset(record.url, digest, cache, 'sha512');
   const destination = path.join(root, 'node_modules', name);
   await unpack(archive, destination, 1);
   const actual = JSON.parse(await readFile(path.join(destination, 'package.json'), 'utf8'));
-  if (actual.name !== name || actual.version !== record.version) throw new Error(`Unexpected npm package: ${name}`);
+  if (actual.name !== name || actual.version !== record.version)
+    throw new Error(`Unexpected npm package: ${name}`);
 }

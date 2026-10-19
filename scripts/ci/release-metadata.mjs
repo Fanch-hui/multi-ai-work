@@ -10,15 +10,25 @@ const targets = [
 ];
 
 export async function createReleaseManifest(directory, version) {
-  if (typeof version !== 'string' || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version)
-    || !version.split('.').map(Number).every(Number.isSafeInteger)) throw new Error('Release version must be a stable semantic version');
+  if (
+    typeof version !== 'string' ||
+    !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version) ||
+    !version.split('.').map(Number).every(Number.isSafeInteger)
+  )
+    throw new Error('Release version must be a stable semantic version');
   const assets = [];
   for (const { platform, architecture, kind, extension } of targets) {
     const name = `multi-AI-work-${version}-${architecture}.${extension}`;
     const digest = await packageFileDigest(path.join(directory, name));
-    if (digest.size > 4 * 1024 ** 3) throw new Error(`Desktop package exceeds the update size limit: ${name}`);
-    assets.push({ platform, architecture, kind,
-      url: `https://github.com/${repository}/releases/download/v${version}/${name}`, ...digest });
+    if (digest.size > 4 * 1024 ** 3)
+      throw new Error(`Desktop package exceeds the update size limit: ${name}`);
+    assets.push({
+      platform,
+      architecture,
+      kind,
+      url: `https://github.com/${repository}/releases/download/v${version}/${name}`,
+      ...digest,
+    });
   }
   return { version, assets };
 }
@@ -31,7 +41,11 @@ export async function writeReleaseMetadata(directory, version) {
 }
 
 if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
-  const { version } = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8'));
+  const { version } = JSON.parse(
+    await readFile(new URL('../../package.json', import.meta.url), 'utf8'),
+  );
   const manifest = await writeReleaseMetadata(path.resolve(process.argv[2] ?? 'release'), version);
-  console.log(`Generated update metadata for ${manifest.version}: ${manifest.assets.length} platform packages`);
+  console.log(
+    `Generated update metadata for ${manifest.version}: ${manifest.assets.length} platform packages`,
+  );
 }

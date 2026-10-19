@@ -1,4 +1,12 @@
-export type AppUpdatePhase = 'disabled' | 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'installing' | 'error';
+export type AppUpdatePhase =
+  | 'disabled'
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'downloading'
+  | 'ready'
+  | 'installing'
+  | 'error';
 
 export interface AppUpdateState {
   phase: AppUpdatePhase;

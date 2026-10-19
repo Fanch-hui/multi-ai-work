@@ -1,10 +1,17 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type {
-  Conversation, MemoryActor, MemoryEntry, MemoryRevisionRecord, Task,
+  Conversation,
+  MemoryActor,
+  MemoryEntry,
+  MemoryRevisionRecord,
+  Task,
 } from '../domain/types.js';
 import {
-  memoryPartitionKey, memorySummary, normalizeMemoryContent, normalizedAllowedConversations,
+  memoryPartitionKey,
+  memorySummary,
+  normalizeMemoryContent,
+  normalizedAllowedConversations,
 } from '../domain/memory.js';
 import { State, id, now } from './state.js';
 import { required } from './errors.js';
@@ -23,7 +30,12 @@ export interface MemoryBatchMeta {
 }
 
 export function isUserProtectedMemory(entry: MemoryEntry): boolean {
-  return !!entry.userMaintained || entry.createdBy === 'user' || entry.updatedBy === 'user' || !!entry.pinned;
+  return (
+    !!entry.userMaintained ||
+    entry.createdBy === 'user' ||
+    entry.updatedBy === 'user' ||
+    !!entry.pinned
+  );
 }
 
 export function buildRevisionSnapshot(entry: MemoryEntry): MemoryRevisionRecord {
@@ -100,10 +112,15 @@ export function recordBatchTouch(state: State, task: Task | undefined, entry: Me
 }
 
 const mergeSchema = z.object({
-  sourceEntries: z.array(z.object({
-    id: z.string().min(1),
-    revision: z.number().int().positive(),
-  })).min(1).max(30),
+  sourceEntries: z
+    .array(
+      z.object({
+        id: z.string().min(1),
+        revision: z.number().int().positive(),
+      }),
+    )
+    .min(1)
+    .max(30),
   content: z.string().trim().min(1).max(20000),
   topic: z.string().trim().max(120).optional(),
   summary: z.string().trim().max(200).optional(),
@@ -125,14 +142,19 @@ export function mergeMemories(
   const contentHash = createHash('sha256').update(content).digest('hex');
 
   const merged = s.transaction(() => {
-    const entries = input.sourceEntries.map(spec => {
-      const entry = required(s.get<MemoryEntry>('memory_entries', spec.id), `记忆不存在：${spec.id}`);
+    const entries = input.sourceEntries.map((spec) => {
+      const entry = required(
+        s.get<MemoryEntry>('memory_entries', spec.id),
+        `记忆不存在：${spec.id}`,
+      );
       if (!owns(entry)) throw new Error('只能合并自己负责的记忆');
       if (entry.status !== 'approved' && entry.status !== 'candidate') {
         throw new Error(`只能合并有效或候选记忆：${entry.id}`);
       }
       if (entry.revision !== spec.revision) {
-        throw new Error(`记忆 ${entry.id} 版本已变化（预期 ${spec.revision}，实际 ${entry.revision}），请重新读取`);
+        throw new Error(
+          `记忆 ${entry.id} 版本已变化（预期 ${spec.revision}，实际 ${entry.revision}），请重新读取`,
+        );
       }
       assertBatchConcurrency(state, actor.task, entry);
       if (actor.kind === 'memory-review' && isUserProtectedMemory(entry)) {
@@ -141,7 +163,7 @@ export function mergeMemories(
       return entry;
     });
 
-    const uniqueIds = new Set(entries.map(item => item.id));
+    const uniqueIds = new Set(entries.map((item) => item.id));
     if (uniqueIds.size !== entries.length) throw new Error('合并来源包含重复 ID');
 
     const first = entries[0];
@@ -156,16 +178,15 @@ export function mergeMemories(
     if (input.sourceIds?.length) {
       assertUserMemorySources(state, input.sourceIds, allowedConversationIds);
     }
-    const combinedSources = [...new Set([
-      ...entries.flatMap(entry => entry.sourceIds),
-      ...(input.sourceIds ?? []),
-    ])];
+    const combinedSources = [
+      ...new Set([...entries.flatMap((entry) => entry.sourceIds), ...(input.sourceIds ?? [])]),
+    ];
 
     const timestamp = now();
-    const nextTopic = input.topic?.trim() || entries.find(item => item.topic?.trim())?.topic;
+    const nextTopic = input.topic?.trim() || entries.find((item) => item.topic?.trim())?.topic;
     const nextTags = input.tags?.length
-      ? [...new Set(input.tags.map(tag => tag.trim()).filter(Boolean))]
-      : [...new Set(entries.flatMap(item => item.tags ?? []))];
+      ? [...new Set(input.tags.map((tag) => tag.trim()).filter(Boolean))]
+      : [...new Set(entries.flatMap((item) => item.tags ?? []))];
     const nextSummary = input.summary?.trim()
       ? memorySummary({ content, summary: input.summary, revision: 1 })
       : undefined;
@@ -182,7 +203,7 @@ export function mergeMemories(
       createdBy: actor.kind,
       updatedBy: actor.kind,
       ...(actor.botId ? { actorBotId: actor.botId } : {}),
-      supersedes: entries.map(entry => entry.id),
+      supersedes: entries.map((entry) => entry.id),
       ...(input.reason ? { consolidationReason: input.reason } : {}),
       sourceIds: combinedSources,
       allowedConversationIds,
@@ -247,16 +268,23 @@ export function promoteMemory(
   const source = required(s.get<MemoryEntry>('memory_entries', input.id), '源记忆不存在');
   if (source.scope !== 'bot') throw new Error('只能将成员个人记忆晋升为公共记忆');
   const scope = input.scope;
-  const ownerId = scope === 'team' ? (input.ownerId ?? conversationId) : (input.ownerId ?? 'shared');
-  if (scope === 'team') required(s.get<Conversation>('conversations', ownerId), '目标团队会话不存在');
-  const allowed = scope === 'team'
-    ? [ownerId]
-    : [...new Set(input.allowedConversationIds?.length ? input.allowedConversationIds : [conversationId])];
+  const ownerId =
+    scope === 'team' ? (input.ownerId ?? conversationId) : (input.ownerId ?? 'shared');
+  if (scope === 'team')
+    required(s.get<Conversation>('conversations', ownerId), '目标团队会话不存在');
+  const allowed =
+    scope === 'team'
+      ? [ownerId]
+      : [
+          ...new Set(
+            input.allowedConversationIds?.length ? input.allowedConversationIds : [conversationId],
+          ),
+        ];
   for (const roomId of allowed) {
     const room = required(s.get<Conversation>('conversations', roomId), '目标授权会话不存在');
     if (!room.memberIds.includes(botId)) throw new Error('公共记忆只能授权给管家参与的会话');
   }
-  const publicSourceIds = source.sourceIds.filter(msgId => {
+  const publicSourceIds = source.sourceIds.filter((msgId) => {
     const msg = s.getMessage(msgId);
     return !!msg && allowed.includes(msg.conversationId);
   });
@@ -267,7 +295,9 @@ export function promoteMemory(
   const nextTags = input.tags?.length ? [...new Set(input.tags)] : source.tags;
   const nextSummary = input.summary?.trim()
     ? memorySummary({ content, summary: input.summary, revision: 1 })
-    : (content === normalizeMemoryContent(source.content) ? source.summary : undefined);
+    : content === normalizeMemoryContent(source.content)
+      ? source.summary
+      : undefined;
 
   const promoted: MemoryEntry = {
     id: id(),
@@ -300,21 +330,30 @@ export function getMemoryHistory(state: State, memoryId: string, conversationId?
   const entry = required(s.get<MemoryEntry>('memory_entries', memoryId), '记忆不存在');
   const filterSources = (sourceIds: string[]) => {
     if (!conversationId) return sourceIds;
-    return sourceIds.filter(msgId => s.getMessage(msgId)?.conversationId === conversationId);
+    return sourceIds.filter((msgId) => s.getMessage(msgId)?.conversationId === conversationId);
   };
-  const revisions = listMemoryRevisions(s, memoryId).map(rev => ({
+  const revisions = listMemoryRevisions(s, memoryId).map((rev) => ({
     ...rev,
     sourceIds: filterSources(rev.sourceIds),
   }));
   const supersededEntries = (entry.supersedes ?? [])
-    .map(oldId => s.get<MemoryEntry>('memory_entries', oldId))
+    .map((oldId) => s.get<MemoryEntry>('memory_entries', oldId))
     .filter((item): item is MemoryEntry => !!item)
-    .map(item => ({ ...item, sourceIds: filterSources(item.sourceIds) }));
-  const supersededByEntry = entry.supersededBy ? s.get<MemoryEntry>('memory_entries', entry.supersededBy) : undefined;
+    .map((item) => ({ ...item, sourceIds: filterSources(item.sourceIds) }));
+  const supersededByEntry = entry.supersededBy
+    ? s.get<MemoryEntry>('memory_entries', entry.supersededBy)
+    : undefined;
   return {
     memory: { ...entry, sourceIds: filterSources(entry.sourceIds) },
     revisions,
     supersededEntries,
-    ...(supersededByEntry ? { supersededByEntry: { ...supersededByEntry, sourceIds: filterSources(supersededByEntry.sourceIds) } } : {}),
+    ...(supersededByEntry
+      ? {
+          supersededByEntry: {
+            ...supersededByEntry,
+            sourceIds: filterSources(supersededByEntry.sourceIds),
+          },
+        }
+      : {}),
   };
 }

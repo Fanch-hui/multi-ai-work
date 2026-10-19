@@ -15,18 +15,23 @@ it('Core 构造失败时向桌面宿主回传实际错误', async () => {
     env: { ...process.env, AI_TEAM_DATA_DIR: dataDirectory },
     stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
   });
-  let stderr = '', timer: ReturnType<typeof setTimeout> | undefined;
-  child.stderr?.on('data', chunk => { stderr += String(chunk); });
-  const exited = new Promise<number | null>(resolve => child.once('exit', code => resolve(code)));
+  let stderr = '',
+    timer: ReturnType<typeof setTimeout> | undefined;
+  child.stderr?.on('data', (chunk) => {
+    stderr += String(chunk);
+  });
+  const exited = new Promise<number | null>((resolve) =>
+    child.once('exit', (code) => resolve(code)),
+  );
   try {
     const fatal = await new Promise<{ type: string; error: string }>((resolve, reject) => {
       timer = setTimeout(() => reject(new Error('Core 启动错误未回传')), 60000);
-      child.on('message', message => {
+      child.on('message', (message) => {
         const input = message as { type: string; error: string };
         if (input.type === 'fatal') resolve(input);
       });
       child.once('error', reject);
-      child.once('exit', code => reject(new Error(`Core 提前退出 (${code}): ${stderr}`)));
+      child.once('exit', (code) => reject(new Error(`Core 提前退出 (${code}): ${stderr}`)));
     });
     expect(fatal.error).toContain('EEXIST');
     expect(fatal.error).toContain(dataDirectory);
