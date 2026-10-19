@@ -34,7 +34,9 @@ async function modelServer(first: ReturnType<typeof gate>) {
     requests.push(JSON.parse(body));
     const index = requests.length;
     if (index === 1) await first.promise;
-    const content = index === 1 ? '原需求的答复' : index === 2 ? '已按补充调整' : '新任务答复';
+    let content = '新任务答复';
+    if (index === 1) content = '原需求的答复';
+    else if (index === 2) content = '已按补充调整';
     response.writeHead(200, { 'content-type': 'text/event-stream' });
     response.end(
       `data: ${JSON.stringify({

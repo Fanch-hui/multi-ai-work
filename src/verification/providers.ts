@@ -85,12 +85,17 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
   if (!Number.isInteger(timeout) || timeout < 1000 || timeout > 600000)
     throw new Error('超时必须为 1000 至 600000 毫秒');
   const provider = values.provider as ProviderKind;
-  const appDirectory =
-    process.platform === 'darwin'
-      ? join(homedir(), 'Library', 'Application Support', 'multi-AI work')
-      : process.platform === 'win32'
-        ? join(process.env.LOCALAPPDATA ?? homedir(), 'multi-AI work')
-        : join(homedir(), '.local', 'share', 'multi-AI work');
+  let appDirectory: string;
+  if (process.platform === 'darwin') {
+    appDirectory = join(homedir(), 'Library', 'Application Support', 'multi-AI work');
+  } else if (process.platform === 'win32') {
+    appDirectory = join(process.env.LOCALAPPDATA ?? homedir(), 'multi-AI work');
+  } else {
+    appDirectory = join(homedir(), '.local', 'share', 'multi-AI work');
+  }
+  let authMode: Connection['authMode'] = 'local';
+  if (provider === 'chatgpt') authMode = 'oauth';
+  else if (provider === 'custom') authMode = values['auth-none'] ? 'none' : 'api-key';
   const connection: Connection = {
     id: randomUUID(),
     name: 'verification',
@@ -105,14 +110,7 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
     executable: values.executable,
     profilePath: values.profile ?? join(appDirectory, 'runtime', provider),
     secretRef: 'verification-secret',
-    authMode:
-      provider === 'chatgpt'
-        ? 'oauth'
-        : provider === 'custom'
-          ? values['auth-none']
-            ? 'none'
-            : 'api-key'
-          : 'local',
+    authMode,
   };
   if (provider === 'antigravity' || provider === 'qoder') {
     const setup = await detectNativeSetup({

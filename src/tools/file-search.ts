@@ -136,10 +136,13 @@ export async function listDirectory(input: Page, context: ToolExecutionContext):
       if (verdict.ignored || verdict.unignored) ignored = verdict.ignored;
     }
     if (ignored) return undefined;
+    let type = 'file';
+    if (item.isSymbolicLink()) type = 'symlink';
+    else if (info.isDirectory()) type = 'directory';
     return {
       path: path.relative(root, candidate).split(path.sep).join('/'),
       name: item.name,
-      type: item.isSymbolicLink() ? 'symlink' : info.isDirectory() ? 'directory' : 'file',
+      type,
       size: info.size,
     };
   });

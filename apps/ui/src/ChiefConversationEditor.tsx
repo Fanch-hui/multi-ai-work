@@ -115,6 +115,15 @@ export function ChiefConversationEditor({
       setBusy(false);
     }
   }
+  const getSaveLabel = () => {
+    if (busy) {
+      return '保存中…';
+    }
+    if (conversation) {
+      return '保存';
+    }
+    return '开始对话';
+  };
   return (
     <Modal
       open
@@ -247,7 +256,7 @@ export function ChiefConversationEditor({
               (!conversation && !workspaceId)
             }
           >
-            {busy ? '保存中…' : conversation ? '保存' : '开始对话'}
+            {getSaveLabel()}
           </Button>
         </div>
       </form>

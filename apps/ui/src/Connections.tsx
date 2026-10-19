@@ -154,7 +154,13 @@ export function Connections({ data, mutate }: { data: Snapshot; mutate: Mutate }
   );
 }
 function capabilityLabel(value: string) {
-  return value === 'supported' ? '支持' : value === 'unsupported' ? '不支持' : '待验证';
+  if (value === 'supported') {
+    return '支持';
+  }
+  if (value === 'unsupported') {
+    return '不支持';
+  }
+  return '待验证';
 }
 function permissionLabel(value: string) {
   if (value === 'native-cli') return '原生 CLI；团队由 App';

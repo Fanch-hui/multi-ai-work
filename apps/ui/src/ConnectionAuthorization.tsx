@@ -11,18 +11,31 @@ export function ConnectionAuthorization({
   canLogin: boolean;
 }) {
   const waiting = flow.phase === 'waiting';
+  const getConnectionStatusLabel = () => {
+    if (flow.busy) {
+      return '正在连接…';
+    }
+    if (!canLogin) {
+      return '连接尚未完成，请检查配置后重试';
+    }
+    if (waiting) {
+      return '在浏览器完成授权，连接会自动继续';
+    }
+    return '完成登录后，继续连接';
+  };
+  const getContinueLabel = () => {
+    if (flow.busy) {
+      return '连接中…';
+    }
+    if (!canLogin) {
+      return '重试连接';
+    }
+    return '我已登录，继续';
+  };
   return (
     <div className="grid gap-4">
       <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4">
-        <p className="text-sm font-medium text-slate-800">
-          {flow.busy
-            ? '正在连接…'
-            : !canLogin
-              ? '连接尚未完成，请检查配置后重试'
-              : waiting
-                ? '在浏览器完成授权，连接会自动继续'
-                : '完成登录后，继续连接'}
-        </p>
+        <p className="text-sm font-medium text-slate-800">{getConnectionStatusLabel()}</p>
         {flow.guide?.instructions && (
           <p className="mt-2 text-pretty text-sm leading-6 text-slate-600">
             {flow.guide.instructions}
@@ -79,7 +92,7 @@ export function ConnectionAuthorization({
           disabled={flow.busy}
           onClick={() => void flow.retry()}
         >
-          {flow.busy ? '连接中…' : !canLogin ? '重试连接' : '我已登录，继续'}
+          {getContinueLabel()}
         </Button>
       </div>
     </div>

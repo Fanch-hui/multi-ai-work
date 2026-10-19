@@ -106,13 +106,26 @@ export function BotEditor({
       setBusy(false);
     }
   }
+  const getEditorTitle = () => {
+    if (main) {
+      return '配置主智能体';
+    }
+    if (bot) {
+      return `编辑 ${bot.name}`;
+    }
+    return '新建智能体';
+  };
+  const getSaveLabel = () => {
+    if (busy) {
+      return '保存中…';
+    }
+    if (main) {
+      return '保存 Chief';
+    }
+    return '保存智能体';
+  };
   return (
-    <Modal
-      open
-      onOpenChange={(open) => !open && close()}
-      title={main ? '配置主智能体' : bot ? `编辑 ${bot.name}` : '新建智能体'}
-      wide
-    >
+    <Modal open onOpenChange={(open) => !open && close()} title={getEditorTitle()} wide>
       <form className="grid gap-4" onSubmit={(event) => void save(event)}>
         <AvatarPicker value={avatar} onChange={setAvatar} mutate={mutate} />
         <div className={cn('grid gap-4', !main && 'sm:grid-cols-2')}>
@@ -316,7 +329,7 @@ export function BotEditor({
                 (!!connection.models.length && !selectedModel)
               }
             >
-              {busy ? '保存中…' : main ? '保存 Chief' : '保存智能体'}
+              {getSaveLabel()}
             </Button>
           </div>
         </div>

@@ -7,15 +7,16 @@ export function addUsage(first?: Usage, second?: Usage): Usage | undefined {
     first[field] === undefined || second[field] === undefined
       ? undefined
       : first[field] + second[field];
+  const inputTokens = sum('inputTokens');
+  const outputTokens = sum('outputTokens');
+  const cachedInputTokens = sum('cachedInputTokens');
+  let source: Usage['source'] = 'estimated';
+  if (first.source === 'unknown' || second.source === 'unknown') source = 'unknown';
+  else if (first.source === 'reported' && second.source === 'reported') source = 'reported';
   return {
-    inputTokens: sum('inputTokens'),
-    outputTokens: sum('outputTokens'),
-    cachedInputTokens: sum('cachedInputTokens'),
-    source:
-      first.source === 'unknown' || second.source === 'unknown'
-        ? 'unknown'
-        : first.source === 'reported' && second.source === 'reported'
-          ? 'reported'
-          : 'estimated',
+    inputTokens,
+    outputTokens,
+    cachedInputTokens,
+    source,
   };
 }

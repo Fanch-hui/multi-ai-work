@@ -90,6 +90,18 @@ export function Composer({
       composerDrafts.finishSend(conversation.id, pending.requestId, errorMessage(cause));
     }
   }
+  const getMessagePlaceholder = () => {
+    if (busyMembers.length) {
+      if (mixedTargets) {
+        return '给成员发消息，或补充当前任务…';
+      }
+      return '补充、纠正或调整当前任务…';
+    }
+    if (main) {
+      return '给主管发消息，或交代一个任务…';
+    }
+    return '发消息…';
+  };
   return (
     <div className="chat-composer-region px-6 pb-3 pt-3 max-sm:px-3">
       <form className="mx-auto w-full max-w-4xl" onSubmit={(event) => void send(event)}>
@@ -173,15 +185,7 @@ export function Composer({
             onChange={(event) => {
               setContent(event.target.value);
             }}
-            placeholder={
-              busyMembers.length
-                ? mixedTargets
-                  ? '给成员发消息，或补充当前任务…'
-                  : '补充、纠正或调整当前任务…'
-                : main
-                  ? '给主管发消息，或交代一个任务…'
-                  : '发消息…'
-            }
+            placeholder={getMessagePlaceholder()}
             onCompositionStart={() => {
               composing.current = true;
             }}

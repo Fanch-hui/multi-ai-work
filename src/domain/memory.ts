@@ -137,7 +137,9 @@ export function memoryPartitionKey(
 export function memoryTopic(entry: Pick<MemoryEntry, 'topic' | 'scope'>): string {
   const topic = entry.topic?.trim();
   if (topic) return topic;
-  return entry.scope === 'team' ? '团队约定' : entry.scope === 'shared' ? '共享资料' : '常用偏好';
+  if (entry.scope === 'team') return '团队约定';
+  if (entry.scope === 'shared') return '共享资料';
+  return '常用偏好';
 }
 
 export function memorySummary(

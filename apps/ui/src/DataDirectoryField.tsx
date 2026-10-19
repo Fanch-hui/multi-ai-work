@@ -37,6 +37,15 @@ export function DataDirectoryField({ path, disabled }: { path: string; disabled?
       throw cause;
     }
   }
+  const getMigrationLabel = () => {
+    if (phase === 'migrating') {
+      return '正在复制数据，请稍候…';
+    }
+    if (phase === 'restarting') {
+      return '数据已复制，正在重启…';
+    }
+    return '';
+  };
   return (
     <div className="grid gap-1.5" aria-busy={phase === 'migrating' || phase === 'restarting'}>
       <label htmlFor={id} className="text-sm font-medium text-slate-700">
@@ -94,11 +103,7 @@ export function DataDirectoryField({ path, disabled }: { path: string; disabled?
         </div>
       )}
       <p role="status" className="text-sm text-blue-700">
-        {phase === 'migrating'
-          ? '正在复制数据，请稍候…'
-          : phase === 'restarting'
-            ? '数据已复制，正在重启…'
-            : ''}
+        {getMigrationLabel()}
       </p>
     </div>
   );

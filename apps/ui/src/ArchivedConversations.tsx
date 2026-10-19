@@ -37,32 +37,41 @@ export function ArchivedConversations({
         />
       </div>
       <div className="grid gap-1">
-        {conversations.map((item) => (
-          <div key={item.id} className="flex min-w-0 items-center rounded-lg hover:bg-slate-50">
-            <button
-              onClick={() => onSelectConversation?.(item.id)}
-              disabled={!onSelectConversation}
-              className="flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-            >
-              <ConversationAvatar
-                conversation={item}
-                bots={data.bots}
-                className="size-6 rounded-md"
-              />
-              <span className="min-w-0 flex-1 truncate text-sm text-slate-700">{item.name}</span>
-              <span className="shrink-0 text-xs text-slate-400">
-                {item.purpose === 'chief' ? '主对话' : item.kind === 'group' ? '群聊' : '成员对话'}
-              </span>
-            </button>
-            <button
-              onClick={() => setManageId(item.id)}
-              aria-label={`管理归档会话 ${item.name}`}
-              className="mr-2 rounded-md p-2 text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-            >
-              <MoreHorizontal size={16} />
-            </button>
-          </div>
-        ))}
+        {conversations.map((item) => {
+          const getConversationLabel = () => {
+            if (item.purpose === 'chief') {
+              return '主对话';
+            }
+            if (item.kind === 'group') {
+              return '群聊';
+            }
+            return '成员对话';
+          };
+          return (
+            <div key={item.id} className="flex min-w-0 items-center rounded-lg hover:bg-slate-50">
+              <button
+                onClick={() => onSelectConversation?.(item.id)}
+                disabled={!onSelectConversation}
+                className="flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              >
+                <ConversationAvatar
+                  conversation={item}
+                  bots={data.bots}
+                  className="size-6 rounded-md"
+                />
+                <span className="min-w-0 flex-1 truncate text-sm text-slate-700">{item.name}</span>
+                <span className="shrink-0 text-xs text-slate-400">{getConversationLabel()}</span>
+              </button>
+              <button
+                onClick={() => setManageId(item.id)}
+                aria-label={`管理归档会话 ${item.name}`}
+                className="mr-2 rounded-md p-2 text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              >
+                <MoreHorizontal size={16} />
+              </button>
+            </div>
+          );
+        })}
         {!conversations.length && (
           <p className="py-6 text-sm text-slate-500">
             {query ? '没有匹配的已归档会话' : '暂无已归档会话'}

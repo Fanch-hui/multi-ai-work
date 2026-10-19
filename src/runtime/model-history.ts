@@ -58,11 +58,12 @@ function messageProjection(message: ModelMessage, protocol: Protocol): unknown {
     message.chatReplay?.version === 1
       ? message.chatReplay
       : undefined;
-  const reasoning = replay?.reasoningDetails?.length
-    ? { reasoning_details: replay.reasoningDetails }
-    : replay?.reasoningField && replay.reasoningText
-      ? { [replay.reasoningField]: replay.reasoningText }
-      : {};
+  let reasoning: Record<string, unknown> = {};
+  if (replay?.reasoningDetails?.length) {
+    reasoning = { reasoning_details: replay.reasoningDetails };
+  } else if (replay?.reasoningField && replay.reasoningText) {
+    reasoning = { [replay.reasoningField]: replay.reasoningText };
+  }
   return {
     role: message.role,
     content: modelMessageContent(message),

@@ -118,36 +118,33 @@ export class AntigravityEvents {
     const step = this.validateSession(value);
     if (typeof step.step_index !== 'number' || !Number.isInteger(step.step_index))
       throw new Error('Antigravity 返回了无效步骤序号');
-    if (step.state === 'ACTIVE')
-      this.activity.report(
-        step.step_type === 'tool'
-          ? 'tool'
-          : step.step_type === 'agent_response' && step.text_delta
-            ? 'responding'
-            : 'working',
-        `step_update:${step.step_type}`,
-      );
+    if (step.state === 'ACTIVE') {
+      let phase: 'tool' | 'responding' | 'working' = 'working';
+      if (step.step_type === 'tool') phase = 'tool';
+      else if (step.step_type === 'agent_response' && step.text_delta) phase = 'responding';
+      this.activity.report(phase, `step_update:${step.step_type}`);
+    }
     if (step.step_type === 'agent_response' && typeof step.text_delta === 'string')
       this.append(step.text_delta, `${this.turnSequence}:${step.step_index}`);
     if (step.state === 'DONE') {
       const usage = usageValue(step.usage);
       if (usage) this.stepUsage.set(step.step_index, usage);
     }
-    if (step.step_type === 'tool' && typeof step.tool_name === 'string')
+    if (step.step_type === 'tool' && typeof step.tool_name === 'string') {
+      const toolStatus = () => {
+        if (step.state !== 'DONE') return 'running';
+        return object(step.tool_info)?.error ? 'failed' : 'completed';
+      };
       this.options.emit?.({
         type: 'tool',
         data: {
           source: 'native',
           name: step.tool_name,
           callId: `${this.initialization!.conversationId}:${step.step_index}`,
-          status:
-            step.state === 'DONE'
-              ? object(step.tool_info)?.error
-                ? 'failed'
-                : 'completed'
-              : 'running',
+          status: toolStatus(),
         },
       });
+    }
   }
 
   private finish(value: ObjectValue | undefined): AntigravityTurn {

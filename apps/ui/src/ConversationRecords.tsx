@@ -166,6 +166,15 @@ function TaskRecord({
   const processes = (data.processes ?? []).filter((process) => process.taskId === task.id);
   const room = data.conversations.find((item) => item.id === task.conversationId);
   const activeCommands = processes.filter((process) => process.status === 'running').length;
+  const getBackgroundTaskLabel = () => {
+    if (task.kind === 'memory-review') {
+      return '记忆整理';
+    }
+    if (task.kind === 'context-compaction') {
+      return '上下文压缩';
+    }
+    return '主管代答';
+  };
   return (
     <li>
       <button
@@ -175,15 +184,7 @@ function TaskRecord({
         <div className="min-w-0 flex-1">
           <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
             <Badge status={task.status}>{taskRecordStatus(task, processes)}</Badge>
-            {task.kind && (
-              <span className="text-slate-500">
-                {task.kind === 'memory-review'
-                  ? '记忆整理'
-                  : task.kind === 'context-compaction'
-                    ? '上下文压缩'
-                    : '主管代答'}
-              </span>
-            )}
+            {task.kind && <span className="text-slate-500">{getBackgroundTaskLabel()}</span>}
             {room?.purpose === 'task' && (
               <span className="min-w-0 max-w-48 truncate text-slate-400">{room.name}</span>
             )}

@@ -121,12 +121,10 @@ export class State {
       tasks: tasks.map((task) => this.taskSnapshot(task, readActivity)),
       runs,
       approvals: s.all('approvals'),
-      artifacts: s
-        .all<Artifact>('artifacts')
-        .map((artifact) => ({
-          ...artifactRequirement(s, artifact),
-          ...(artifact.image ? { image: { ...artifact.image, path: '' } } : {}),
-        })),
+      artifacts: s.all<Artifact>('artifacts').map((artifact) => ({
+        ...artifactRequirement(s, artifact),
+        ...(artifact.image ? { image: { ...artifact.image, path: '' } } : {}),
+      })),
       questions: s.all('questions'),
       memories: listMemoriesWithUsage(s),
       processes: s.all<ProcessRecord>('processes').map(publicProcess),

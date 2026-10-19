@@ -43,6 +43,18 @@ export function MemoryEditor({
         .split(/[、,，\s]+/)
         .map((tag) => tag.trim())
         .filter(Boolean);
+      const getMemoryOwnerId = () => {
+        if (scope === 'team') {
+          return allowed[0] || '';
+        }
+        if (scope === 'shared') {
+          if (memory?.scope === 'shared') {
+            return memory.ownerId;
+          }
+          return 'shared';
+        }
+        return ownerId;
+      };
       await mutate('memories.save', {
         id: memory?.id,
         ...(memory ? { expectedRevision: memory.revision } : {}),
@@ -52,14 +64,7 @@ export function MemoryEditor({
         tags,
         pinned,
         scope,
-        ownerId:
-          scope === 'team'
-            ? allowed[0] || ''
-            : scope === 'shared'
-              ? memory?.scope === 'shared'
-                ? memory.ownerId
-                : 'shared'
-              : ownerId,
+        ownerId: getMemoryOwnerId(),
         allowedConversationIds: allowed,
         sourceIds: memory?.sourceIds || [],
       });
@@ -170,15 +175,18 @@ export function MemoryEditor({
                     type={scope === 'team' ? 'radio' : 'checkbox'}
                     name="memory-conversation"
                     checked={allowed.includes(item.id)}
-                    onChange={() =>
-                      setAllowed(
-                        scope === 'team'
-                          ? [item.id]
-                          : allowed.includes(item.id)
-                            ? allowed.filter((value) => value !== item.id)
-                            : [...allowed, item.id],
-                      )
-                    }
+                    onChange={() => {
+                      const toggleConversationIds = () => {
+                        if (scope === 'team') {
+                          return [item.id];
+                        }
+                        if (allowed.includes(item.id)) {
+                          return allowed.filter((value) => value !== item.id);
+                        }
+                        return [...allowed, item.id];
+                      };
+                      return setAllowed(toggleConversationIds());
+                    }}
                   />
                   {item.name}
                 </label>

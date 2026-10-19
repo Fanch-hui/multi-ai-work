@@ -1,6 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { Message, ProcessRecord, Run, Task } from '../domain/types.js';
-import type { SnapshotCursor, SnapshotDelta, SnapshotView } from '../domain/snapshot-sync.js';
+import type {
+  MessagePage,
+  SnapshotCursor,
+  SnapshotDelta,
+  SnapshotView,
+} from '../domain/snapshot-sync.js';
 import type { State, StateChange } from './state.js';
 import type { StorageChanges } from './storage-changes.js';
 import { taskActivityReader } from './task-activity.js';
@@ -55,11 +60,12 @@ export class SnapshotSync {
     if (this.log.length > 256) this.log.shift();
   }
   view(conversationId?: string, from?: number): SnapshotView {
-    const page = conversationId
-      ? from
+    let page: MessagePage | undefined;
+    if (conversationId) {
+      page = from
         ? this.state.storage.messageRange(conversationId, from)
-        : this.state.storage.messagePage(conversationId)
-      : undefined;
+        : this.state.storage.messagePage(conversationId);
+    }
     return {
       snapshot: this.state.snapshot(page?.messages ?? []),
       cursor: this.cursor(),

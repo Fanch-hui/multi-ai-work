@@ -150,7 +150,9 @@ export function scoreMemoryEntry(
   const relevanceScore = ftsScore + keywordScore + roleScore;
   const userMaintained = entry.createdBy === 'user' || entry.updatedBy === 'user';
   const authorityBonus = userMaintained ? 2.5 : 0;
-  const scopeBonus = entry.scope === 'team' ? 0.6 : entry.scope === 'bot' ? 0.4 : 0.2;
+  let scopeBonus = 0.2;
+  if (entry.scope === 'team') scopeBonus = 0.6;
+  else if (entry.scope === 'bot') scopeBonus = 0.4;
   const activeReads = options?.usage?.activeReadCount ?? entry.usage?.activeReadCount ?? 0;
   const heatBonus = Math.min(1.5, Math.log2(1 + activeReads) * 0.4);
   const pinnedBonus = entry.pinned ? 4 : 0;

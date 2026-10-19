@@ -83,24 +83,27 @@ const statusLabels: Record<string, string> = {
   rejected: '已拒绝',
 };
 export function Badge({ status, children }: { status?: string; children?: ReactNode }) {
+  const getStatusColor = () => {
+    if (['ready', 'completed', 'approved'].includes(status || '')) {
+      return 'bg-blue-50 text-blue-800';
+    }
+    if (['failed', 'error'].includes(status || '')) {
+      return 'bg-red-50 text-red-700';
+    }
+    if (
+      ['running', 'recovering', 'waiting_approval', 'candidate', 'needs_auth', 'pending'].includes(
+        status || '',
+      )
+    ) {
+      return 'bg-amber-50 text-amber-800';
+    }
+    return 'bg-slate-100 text-slate-500';
+  };
   return (
     <span
       className={cn(
         'inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium',
-        ['ready', 'completed', 'approved'].includes(status || '')
-          ? 'bg-blue-50 text-blue-800'
-          : ['failed', 'error'].includes(status || '')
-            ? 'bg-red-50 text-red-700'
-            : [
-                  'running',
-                  'recovering',
-                  'waiting_approval',
-                  'candidate',
-                  'needs_auth',
-                  'pending',
-                ].includes(status || '')
-              ? 'bg-amber-50 text-amber-800'
-              : 'bg-slate-100 text-slate-500',
+        getStatusColor(),
       )}
     >
       {status === 'running' && !children ? (

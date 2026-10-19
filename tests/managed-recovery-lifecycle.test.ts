@@ -257,21 +257,23 @@ describe('managed recovery lifecycle', () => {
         arguments: JSON.stringify(args),
         status: 'completed',
       });
-      const model = modelFixture((index) => [
-        complete(
-          index === 0
-            ? [call('read-original', 'read_file', { path: 'original.txt' })]
-            : index === 1
-              ? [
-                  call('edit-original', 'edit_file', {
-                    path: 'original.txt',
-                    oldText: 'original',
-                    newText: 'edited',
-                  }),
-                ]
-              : [answer],
-        ),
-      ]);
+      const model = modelFixture((index) => {
+        if (index === 0) {
+          return [complete([call('read-original', 'read_file', { path: 'original.txt' })])];
+        }
+        if (index === 1) {
+          return [
+            complete([
+              call('edit-original', 'edit_file', {
+                path: 'original.txt',
+                oldText: 'original',
+                newText: 'edited',
+              }),
+            ]),
+          ];
+        }
+        return [complete([answer])];
+      });
       let interrupted = false;
       const { core, root, bot } = await setup((context) =>
         runManaged(

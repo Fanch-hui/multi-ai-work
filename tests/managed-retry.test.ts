@@ -163,22 +163,22 @@ describe('managed request recovery', () => {
   );
 
   it('recovers a truncated reply after a successful write and keeps only the completed text prefix', async () => {
-    const server = await fixture((index) => ({
-      events:
-        index === 0
-          ? [
-              completed([
-                {
-                  ...output,
-                  content: [{ type: 'output_text', text: '已保存。', annotations: [] }],
-                },
-                call,
-              ]),
-            ]
-          : index === 1
-            ? [textDelta]
-            : [completed()],
-    }));
+    const server = await fixture((index) => {
+      if (index === 0) {
+        return {
+          events: [
+            completed([
+              {
+                ...output,
+                content: [{ type: 'output_text', text: '已保存。', annotations: [] }],
+              },
+              call,
+            ]),
+          ],
+        };
+      }
+      return { events: index === 1 ? [textDelta] : [completed()] };
+    });
     const events: ProviderEvent[] = [];
     let writes = 0;
     const result = await runManaged(

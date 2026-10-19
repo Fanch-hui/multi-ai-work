@@ -18,26 +18,37 @@ const cli = join(
   process.platform === 'win32' ? 'qoderclicn.exe' : 'qoderclicn',
 );
 const desktop = process.argv.includes('--desktop');
-const platform = process.argv.includes('--win')
-  ? '--win'
-  : process.argv.includes('--mac')
-    ? '--mac'
-    : process.platform === 'darwin'
-      ? '--mac'
-      : process.platform === 'win32'
-        ? '--win'
-        : '--linux';
+const resolvePlatform = () => {
+  if (process.argv.includes('--win')) {
+    return '--win';
+  }
+  if (process.argv.includes('--mac')) {
+    return '--mac';
+  }
+  if (process.platform === 'darwin') {
+    return '--mac';
+  }
+  if (process.platform === 'win32') {
+    return '--win';
+  }
+  return '--linux';
+};
+const platform = resolvePlatform();
 if (!existsSync(cli))
   await run(process.execPath, [join(sdk, 'scripts', 'postinstall.cjs')], {
     QODER_INSTALL_BUNDLED_CLI: '1',
   });
 if (platform === '--mac' && process.platform === 'darwin') await buildMacIcon(project);
-const runtimeTarget =
-  platform === '--mac' && process.arch === 'arm64'
-    ? 'mac-arm64'
-    : platform === '--win' && process.arch === 'x64'
-      ? 'win-x64'
-      : undefined;
+const resolveRuntimeTarget = () => {
+  if (platform === '--mac' && process.arch === 'arm64') {
+    return 'mac-arm64';
+  }
+  if (platform === '--win' && process.arch === 'x64') {
+    return 'win-x64';
+  }
+  return undefined;
+};
+const runtimeTarget = resolveRuntimeTarget();
 if (!runtimeTarget) throw new Error('随包 Office 运行环境目前支持 macOS arm64 和 Windows x64');
 await run(process.execPath, [
   join(project, 'scripts/workspace-runtime/prepare.mjs'),
@@ -92,12 +103,16 @@ try {
 }
 if (desktop) {
   const root = join(project, 'release');
-  const path =
-    process.platform === 'darwin'
-      ? join(root, process.arch === 'arm64' ? 'mac-arm64' : 'mac', 'multi-AI work.app')
-      : process.platform === 'win32'
-        ? join(root, 'win-unpacked', 'multi-AI work.exe')
-        : join(root, 'linux-unpacked', 'multi-AI work');
+  const resolvePath = () => {
+    if (process.platform === 'darwin') {
+      return join(root, process.arch === 'arm64' ? 'mac-arm64' : 'mac', 'multi-AI work.app');
+    }
+    if (process.platform === 'win32') {
+      return join(root, 'win-unpacked', 'multi-AI work.exe');
+    }
+    return join(root, 'linux-unpacked', 'multi-AI work');
+  };
+  const path = resolvePath();
   await run(
     process.platform === 'darwin' ? 'open' : path,
     process.platform === 'darwin' ? [path] : [],

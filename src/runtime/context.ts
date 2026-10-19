@@ -315,13 +315,10 @@ export class ContextManager {
       this.store.recordCompaction?.({ ...record, status: 'completed' });
       return { ...prepared, compaction: { status: 'completed' } };
     } catch (error) {
-      const failed = fail(
-        input.signal.aborted
-          ? 'cancelled'
-          : error instanceof SummaryNeedsSplit
-            ? 'needs_split'
-            : 'summary_failed',
-      );
+      let reason: 'cancelled' | 'needs_split' | 'summary_failed' = 'summary_failed';
+      if (input.signal.aborted) reason = 'cancelled';
+      else if (error instanceof SummaryNeedsSplit) reason = 'needs_split';
+      const failed = fail(reason);
       if (input.signal.aborted) throw error;
       return failed;
     }

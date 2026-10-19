@@ -164,6 +164,27 @@ export function ArtifactItem({
       setError(errorMessage(cause));
     }
   }
+  const renderPreview = () => {
+    if (isImageAttachment(artifact) && preview) {
+      return <ArtifactImagePreview artifact={artifact} />;
+    }
+    if (isDocumentPreview(artifact.name) && preview) {
+      return <DocumentPreview artifactId={artifact.id} />;
+    }
+    if (busy) {
+      return (
+        <div className="flex items-center gap-2 py-12 text-sm text-slate-500">
+          <LoaderCircle size={18} />
+          读取预览…
+        </div>
+      );
+    }
+    return (
+      <div className="max-h-96 overflow-auto text-sm leading-7">
+        <Markdown>{content}</Markdown>
+      </div>
+    );
+  };
   return (
     <>
       <div
@@ -203,20 +224,7 @@ export function ArtifactItem({
       <Modal open={preview} onOpenChange={setPreview} title={artifact.name} wide>
         <ArtifactRequirement artifact={artifact} className="mb-3" />
         <ErrorNote error={error} />
-        {isImageAttachment(artifact) && preview ? (
-          <ArtifactImagePreview artifact={artifact} />
-        ) : isDocumentPreview(artifact.name) && preview ? (
-          <DocumentPreview artifactId={artifact.id} />
-        ) : busy ? (
-          <div className="flex items-center gap-2 py-12 text-sm text-slate-500">
-            <LoaderCircle size={18} />
-            读取预览…
-          </div>
-        ) : (
-          <div className="max-h-96 overflow-auto text-sm leading-7">
-            <Markdown>{content}</Markdown>
-          </div>
-        )}
+        {renderPreview()}
         <div className="mt-5 flex justify-end gap-2">
           {allowDelete && (
             <DeleteArtifactButton
@@ -254,13 +262,19 @@ function ArtifactEntry({
   onOpen: () => void;
   deleteAction?: ReactNode;
 }) {
-  const FileIcon = artifact.mimeType.startsWith('image/')
-    ? FileImage
-    : /\.(csv|xlsx?|ods)$/i.test(artifact.name)
-      ? FileSpreadsheet
-      : /\.(html?|json|tsx?|jsx?|py|css|sh)$/i.test(artifact.name)
-        ? FileCode
-        : FileText;
+  const resolveFileIcon = () => {
+    if (artifact.mimeType.startsWith('image/')) {
+      return FileImage;
+    }
+    if (/\.(csv|xlsx?|ods)$/i.test(artifact.name)) {
+      return FileSpreadsheet;
+    }
+    if (/\.(html?|json|tsx?|jsx?|py|css|sh)$/i.test(artifact.name)) {
+      return FileCode;
+    }
+    return FileText;
+  };
+  const FileIcon = resolveFileIcon();
   return (
     <>
       <div
@@ -340,9 +354,11 @@ function ArtifactProducer({ producer, className }: { producer?: Bot; className?:
   );
 }
 function formatSize(value: number) {
-  return value >= 1024 * 1024
-    ? `${(value / 1024 / 1024).toFixed(1)} MB`
-    : value >= 1024
-      ? `${(value / 1024).toFixed(1)} KB`
-      : `${value} B`;
+  if (value >= 1024 * 1024) {
+    return `${(value / 1024 / 1024).toFixed(1)} MB`;
+  }
+  if (value >= 1024) {
+    return `${(value / 1024).toFixed(1)} KB`;
+  }
+  return `${value} B`;
 }

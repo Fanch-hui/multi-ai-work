@@ -58,11 +58,13 @@ export function stoppingTask(task: Task, run?: Run): boolean {
 export function taskRecovery(task?: Task): TaskActivity['recovery'] {
   if (task && (terminalLabels[task.status] || task.activity?.phase === 'stopping'))
     return undefined;
-  return task?.status === 'recovering'
-    ? task.recovery
-    : task?.activity?.phase === 'recovering'
-      ? task.activity.recovery
-      : undefined;
+  if (task?.status === 'recovering') {
+    return task.recovery;
+  }
+  if (task?.activity?.phase === 'recovering') {
+    return task.activity.recovery;
+  }
+  return undefined;
 }
 
 export function recoveryAttemptTime(task?: Task): string | undefined {

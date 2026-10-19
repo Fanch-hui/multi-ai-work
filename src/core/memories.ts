@@ -224,12 +224,12 @@ export class MemoryManagement {
 
     const revision = (old?.revision ?? 0) + 1;
     const nextTopic = parsed.topic !== undefined ? parsed.topic.trim() || undefined : old?.topic;
-    const nextSummaryRaw =
-      parsed.summary !== undefined
-        ? parsed.summary.trim() || undefined
-        : !contentChanged
-          ? old?.summary
-          : undefined;
+    let nextSummaryRaw: string | undefined;
+    if (parsed.summary !== undefined) {
+      nextSummaryRaw = parsed.summary.trim() || undefined;
+    } else if (!contentChanged) {
+      nextSummaryRaw = old?.summary;
+    }
     const nextSummary = nextSummaryRaw
       ? memorySummary({ content, summary: nextSummaryRaw, revision })
       : undefined;
@@ -249,6 +249,7 @@ export class MemoryManagement {
     const nextActorBotId = actor.botId ?? old?.actorBotId;
     if (old) s.put('memory_revisions', buildRevisionSnapshot(old));
 
+    const consolidationReason = parsed.consolidationReason || old?.consolidationReason;
     const entry: MemoryEntry = {
       id: old?.id ?? id(),
       content,
@@ -267,11 +268,7 @@ export class MemoryManagement {
       ...(nextActorBotId ? { actorBotId: nextActorBotId } : {}),
       ...(old?.supersedes?.length ? { supersedes: old.supersedes } : {}),
       ...(old?.promotedFromId ? { promotedFromId: old.promotedFromId } : {}),
-      ...(parsed.consolidationReason
-        ? { consolidationReason: parsed.consolidationReason }
-        : old?.consolidationReason
-          ? { consolidationReason: old.consolidationReason }
-          : {}),
+      ...(consolidationReason ? { consolidationReason } : {}),
       status: 'approved',
       revision,
       createdAt: old?.createdAt ?? now(),
@@ -370,9 +367,8 @@ export class MemoryManagement {
       );
     }
     const scope = input.scope ?? entry?.scope ?? 'bot';
-    const ownerId =
-      input.ownerId ??
-      (entry?.scope === scope ? entry.ownerId : scope === 'team' ? conversationId : botId);
+    const defaultOwnerId = scope === 'team' ? conversationId : botId;
+    const ownerId = input.ownerId ?? (entry?.scope === scope ? entry.ownerId : defaultOwnerId);
     const parsed = fields.parse({
       allowedConversationIds: [conversationId],
       ...entry,

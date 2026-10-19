@@ -18,12 +18,9 @@ export async function openWebUi(url: string, signal: AbortSignal): Promise<void>
     if (Date.now() >= deadline) throw new Error('开发界面尚未启动，请启动界面后重新启动 Core。');
     await delay(250, undefined, { signal });
   }
-  const command =
-    process.platform === 'darwin'
-      ? '/usr/bin/open'
-      : process.platform === 'win32'
-        ? 'rundll32.exe'
-        : 'xdg-open';
+  let command = 'xdg-open';
+  if (process.platform === 'darwin') command = '/usr/bin/open';
+  else if (process.platform === 'win32') command = 'rundll32.exe';
   const args = process.platform === 'win32' ? ['url.dll,FileProtocolHandler', url] : [url];
   await new Promise<void>((resolve, reject) => {
     const child = spawn(command, args, { stdio: 'ignore', signal });

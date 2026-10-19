@@ -294,20 +294,18 @@ describe('智能体上下文设置', () => {
 
   it('保存较大 ChatGPT 窗口时刷新旧目录并持久保存最大能力，后续保存复用该目录', async () => {
     const root = await mkdtemp(join(tmpdir(), 'multi-ai-context-catalog-'));
-    const probe = vi
-      .fn()
-      .mockResolvedValue({
-        models: [
-          {
-            id: 'gpt-6.1-sol',
-            name: 'GPT-6.1-Sol',
-            contextWindow: 272000,
-            maxContextWindow: 872000,
-            maxContextWindowSource: 'provider',
-          },
-        ],
-        capabilities: caps,
-      });
+    const probe = vi.fn().mockResolvedValue({
+      models: [
+        {
+          id: 'gpt-6.1-sol',
+          name: 'GPT-6.1-Sol',
+          contextWindow: 272000,
+          maxContextWindow: 872000,
+          maxContextWindowSource: 'provider',
+        },
+      ],
+      capabilities: caps,
+    });
     const core = new CoreService(root, undefined, undefined, [
       { kind: 'chatgpt', probe, run: async () => ({ text: '' }) },
     ]);

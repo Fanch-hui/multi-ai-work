@@ -27,6 +27,33 @@ export function PresetDetails({
   update?: () => void;
   checkUpdates: () => void;
 }) {
+  const renderDownloadAction = () => {
+    if (installation?.status === 'downloading') {
+      return <Button onClick={cancel}>取消下载</Button>;
+    }
+    if (installation) {
+      return (
+        <Confirm
+          title="删除下载内容？"
+          description="只删除本地资源；仍被成员引用的版本需要先解除引用。"
+          actionLabel="删除"
+          onConfirm={remove}
+        >
+          <Button variant="ghost">删除下载内容</Button>
+        </Confirm>
+      );
+    }
+    return <span />;
+  };
+  const getHireLabel = () => {
+    if (installation?.status === 'downloading') {
+      return `下载中 ${installation.progress}%`;
+    }
+    if (bots.length) {
+      return '再雇佣一位';
+    }
+    return '雇佣';
+  };
   return (
     <Modal
       open
@@ -125,20 +152,7 @@ export function PresetDetails({
           </p>
         )}
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
-          {installation?.status === 'downloading' ? (
-            <Button onClick={cancel}>取消下载</Button>
-          ) : installation ? (
-            <Confirm
-              title="删除下载内容？"
-              description="只删除本地资源；仍被成员引用的版本需要先解除引用。"
-              actionLabel="删除"
-              onConfirm={remove}
-            >
-              <Button variant="ghost">删除下载内容</Button>
-            </Confirm>
-          ) : (
-            <span />
-          )}
+          {renderDownloadAction()}
           <div className="flex flex-wrap gap-2">
             {installation && <Button onClick={checkUpdates}>检查更新</Button>}
             {update && <Button onClick={update}>更新成员</Button>}
@@ -147,11 +161,7 @@ export function PresetDetails({
               disabled={installation?.status === 'downloading' || hiring}
               onClick={hire}
             >
-              {installation?.status === 'downloading'
-                ? `下载中 ${installation.progress}%`
-                : bots.length
-                  ? '再雇佣一位'
-                  : '雇佣'}
+              {getHireLabel()}
             </Button>
           </div>
         </div>

@@ -15,12 +15,10 @@ export function receivingTask(
       .filter((input) => input.status !== 'delivered')
       .map((input) => input.taskId),
   );
-  const priority = (task: Task) =>
-    ['running', 'recovering', 'waiting_approval'].includes(task.status)
-      ? 0
-      : task.status === 'queued'
-        ? 2
-        : 1;
+  const priority = (task: Task) => {
+    if (['running', 'recovering', 'waiting_approval'].includes(task.status)) return 0;
+    return task.status === 'queued' ? 2 : 1;
+  };
   return storage
     .all<Task>('tasks')
     .filter(

@@ -54,14 +54,19 @@ export function messageInputFeedbackIndex(data: FeedbackData, conversationId: st
   for (const input of data.taskInputs ?? []) {
     if (input.conversationId !== conversationId) continue;
     const task = tasks.get(input.taskId);
-    const status =
-      input.status === 'delivered'
-        ? '成员已接收'
-        : !task || !activeTask(task.status)
-          ? '任务已结束，保留待接入'
-          : input.status === 'claimed'
-            ? '已接入当前请求，待确认'
-            : '等待接入';
+    const resolveStatus = () => {
+      if (input.status === 'delivered') {
+        return '成员已接收';
+      }
+      if (!task || !activeTask(task.status)) {
+        return '任务已结束，保留待接入';
+      }
+      if (input.status === 'claimed') {
+        return '已接入当前请求，待确认';
+      }
+      return '等待接入';
+    };
+    const status = resolveStatus();
     append(input.messageId, input.botId, {
       id: input.id,
       name: bots.get(input.botId)?.name || '成员',
@@ -75,11 +80,16 @@ export function messageInputFeedbackIndex(data: FeedbackData, conversationId: st
       receivers.get(task.sourceMessageId)?.has(task.botId)
     )
       continue;
-    const status = task.runIds.length
-      ? '成员已开始'
-      : activeTask(task.status)
-        ? '任务已派发'
-        : '任务已结束，尚未开始';
+    const resolveStatus = () => {
+      if (task.runIds.length) {
+        return '成员已开始';
+      }
+      if (activeTask(task.status)) {
+        return '任务已派发';
+      }
+      return '任务已结束，尚未开始';
+    };
+    const status = resolveStatus();
     append(task.sourceMessageId, task.botId, {
       id: task.id,
       name: bots.get(task.botId)?.name || '成员',

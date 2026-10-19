@@ -56,6 +56,8 @@ jobs:
         with:
           path: ${{ env.CI_PNPM_STORE }}
           key: ${{ steps.pnpm-cache.outputs.cache-primary-key }}
+      - name: Check source conventions
+        run: pnpm check
       - name: Typecheck
         run: pnpm typecheck
       - name: Test

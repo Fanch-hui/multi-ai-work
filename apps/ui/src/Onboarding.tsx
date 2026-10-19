@@ -56,7 +56,16 @@ export function Onboarding({
       setBusy(false);
     }
   }
-  const step = conversationId ? 2 : connection ? 1 : 0;
+  const getCurrentStep = () => {
+    if (conversationId) {
+      return 2;
+    }
+    if (connection) {
+      return 1;
+    }
+    return 0;
+  };
+  const step = getCurrentStep();
   const titles = [
     custom ? '连接自定义 API' : '欢迎使用 multi-AI work',
     '配置你的管家',
@@ -67,28 +76,12 @@ export function Onboarding({
     '选择模型和工作目录，之后随时可以在我的团队中调整。',
     '可以多选。管家会结合你的职业提供帮助，并为你推荐适合的团队成员。',
   ];
-  return (
-    <OnboardingLayout
-      title={titles[step]}
-      description={
-        custom && !connection ? '填写服务地址与认证信息，连接后继续配置管家。' : descriptions[step]
-      }
-      welcome={step === 0 && !custom}
-      wide={step === 2}
-      footer={
-        !conversationId && (
-          <>
-            <Button variant="ghost" disabled={busy || login.busy} onClick={() => void skip()}>
-              稍后设置
-            </Button>
-            <p className="mt-1 text-xs text-slate-400">之后可以在我的团队中配置管家。</p>
-          </>
-        )
-      }
-    >
-      {conversationId ? (
-        <OnboardingCareer mutate={mutate} finished={() => finished(conversationId)} />
-      ) : connection ? (
+  const renderSetup = () => {
+    if (conversationId) {
+      return <OnboardingCareer mutate={mutate} finished={() => finished(conversationId)} />;
+    }
+    if (connection) {
+      return (
         <>
           <div className="mb-5 flex min-w-0 items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
             <Check size={15} className="shrink-0 text-blue-600" />
@@ -115,7 +108,10 @@ export function Onboarding({
             onSubmit={complete}
           />
         </>
-      ) : custom ? (
+      );
+    }
+    if (custom) {
+      return (
         <>
           <Button
             variant="ghost"
@@ -134,14 +130,37 @@ export function Onboarding({
             connected={setConnection}
           />
         </>
-      ) : (
-        <OnboardingSignIn
-          login={login}
-          existing={existing}
-          useConnection={setConnection}
-          useCustom={() => setCustom(true)}
-        />
-      )}
+      );
+    }
+    return (
+      <OnboardingSignIn
+        login={login}
+        existing={existing}
+        useConnection={setConnection}
+        useCustom={() => setCustom(true)}
+      />
+    );
+  };
+  return (
+    <OnboardingLayout
+      title={titles[step]}
+      description={
+        custom && !connection ? '填写服务地址与认证信息，连接后继续配置管家。' : descriptions[step]
+      }
+      welcome={step === 0 && !custom}
+      wide={step === 2}
+      footer={
+        !conversationId && (
+          <>
+            <Button variant="ghost" disabled={busy || login.busy} onClick={() => void skip()}>
+              稍后设置
+            </Button>
+            <p className="mt-1 text-xs text-slate-400">之后可以在我的团队中配置管家。</p>
+          </>
+        )
+      }
+    >
+      {renderSetup()}
       <div className="mt-5">
         <ErrorNote error={error} />
       </div>
@@ -160,6 +179,24 @@ function OnboardingSignIn({
   useConnection: (connection: Connection) => void;
   useCustom: () => void;
 }) {
+  const getLoginLabel = () => {
+    if (login.phase === 'starting') {
+      return '正在打开登录…';
+    }
+    if (login.phase === 'checking') {
+      return '正在连接…';
+    }
+    return 'Sign in ChatGPT';
+  };
+  const getLoginStatusLabel = () => {
+    if (login.phase === 'error') {
+      return '连接未完成，请重试。';
+    }
+    if (login.phase === 'checking') {
+      return '正在读取可用模型，完成后继续配置管家。';
+    }
+    return '在浏览器完成登录，回来后会自动继续。';
+  };
   return (
     <div className="grid gap-3">
       <Button
@@ -168,20 +205,12 @@ function OnboardingSignIn({
         className="h-11 justify-center px-3"
         onClick={() => void login.start()}
       >
-        {login.phase === 'starting'
-          ? '正在打开登录…'
-          : login.phase === 'checking'
-            ? '正在连接…'
-            : 'Sign in ChatGPT'}
+        {getLoginLabel()}
       </Button>
       {login.phase !== 'idle' && (
         <div className="rounded-lg border border-black/5 bg-slate-50 p-4">
           <p role="status" className="text-pretty text-sm leading-6 text-slate-600">
-            {login.phase === 'error'
-              ? '连接未完成，请重试。'
-              : login.phase === 'checking'
-                ? '正在读取可用模型，完成后继续配置管家。'
-                : '在浏览器完成登录，回来后会自动继续。'}
+            {getLoginStatusLabel()}
           </p>
           <div className="mt-3">
             <ErrorNote error={login.error} />

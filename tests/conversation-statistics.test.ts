@@ -371,9 +371,8 @@ describe('conversation statistics', () => {
         rateFromPrevious: true,
         rateRun: { id: 'old', model: 'previous-model' },
       });
-      expect(stats.rateMissingReason).toContain(
-        status === 'running' ? '统计中' : status === 'failed' ? '失败' : '取消',
-      );
+      const expectedReason = { running: '统计中', failed: '失败', cancelled: '取消' }[status];
+      expect(stats.rateMissingReason).toContain(expectedReason);
       const html = renderToStaticMarkup(
         createElement(StatisticsDetails, {
           id: 'stats',

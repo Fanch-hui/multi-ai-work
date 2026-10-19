@@ -28,13 +28,22 @@ export function Memory({
   const [editing, setEditing] = useState<MemoryEntry | 'new'>();
   const notebook = memoryNotebooks(data).find((item) => item.id === selectedId);
   const notebooks = memoryNotebooks(data, query);
+  const getPageTitle = () => {
+    if (notebook) {
+      if (notebook.bot) {
+        return `${notebook.name} 的记忆`;
+      }
+      return notebook.name;
+    }
+    return '记忆';
+  };
   return (
     <PageSurface
       headerLeading={headerLeading}
       contentClassName="px-7 pb-8"
       header={
         <PageHeader
-          title={notebook ? (notebook.bot ? `${notebook.name} 的记忆` : notebook.name) : '记忆'}
+          title={getPageTitle()}
           action={
             <Button variant="primary" onClick={() => setEditing('new')}>
               <Plus size={16} />

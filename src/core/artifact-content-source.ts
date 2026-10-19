@@ -39,11 +39,9 @@ export function sourceContent(
 }
 
 function encodedContent(value: unknown, encoding: 'value' | 'model-text'): string | undefined {
-  return encoding === 'model-text'
-    ? toolResultMessage('', value).content
-    : typeof value === 'string'
-      ? value
-      : JSON.stringify(value);
+  if (encoding === 'model-text') return toolResultMessage('', value).content;
+  if (typeof value === 'string') return value;
+  return JSON.stringify(value);
 }
 
 export function matchesArtifact(

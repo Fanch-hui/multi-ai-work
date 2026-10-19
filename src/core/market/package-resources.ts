@@ -56,6 +56,10 @@ export async function digestSkillDirectory(root: string): Promise<string> {
     }
   }
   await visit(root, '');
-  files.sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
+  files.sort(([left], [right]) => {
+    if (left < right) return -1;
+    if (left > right) return 1;
+    return 0;
+  });
   return digestBytes(files.map((item) => `${JSON.stringify(item)}\n`).join(''));
 }

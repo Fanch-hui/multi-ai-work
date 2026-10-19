@@ -5,7 +5,7 @@ import {
   estimateTokens,
 } from '../runtime/model-history.js';
 import { projectToolResult, toolResultBudgets } from '../runtime/tool-result-budget.js';
-import type { ContextReferences } from './context-references.js';
+import type { ContextReference, ContextReferences } from './context-references.js';
 import {
   artifactReadPages,
   projectArtifactReadBatch,
@@ -62,11 +62,14 @@ export function prepareToolResultBudget(
           const args = page
             ? (JSON.parse(call.arguments) as { artifactId?: string; offset?: number })
             : undefined;
-          const reference = page
-            ? typeof args?.artifactId === 'string'
-              ? await references.readableArtifact(args.artifactId)
-              : undefined
-            : await references.preserveToolOutput(message);
+          let reference: ContextReference | undefined;
+          if (page) {
+            if (typeof args?.artifactId === 'string') {
+              reference = await references.readableArtifact(args.artifactId);
+            }
+          } else {
+            reference = await references.preserveToolOutput(message);
+          }
           if (reference) {
             next =
               (!page && call

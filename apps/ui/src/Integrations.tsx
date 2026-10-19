@@ -113,82 +113,90 @@ export function Integrations({ data, mutate }: { data: Snapshot; mutate: Mutate 
         )}
         {data.toolConnections.length ? (
           <div className="grid gap-3">
-            {data.toolConnections.map((item) => (
-              <article key={item.id} className="rounded-xl border border-slate-200 bg-white p-5">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <Plug className="text-slate-400" size={20} />
-                    <div>
-                      <h3 className="font-semibold">{item.name}</h3>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {item.kind === 'search' ? '搜索' : 'MCP'} ·{' '}
-                        {item.kind === 'search'
-                          ? `HTTP ${httpSearchConfiguration(item).method}`
-                          : item.transport === 'http'
-                            ? 'HTTP'
-                            : 'stdio'}{' '}
-                        · {item.enabled ? '已启用' : '未启用'}
-                      </p>
+            {data.toolConnections.map((item) => {
+              const getTransportLabel = () => {
+                if (item.kind === 'search') {
+                  return `HTTP ${httpSearchConfiguration(item).method}`;
+                }
+                if (item.transport === 'http') {
+                  return 'HTTP';
+                }
+                return 'stdio';
+              };
+              return (
+                <article key={item.id} className="rounded-xl border border-slate-200 bg-white p-5">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                      <Plug className="text-slate-400" size={20} />
+                      <div>
+                        <h3 className="font-semibold">{item.name}</h3>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {item.kind === 'search' ? '搜索' : 'MCP'} · {getTransportLabel()} ·{' '}
+                          {item.enabled ? '已启用' : '未启用'}
+                        </p>
+                      </div>
                     </div>
+                    <Badge status={item.status} />
                   </div>
-                  <Badge status={item.status} />
-                </div>
-                <p
-                  className="mt-3 truncate font-mono text-xs text-slate-500"
-                  title={item.url || item.command}
-                >
-                  {item.url || item.command}
-                </p>
-                {item.error && (
-                  <p className="mt-3 text-pretty text-sm text-red-700">{item.error}</p>
-                )}
-                {!!item.toolNames.length && (
-                  <details className="mt-3 text-xs text-slate-500">
-                    <summary className="cursor-pointer">{item.toolNames.length} 项可用工具</summary>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {item.toolNames.map((name) => (
-                        <code key={name} className="rounded bg-slate-100 px-2 py-1">
-                          {name}
-                        </code>
-                      ))}
-                    </div>
-                  </details>
-                )}
-                {(item.kind === 'search' ||
-                  item.searchBackend === 'tavily' ||
-                  item.toolNames.includes('tavily-search')) && (
-                  <p className="mt-3 text-xs text-blue-700">
-                    {data.settings.defaultSearchConnectionId === item.id
-                      ? '默认搜索服务'
-                      : '可用于网页搜索'}{' '}
-                    ·{' '}
-                    {item.kind === 'search'
-                      ? `HTTP ${httpSearchConfiguration(item).method}`
-                      : 'Tavily MCP'}
-                  </p>
-                )}
-                <div className="mt-4 flex gap-2">
-                  <Button disabled={!!busy} onClick={() => void probe(item.id)}>
-                    <Play size={14} />
-                    {busy === item.id ? '检测中…' : '检测工具'}
-                  </Button>
-                  <Button variant="ghost" onClick={() => setEditing(item)}>
-                    <Pencil size={14} />
-                    编辑
-                  </Button>
-                  <Confirm
-                    title={`删除 ${item.name}？`}
-                    description="此工具连接将被移除，智能体配置需同步调整。"
-                    actionLabel="删除"
-                    onConfirm={() => mutate('tools.delete', { id: item.id })}
+                  <p
+                    className="mt-3 truncate font-mono text-xs text-slate-500"
+                    title={item.url || item.command}
                   >
-                    <Button variant="ghost" aria-label={`删除${item.name}`} className="ml-auto">
-                      <Trash2 size={15} />
+                    {item.url || item.command}
+                  </p>
+                  {item.error && (
+                    <p className="mt-3 text-pretty text-sm text-red-700">{item.error}</p>
+                  )}
+                  {!!item.toolNames.length && (
+                    <details className="mt-3 text-xs text-slate-500">
+                      <summary className="cursor-pointer">
+                        {item.toolNames.length} 项可用工具
+                      </summary>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {item.toolNames.map((name) => (
+                          <code key={name} className="rounded bg-slate-100 px-2 py-1">
+                            {name}
+                          </code>
+                        ))}
+                      </div>
+                    </details>
+                  )}
+                  {(item.kind === 'search' ||
+                    item.searchBackend === 'tavily' ||
+                    item.toolNames.includes('tavily-search')) && (
+                    <p className="mt-3 text-xs text-blue-700">
+                      {data.settings.defaultSearchConnectionId === item.id
+                        ? '默认搜索服务'
+                        : '可用于网页搜索'}{' '}
+                      ·{' '}
+                      {item.kind === 'search'
+                        ? `HTTP ${httpSearchConfiguration(item).method}`
+                        : 'Tavily MCP'}
+                    </p>
+                  )}
+                  <div className="mt-4 flex gap-2">
+                    <Button disabled={!!busy} onClick={() => void probe(item.id)}>
+                      <Play size={14} />
+                      {busy === item.id ? '检测中…' : '检测工具'}
                     </Button>
-                  </Confirm>
-                </div>
-              </article>
-            ))}
+                    <Button variant="ghost" onClick={() => setEditing(item)}>
+                      <Pencil size={14} />
+                      编辑
+                    </Button>
+                    <Confirm
+                      title={`删除 ${item.name}？`}
+                      description="此工具连接将被移除，智能体配置需同步调整。"
+                      actionLabel="删除"
+                      onConfirm={() => mutate('tools.delete', { id: item.id })}
+                    >
+                      <Button variant="ghost" aria-label={`删除${item.name}`} className="ml-auto">
+                        <Trash2 size={15} />
+                      </Button>
+                    </Confirm>
+                  </div>
+                </article>
+              );
+            })}
           </div>
         ) : (
           <Empty

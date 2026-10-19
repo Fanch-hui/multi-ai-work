@@ -58,7 +58,8 @@ function imageCapability(model: CatalogRecord): ModelInfo['imageInput'] {
     return modalities.includes('image') ? 'supported' : 'unsupported';
   }
   const supported = model.supports_images ?? model.supportsImages;
-  return typeof supported === 'boolean' ? (supported ? 'supported' : 'unsupported') : undefined;
+  if (typeof supported !== 'boolean') return undefined;
+  return supported ? 'supported' : 'unsupported';
 }
 
 function modelInfo(model: CatalogRecord, id: string): ModelInfo {

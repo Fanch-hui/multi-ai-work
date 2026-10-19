@@ -17,6 +17,15 @@ export function OnboardingLayout({
   children: ReactNode;
   footer?: ReactNode;
 }) {
+  const getContentWidth = () => {
+    if (welcome) {
+      return 'max-w-sm';
+    }
+    if (wide) {
+      return 'max-w-xl';
+    }
+    return 'max-w-lg';
+  };
   return (
     <main
       className="onboarding flex h-dvh flex-col overflow-auto pb-[env(safe-area-inset-bottom)]"
@@ -24,10 +33,7 @@ export function OnboardingLayout({
     >
       <div className="app-titlebar h-14 shrink-0" />
       <div className="flex flex-1 items-center justify-center px-6 py-10 sm:px-8">
-        <section
-          className={cn('w-full min-w-0', welcome ? 'max-w-sm' : wide ? 'max-w-xl' : 'max-w-lg')}
-          aria-label={title}
-        >
+        <section className={cn('w-full min-w-0', getContentWidth())} aria-label={title}>
           <header className={cn('mb-8', welcome && 'text-center')}>
             {welcome ? (
               <img

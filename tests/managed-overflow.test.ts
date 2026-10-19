@@ -88,13 +88,11 @@ async function fixture(
 
 describe('managed context overflow recovery', () => {
   it('recovers once after executing a tool, retaining opaque items and results without repeating the write', async () => {
-    const { context, requests } = await fixture((_request, index) =>
-      index === 1
-        ? { output: [opaque, call] }
-        : index === 2
-          ? { code: 'context_length_exceeded' }
-          : { output: [answer] },
-    );
+    const { context, requests } = await fixture((_request, index) => {
+      if (index === 1) return { output: [opaque, call] };
+      if (index === 2) return { code: 'context_length_exceeded' };
+      return { output: [answer] };
+    });
     let writes = 0,
       recoveries = 0;
     context.executeTool = async () => {

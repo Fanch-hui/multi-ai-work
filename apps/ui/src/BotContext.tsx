@@ -46,6 +46,40 @@ export function BotContext({ bot, data, close }: { bot: Bot; data: Snapshot; clo
         : memory.allowedConversationIds.includes(binding.conversationId) &&
           (memory.scope === 'shared' || memory.ownerId === bot.id)),
   );
+  const getContextLabel = () => {
+    if (context?.source === 'native-reported' && typeof context.usedPercentage === 'number') {
+      return `运行时报告占用 ${context.usedPercentage.toFixed(1)}%`;
+    }
+    if (context?.source === 'native-reported' && typeof context.usedTokens === 'number') {
+      return `运行时报告已用 ${context.usedTokens.toLocaleString()} / ${String(context.contextWindow ?? '未知')} tokens`;
+    }
+    if (context?.source === 'app-estimated' && typeof context.estimatedTokens === 'number') {
+      return `估计占用 ${context.estimatedTokens.toLocaleString()} tokens${typeof context.availableTokens === 'number' ? ` / 可用 ${context.availableTokens.toLocaleString()}` : '，窗口未知'}`;
+    }
+    return '上下文占用未知';
+  };
+  const getCompactionLabel = (status: string) => {
+    if (status === 'completed') {
+      return '完成';
+    }
+    if (status === 'started') {
+      return '进行中';
+    }
+    return '未替换上下文';
+  };
+  const renderMemories = () => {
+    if (bot.memoryMode === 'off') {
+      return <p className="text-slate-500">此成员已关闭记忆</p>;
+    }
+    if (memories.length) {
+      return memories.map((memory) => (
+        <p key={memory.id} className="mt-2 whitespace-pre-wrap text-slate-600">
+          {memory.content}
+        </p>
+      ));
+    }
+    return <p className="text-slate-500">尚无长期记忆</p>;
+  };
   return (
     <Modal open title={`${bot.name} · 上下文与记忆`} onOpenChange={(open) => !open && close()}>
       <div className="grid gap-5">
@@ -88,15 +122,7 @@ export function BotContext({ bot, data, close }: { bot: Bot; data: Snapshot; clo
                 )}
             </>
           )}
-          <p className="mt-2 text-slate-600 tabular-nums">
-            {context?.source === 'native-reported' && typeof context.usedPercentage === 'number'
-              ? `运行时报告占用 ${context.usedPercentage.toFixed(1)}%`
-              : context?.source === 'native-reported' && typeof context.usedTokens === 'number'
-                ? `运行时报告已用 ${context.usedTokens.toLocaleString()} / ${String(context.contextWindow ?? '未知')} tokens`
-                : context?.source === 'app-estimated' && typeof context.estimatedTokens === 'number'
-                  ? `估计占用 ${context.estimatedTokens.toLocaleString()} tokens${typeof context.availableTokens === 'number' ? ` / 可用 ${context.availableTokens.toLocaleString()}` : '，窗口未知'}`
-                  : '上下文占用未知'}
-          </p>
+          <p className="mt-2 text-slate-600 tabular-nums">{getContextLabel()}</p>
           {binding && (
             <p className="mt-2 break-all text-xs text-slate-400">
               绑定 {binding.id} · 第 {binding.generation} 代
@@ -105,12 +131,7 @@ export function BotContext({ bot, data, close }: { bot: Bot; data: Snapshot; clo
           {compaction && (
             <p className="mt-3 text-xs text-slate-500">
               最近整理：
-              {compaction.status === 'completed'
-                ? '完成'
-                : compaction.status === 'started'
-                  ? '进行中'
-                  : '未替换上下文'}{' '}
-              · {timeLabel(compaction.createdAt)}
+              {getCompactionLabel(compaction.status)} · {timeLabel(compaction.createdAt)}
               {compaction.reason === 'needs_split' && ' · 单轮资料过大，需要分割输入'}
             </p>
           )}
@@ -125,17 +146,7 @@ export function BotContext({ bot, data, close }: { bot: Bot; data: Snapshot; clo
         </section>
         <section className="rounded-xl border border-slate-200 p-4 text-sm">
           <h3 className="mb-3 font-semibold">本会话可用记忆</h3>
-          {bot.memoryMode === 'off' ? (
-            <p className="text-slate-500">此成员已关闭记忆</p>
-          ) : memories.length ? (
-            memories.map((memory) => (
-              <p key={memory.id} className="mt-2 whitespace-pre-wrap text-slate-600">
-                {memory.content}
-              </p>
-            ))
-          ) : (
-            <p className="text-slate-500">尚无长期记忆</p>
-          )}
+          {renderMemories()}
           <p className="mt-3 text-xs text-slate-400">
             成员管理自己的记忆，你可以在“记忆”页面编辑。
           </p>

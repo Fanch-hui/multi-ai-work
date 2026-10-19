@@ -36,13 +36,12 @@ export async function normalizeImageBytes(
     let pipeline = sharp(bytes, decodeOptions)
       .rotate()
       .resize({ width: 2048, height: 2048, fit: 'inside', withoutEnlargement: true });
-    const output = mimeType === 'image/jpeg' ? 'jpeg' : mimeType === 'image/webp' ? 'webp' : 'png';
-    pipeline =
-      output === 'jpeg'
-        ? pipeline.jpeg({ quality: 90 })
-        : output === 'webp'
-          ? pipeline.webp({ quality: 90 })
-          : pipeline.png();
+    let output = 'png';
+    if (mimeType === 'image/jpeg') output = 'jpeg';
+    else if (mimeType === 'image/webp') output = 'webp';
+    if (output === 'jpeg') pipeline = pipeline.jpeg({ quality: 90 });
+    else if (output === 'webp') pipeline = pipeline.webp({ quality: 90 });
+    else pipeline = pipeline.png();
     const { data, info } = await pipeline.toBuffer({ resolveWithObject: true });
     const previewDirectory = join(directory, '.image');
     await mkdir(previewDirectory, { recursive: true, mode: 0o700 });

@@ -6,12 +6,15 @@ import type { ReactNode } from 'react';
 const exact = (value?: number) =>
   value === undefined ? '—' : new Intl.NumberFormat('en').format(value);
 const tokens = (value?: number) => (value === undefined ? '—' : `${exact(value)} tok`);
-const duration = (ms?: number) =>
-  !nonnegative(ms)
-    ? '—'
-    : ms < 60000
-      ? `${(ms / 1000).toFixed(1)} 秒`
-      : `${Math.floor(ms / 60000)} 分 ${Math.round((ms % 60000) / 1000)} 秒`;
+const duration = (ms?: number) => {
+  if (!nonnegative(ms)) {
+    return '—';
+  }
+  if (ms < 60000) {
+    return `${(ms / 1000).toFixed(1)} 秒`;
+  }
+  return `${Math.floor(ms / 60000)} 分 ${Math.round((ms % 60000) / 1000)} 秒`;
+};
 const row = (label: string, value: string) => (
   <div className="flex items-start justify-between gap-5">
     <dt className="text-slate-500">{label}</dt>
@@ -36,8 +39,26 @@ export function StatisticsDetails({
 }) {
   const visible = useModalVisible();
   const { usage, context } = stats;
-  const title = panel === 'activity' ? '会话统计' : panel === 'usage' ? 'Token 用量' : '上下文';
-  const Icon = panel === 'activity' ? Gauge : panel === 'usage' ? Database : Circle;
+  const getPanelTitle = () => {
+    if (panel === 'activity') {
+      return '会话统计';
+    }
+    if (panel === 'usage') {
+      return 'Token 用量';
+    }
+    return '上下文';
+  };
+  const title = getPanelTitle();
+  const getPanelIcon = () => {
+    if (panel === 'activity') {
+      return Gauge;
+    }
+    if (panel === 'usage') {
+      return Database;
+    }
+    return Circle;
+  };
+  const Icon = getPanelIcon();
   const percent =
     context.percent === undefined
       ? '—'
@@ -126,6 +147,15 @@ function UsageDetails({ stats }: { stats: ReturnType<typeof conversationStatisti
     usage.cacheComplete && usage.input !== undefined && usage.cached !== undefined
       ? usage.input - usage.cached
       : undefined;
+  const getUsageSourceLabel = () => {
+    if (usage.knownRuns === 0) {
+      return '未报告';
+    }
+    if (usage.estimated) {
+      return '包含估算';
+    }
+    return '服务端报告';
+  };
   return (
     <>
       <dl className="space-y-3">
@@ -150,10 +180,7 @@ function UsageDetails({ stats }: { stats: ReturnType<typeof conversationStatisti
               `${usage.cacheLegacyRuns} / ${usage.cacheLegacyTotalRuns} 次运行`,
             )}
           {row('完整用量记录', `${usage.completeRuns} / ${stats.runs} 次运行`)}
-          {row(
-            '用量来源',
-            usage.knownRuns === 0 ? '未报告' : usage.estimated ? '包含估算' : '服务端报告',
-          )}
+          {row('用量来源', getUsageSourceLabel())}
         </dl>
         <p className="mt-3 leading-relaxed">
           含摘要调用。缓存命中按配对样本输入加权；缓存读取包含在输入中，总量为输入加输出。
@@ -173,6 +200,15 @@ function UsageDetails({ stats }: { stats: ReturnType<typeof conversationStatisti
 
 function ContextDetails({ stats }: { stats: ReturnType<typeof conversationStatistics> }) {
   const { context } = stats;
+  const getContextSourceLabel = () => {
+    if (context.source === 'estimated') {
+      return '请求前估算';
+    }
+    if (context.source === 'reported') {
+      return '原生运行时快照';
+    }
+    return '暂无上下文记录';
+  };
   return (
     <>
       <div
@@ -195,11 +231,7 @@ function ContextDetails({ stats }: { stats: ReturnType<typeof conversationStatis
         {row('预留输出', tokens(context.outputReserve))}
       </dl>
       <p className="mt-4 text-xs leading-relaxed text-slate-500">
-        {context.source === 'estimated'
-          ? '请求前估算'
-          : context.source === 'reported'
-            ? '原生运行时快照'
-            : '暂无上下文记录'}
+        {getContextSourceLabel()}
         {context.percent !== undefined && context.percent > 100 ? ' · 已超过窗口' : ''}
       </p>
     </>

@@ -50,6 +50,27 @@ export function ConnectionEditor({
   });
   async function save(event: FormEvent) {
     event.preventDefault();
+    const getExecutableMode = () => {
+      if (['antigravity', 'qoder'].includes(provider)) {
+        if (executable) {
+          return 'explicit';
+        }
+        return 'auto';
+      }
+      return undefined;
+    };
+    const getAuthenticationType = () => {
+      if (provider === 'custom') {
+        return apiAuth;
+      }
+      if (provider === 'chatgpt') {
+        return 'oauth';
+      }
+      if (provider === 'qoder') {
+        return qoderAuth;
+      }
+      return 'local';
+    };
     await flow.connect(
       {
         id: connection?.id,
@@ -58,26 +79,27 @@ export function ConnectionEditor({
         protocol: provider === 'custom' ? protocol : undefined,
         baseUrl: baseUrl || undefined,
         executable: executable || undefined,
-        executableMode: ['antigravity', 'qoder'].includes(provider)
-          ? executable
-            ? 'explicit'
-            : 'auto'
-          : undefined,
+        executableMode: getExecutableMode(),
         concurrency,
-        authMode:
-          provider === 'custom'
-            ? apiAuth
-            : provider === 'chatgpt'
-              ? 'oauth'
-              : provider === 'qoder'
-                ? qoderAuth
-                : 'local',
+        authMode: getAuthenticationType(),
         secret: secret || undefined,
       },
       provider,
     );
     setSecret('');
   }
+  const getConnectLabel = () => {
+    if (flow.phase === 'saving') {
+      return '准备连接…';
+    }
+    if (flow.phase === 'checking') {
+      return '连接中…';
+    }
+    if (inline && provider === 'chatgpt') {
+      return 'Sign in ChatGPT';
+    }
+    return '连接';
+  };
   const content = (
     <>
       {['authorization', 'waiting', 'signingIn'].includes(flow.phase) ||
@@ -242,13 +264,7 @@ export function ConnectionEditor({
               {inline ? '返回' : '取消'}
             </Button>
             <Button variant="primary" disabled={flow.busy}>
-              {flow.phase === 'saving'
-                ? '准备连接…'
-                : flow.phase === 'checking'
-                  ? '连接中…'
-                  : inline && provider === 'chatgpt'
-                    ? 'Sign in ChatGPT'
-                    : '连接'}
+              {getConnectLabel()}
             </Button>
           </div>
         </form>

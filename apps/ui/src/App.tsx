@@ -92,6 +92,81 @@ export function App() {
       />
     );
   }
+  const renderPage = () => {
+    if (!data) {
+      if (error) {
+        return (
+          <div className="flex flex-1 items-center justify-center p-8">
+            <div className="max-w-md">
+              <h1 className="text-lg font-semibold">无法连接工作台</h1>
+              <p role="alert" className="my-4 text-sm leading-6 text-slate-500">
+                {error}
+              </p>
+              <Button variant="primary" onClick={() => void refresh()}>
+                <RefreshCw size={15} />
+                重新连接
+              </Button>
+            </div>
+          </div>
+        );
+      }
+      return <Loading />;
+    }
+    if (page === 'chat') {
+      return (
+        <Chat
+          key={conversation?.id}
+          data={data}
+          conversation={conversation}
+          mutate={mutate}
+          history={{ hasMore: !!nextBefore, loading: loadingHistory, loadMore }}
+          configure={() => setPage('settings')}
+          configureChief={() => setConfigureChief(true)}
+          onSelectConversation={openConversation}
+          sidebarCollapsed={collapsed}
+          onExpandSidebar={toggleSidebar}
+        />
+      );
+    }
+    if (page === 'market') {
+      return (
+        <Market
+          data={data}
+          mutate={mutate}
+          headerLeading={headerLeading}
+          configureConnection={() => setPage('settings')}
+          careerTrigger={careerTrigger}
+          careerHandled={() => setCareerTrigger(false)}
+        />
+      );
+    }
+    if (page === 'agents') {
+      return (
+        <Agents
+          data={data}
+          mutate={mutate}
+          headerLeading={headerLeading}
+          openChief={() => openConversation(data.settings.mainConversationId || '')}
+          openMarket={() => setPage('market')}
+          configureConnection={() => setPage('settings')}
+        />
+      );
+    }
+    if (page === 'tasks') {
+      return <Tasks data={data} mutate={mutate} headerLeading={headerLeading} />;
+    }
+    if (page === 'memory') {
+      return <Memory data={data} mutate={mutate} headerLeading={headerLeading} />;
+    }
+    return (
+      <Settings
+        data={data}
+        mutate={mutate}
+        headerLeading={headerLeading}
+        onSelectConversation={openConversation}
+      />
+    );
+  };
   return (
     <main
       data-mac={navigator.platform.includes('Mac')}
@@ -130,68 +205,7 @@ export function App() {
             }}
           />
         )}
-        <Suspense fallback={<Loading />}>
-          {!data ? (
-            error ? (
-              <div className="flex flex-1 items-center justify-center p-8">
-                <div className="max-w-md">
-                  <h1 className="text-lg font-semibold">无法连接工作台</h1>
-                  <p role="alert" className="my-4 text-sm leading-6 text-slate-500">
-                    {error}
-                  </p>
-                  <Button variant="primary" onClick={() => void refresh()}>
-                    <RefreshCw size={15} />
-                    重新连接
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <Loading />
-            )
-          ) : page === 'chat' ? (
-            <Chat
-              key={conversation?.id}
-              data={data}
-              conversation={conversation}
-              mutate={mutate}
-              history={{ hasMore: !!nextBefore, loading: loadingHistory, loadMore }}
-              configure={() => setPage('settings')}
-              configureChief={() => setConfigureChief(true)}
-              onSelectConversation={openConversation}
-              sidebarCollapsed={collapsed}
-              onExpandSidebar={toggleSidebar}
-            />
-          ) : page === 'market' ? (
-            <Market
-              data={data}
-              mutate={mutate}
-              headerLeading={headerLeading}
-              configureConnection={() => setPage('settings')}
-              careerTrigger={careerTrigger}
-              careerHandled={() => setCareerTrigger(false)}
-            />
-          ) : page === 'agents' ? (
-            <Agents
-              data={data}
-              mutate={mutate}
-              headerLeading={headerLeading}
-              openChief={() => openConversation(data.settings.mainConversationId || '')}
-              openMarket={() => setPage('market')}
-              configureConnection={() => setPage('settings')}
-            />
-          ) : page === 'tasks' ? (
-            <Tasks data={data} mutate={mutate} headerLeading={headerLeading} />
-          ) : page === 'memory' ? (
-            <Memory data={data} mutate={mutate} headerLeading={headerLeading} />
-          ) : (
-            <Settings
-              data={data}
-              mutate={mutate}
-              headerLeading={headerLeading}
-              onSelectConversation={openConversation}
-            />
-          )}
-        </Suspense>
+        <Suspense fallback={<Loading />}>{renderPage()}</Suspense>
       </div>
       <ModalPresence show={configureChief && !!mainBot && !!data}>
         {mainBot && data && (

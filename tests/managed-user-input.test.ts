@@ -287,13 +287,11 @@ describe('supplemental messages and context recovery', () => {
   });
 
   it('keeps complete original-run tool pairs and supplements through a smaller recovery', async () => {
-    const { context, pending, requests } = await fixture('responses', (index) =>
-      index === 1
-        ? { tools: ['write'] }
-        : index === 2
-          ? { overflow: true }
-          : { text: 'Revised answer' },
-    );
+    const { context, pending, requests } = await fixture('responses', (index) => {
+      if (index === 1) return { tools: ['write'] };
+      if (index === 2) return { overflow: true };
+      return { text: 'Revised answer' };
+    });
     context.messages = [
       { role: 'user', content: 'old'.repeat(1000) },
       { role: 'assistant', content: 'Old answer' },

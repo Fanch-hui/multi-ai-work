@@ -239,16 +239,14 @@ describe('official ChatGPT catalog supplement', () => {
   });
 
   it('reads only the fixed public official URL without account credentials and ignores non-level aliases', async () => {
-    const fetcher = vi
-      .fn<typeof fetch>()
-      .mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            models: [chatGptModel, { slug: 'ignored', reasoning_efforts: ['high'] }],
-          }),
-          { status: 200 },
-        ),
-      );
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          models: [chatGptModel, { slug: 'ignored', reasoning_efforts: ['high'] }],
+        }),
+        { status: 200 },
+      ),
+    );
     const models = await loadOfficialModelCatalog(fetcher);
     const [url, request] = fetcher.mock.calls[0];
     expect(url).toBe(

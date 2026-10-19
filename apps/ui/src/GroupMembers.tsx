@@ -49,6 +49,15 @@ export function GroupMembers({
       setBusy(false);
     }
   }
+  const getSubmitLabel = () => {
+    if (busy) {
+      return '处理中…';
+    }
+    if (adding) {
+      return '添加成员';
+    }
+    return '移除成员';
+  };
   return (
     <Modal open title={adding ? '添加成员' : '群聊成员'} onOpenChange={(open) => !open && close()}>
       <div className="grid gap-4">
@@ -113,7 +122,7 @@ export function GroupMembers({
               disabled={busy || conversation.archived || !selected.length}
               onClick={() => void save()}
             >
-              {busy ? '处理中…' : adding ? '添加成员' : '移除成员'}
+              {getSubmitLabel()}
             </Button>
           </div>
         </div>

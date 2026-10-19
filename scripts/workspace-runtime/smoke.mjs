@@ -59,6 +59,15 @@ for (const [format, input] of Object.entries(files)) {
     const outputDirectory = path.join(work, `${format}-${outputFormat}`);
     await mkdir(outputDirectory, { recursive: true });
     const reportPath = path.join(outputDirectory, 'report.json');
+    const renderSelection = () => {
+      if (outputFormat !== 'png') {
+        return {};
+      }
+      if (format === 'xlsx') {
+        return { sheet: '月度统计', range: 'A1:J20' };
+      }
+      return { pages: [1] };
+    };
     execFileSync(
       node,
       [
@@ -69,11 +78,7 @@ for (const [format, input] of Object.entries(files)) {
           reportPath,
           format: outputFormat,
           dpi: 96,
-          ...(outputFormat !== 'png'
-            ? {}
-            : format === 'xlsx'
-              ? { sheet: '月度统计', range: 'A1:J20' }
-              : { pages: [1] }),
+          ...renderSelection(),
         }),
       ],
       options,
@@ -81,12 +86,16 @@ for (const [format, input] of Object.entries(files)) {
     const report = JSON.parse(await readFile(reportPath, 'utf8'));
     for (const rendered of report.files) {
       const bytes = await readFile(rendered.path);
-      const valid =
-        outputFormat === 'pdf'
-          ? bytes.subarray(0, 5).toString() === '%PDF-'
-          : outputFormat === 'xlsx'
-            ? bytes.subarray(0, 2).toString() === 'PK'
-            : bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+      const getValidOutputHeader = () => {
+        if (outputFormat === 'pdf') {
+          return bytes.subarray(0, 5).toString() === '%PDF-';
+        }
+        if (outputFormat === 'xlsx') {
+          return bytes.subarray(0, 2).toString() === 'PK';
+        }
+        return bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+      };
+      const valid = getValidOutputHeader();
       if (!valid) throw new Error(`Invalid rendered ${outputFormat}`);
       if (outputFormat === 'xlsx')
         execFileSync(

@@ -164,20 +164,22 @@ export class BackupService {
       const db = this.state.storage.db;
       db.transaction(() => {
         for (const table of [...entityTables, 'metadata', 'messages', 'run_events']) {
-          const columns =
-            table === 'metadata'
-              ? ['key', 'value']
-              : table === 'messages'
-                ? [
-                    'id',
-                    'conversation_id',
-                    'sequence',
-                    'payload',
-                    ...(hasStreamCursor ? ['stream_sequence'] : []),
-                  ]
-                : table === 'run_events'
-                  ? ['id', 'run_id', 'payload']
-                  : ['id', 'payload'];
+          let columns: string[];
+          if (table === 'metadata') {
+            columns = ['key', 'value'];
+          } else if (table === 'messages') {
+            columns = [
+              'id',
+              'conversation_id',
+              'sequence',
+              'payload',
+              ...(hasStreamCursor ? ['stream_sequence'] : []),
+            ];
+          } else if (table === 'run_events') {
+            columns = ['id', 'run_id', 'payload'];
+          } else {
+            columns = ['id', 'payload'];
+          }
           const optional =
             [
               'memory_revisions',

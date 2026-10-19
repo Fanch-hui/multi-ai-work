@@ -319,7 +319,9 @@ describe('provider network transport', () => {
       refreshes = 0,
       requests = 0;
     configureProviderFetch(async (input) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      let url: string;
+      if (typeof input === 'string') url = input;
+      else url = input instanceof URL ? input.href : input.url;
       if (url.endsWith('/api/accounts/oauth/token')) {
         refreshes++;
         return new Response(

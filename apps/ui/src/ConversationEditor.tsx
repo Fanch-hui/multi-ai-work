@@ -28,12 +28,16 @@ export function ConversationEditor({
   const [busy, setBusy] = useState(false);
   const bots = data.bots.filter((item) => !item.archived);
   function toggle(id: string) {
-    const next =
-      kind === 'private'
-        ? [id]
-        : members.includes(id)
-          ? members.filter((item) => item !== id)
-          : [...members, id];
+    const resolveNext = () => {
+      if (kind === 'private') {
+        return [id];
+      }
+      if (members.includes(id)) {
+        return members.filter((item) => item !== id);
+      }
+      return [...members, id];
+    };
+    const next = resolveNext();
     setMembers(next);
     if (!next.includes(chief)) setChief(next[0] || '');
   }

@@ -34,13 +34,11 @@ export async function compactRunMessages(original: ModelMessage[], options: RunC
     const range = removableRange(messages, currentStart);
     if (!range) return compactLatestResult(messages, currentStart, options);
     const [start, end] = range;
-    const history = messages
-      .slice(start, end)
-      .map((message, sequence) => ({
-        message: { ...message },
-        sequence,
-        messageId: String(sequence),
-      }));
+    const history = messages.slice(start, end).map((message, sequence) => ({
+      message: { ...message },
+      sequence,
+      messageId: String(sequence),
+    }));
     let references = await options.preserveReferences?.(
       history.map((entry) => entry.message),
       history.flatMap((entry) => entry.message.contextArtifactIds ?? []),

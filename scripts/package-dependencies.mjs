@@ -52,12 +52,16 @@ export function assertPackagedDependencies(
     const metadata = JSON.parse(asar.extractFile(archive, normalize(manifest)).toString('utf8'));
     const optional = metadata.optionalDependencies ?? {};
     const dependencies = { ...metadata.dependencies, ...optional };
-    const requiredNative =
-      metadata.name === 'sharp'
-        ? `@img/sharp-${platform}-${arch}`
-        : metadata.name === '@vscode/ripgrep'
-          ? `@vscode/ripgrep-${platform}-${arch}`
-          : undefined;
+    const resolveRequiredNative = () => {
+      if (metadata.name === 'sharp') {
+        return `@img/sharp-${platform}-${arch}`;
+      }
+      if (metadata.name === '@vscode/ripgrep') {
+        return `@vscode/ripgrep-${platform}-${arch}`;
+      }
+      return undefined;
+    };
+    const requiredNative = resolveRequiredNative();
     for (const name of Object.keys(dependencies)) {
       const dependency = resolveManifest(files, manifest, name);
       if (dependency) pending.push(dependency);

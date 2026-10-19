@@ -37,12 +37,12 @@ const yielding = new Set<string | number>();
 server.setRequestHandler(CallToolRequestSchema, async (input, extra) => {
   try {
     const meta = input.params._meta as Record<string, unknown> | undefined;
-    const metaId =
-      typeof meta?.callId === 'string' && meta.callId.trim()
-        ? meta.callId.trim()
-        : typeof meta?.client_request_id === 'string' && meta.client_request_id.trim()
-          ? meta.client_request_id.trim()
-          : undefined;
+    let metaId: string | undefined;
+    if (typeof meta?.callId === 'string' && meta.callId.trim()) {
+      metaId = meta.callId.trim();
+    } else if (typeof meta?.client_request_id === 'string' && meta.client_request_id.trim()) {
+      metaId = meta.client_request_id.trim();
+    }
     const value = await request('/native/call', {
       name: input.params.name,
       args: input.params.arguments ?? {},

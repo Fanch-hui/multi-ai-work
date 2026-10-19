@@ -81,30 +81,48 @@ export function SidebarAppUpdate() {
   const percent = state.total
     ? Math.min(100, Math.round(((state.received ?? 0) / state.total) * 100))
     : undefined;
-  const label = downloading
-    ? `正在下载更新${percent === undefined ? '' : ` ${percent}%`}，点击取消`
-    : installing
-      ? '正在安装更新'
-      : state.phase === 'ready'
-        ? '重启更新'
-        : state.phase === 'error'
-          ? '重新检查更新'
-          : '下载更新';
-  const Icon =
-    downloading || installing
-      ? LoaderCircle
-      : state.phase === 'ready'
-        ? RotateCw
-        : state.phase === 'error'
-          ? RefreshCw
-          : Download;
-  const command = downloading
-    ? 'cancel'
-    : state.phase === 'ready'
-      ? 'install'
-      : state.phase === 'error'
-        ? 'check'
-        : 'download';
+  const resolveLabel = () => {
+    if (downloading) {
+      return `正在下载更新${percent === undefined ? '' : ` ${percent}%`}，点击取消`;
+    }
+    if (installing) {
+      return '正在安装更新';
+    }
+    if (state.phase === 'ready') {
+      return '重启更新';
+    }
+    if (state.phase === 'error') {
+      return '重新检查更新';
+    }
+    return '下载更新';
+  };
+  const label = resolveLabel();
+  const resolveIcon = () => {
+    if (downloading || installing) {
+      return LoaderCircle;
+    }
+    if (state.phase === 'ready') {
+      return RotateCw;
+    }
+    if (state.phase === 'error') {
+      return RefreshCw;
+    }
+    return Download;
+  };
+  const Icon = resolveIcon();
+  const resolveCommand = () => {
+    if (downloading) {
+      return 'cancel';
+    }
+    if (state.phase === 'ready') {
+      return 'install';
+    }
+    if (state.phase === 'error') {
+      return 'check';
+    }
+    return 'download';
+  };
+  const command = resolveCommand();
   return (
     <Button
       variant="ghost"

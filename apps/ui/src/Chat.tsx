@@ -65,6 +65,45 @@ export function Chat({
     );
   const overlap = view === 'chat' && (!main || configured);
   const plan = overlap ? currentTaskPlan(data, conversation) : undefined;
+  const renderConversation = () => {
+    if (view === 'records') {
+      return (
+        <div className="chat-content overflow-auto px-7 py-7">
+          <ConversationRecords
+            key={conversation.id}
+            data={data}
+            conversation={conversation}
+            mutate={mutate}
+          />
+        </div>
+      );
+    }
+    if (main && !configured) {
+      return (
+        <div className="chat-content flex items-center justify-center px-6">
+          <Empty
+            title="让管家帮你组织工作"
+            description="通过 ChatGPT 或自定义 API 配置管家，即可开始对话、分工和汇总。"
+            action={
+              <Button variant="primary" onClick={configureChief}>
+                配置管家
+              </Button>
+            }
+          />
+        </div>
+      );
+    }
+    return (
+      <MessageFeed
+        key={conversation.id}
+        history={history}
+        data={data}
+        conversation={conversation}
+        mutate={mutate}
+        onSelectConversation={onSelectConversation}
+      />
+    );
+  };
   return (
     <>
       {view === 'chat' && reading.error && (
@@ -125,37 +164,7 @@ export function Chat({
           ) : undefined
         }
       >
-        {view === 'records' ? (
-          <div className="chat-content overflow-auto px-7 py-7">
-            <ConversationRecords
-              key={conversation.id}
-              data={data}
-              conversation={conversation}
-              mutate={mutate}
-            />
-          </div>
-        ) : main && !configured ? (
-          <div className="chat-content flex items-center justify-center px-6">
-            <Empty
-              title="让管家帮你组织工作"
-              description="通过 ChatGPT 或自定义 API 配置管家，即可开始对话、分工和汇总。"
-              action={
-                <Button variant="primary" onClick={configureChief}>
-                  配置管家
-                </Button>
-              }
-            />
-          </div>
-        ) : (
-          <MessageFeed
-            key={conversation.id}
-            history={history}
-            data={data}
-            conversation={conversation}
-            mutate={mutate}
-            onSelectConversation={onSelectConversation}
-          />
-        )}
+        {renderConversation()}
       </ChatSurface>
       <ModalPresence show={membersOpen}>
         {membersOpen && (

@@ -77,11 +77,12 @@ async function readOne(
           '通过 Office 技能与随包 python-pptx 读取、修改此文件；源成果按只读资料处理，修改另存到工作目录并登记。',
       },
     };
-  const bytes = ['text/markdown', 'text/plain', 'application/json'].includes(artifact.mimeType)
-    ? context.readArtifact
+  let bytes: Buffer | undefined;
+  if (['text/markdown', 'text/plain', 'application/json'].includes(artifact.mimeType)) {
+    bytes = context.readArtifact
       ? Buffer.from(await context.readArtifact(artifact.id))
-      : await readFile(artifact.path)
-    : undefined;
+      : await readFile(artifact.path);
+  }
   if (bytes && bytes.length > 25 * 1024 * 1024) throw new Error('成果超过 25 MiB 读取限制');
   const document = bytes
     ? bytes.toString('utf8')

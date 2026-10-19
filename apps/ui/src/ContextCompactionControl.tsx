@@ -39,17 +39,25 @@ export function ContextCompactionControl({
       connection?.provider,
       connection?.models.find((model) => model.id === (conversation.model ?? bot?.model)),
     );
-  const reason = !managed
-    ? '此通道的上下文由原生运行时管理'
-    : conversation.archived
-      ? '恢复对话后可压缩'
-      : connection.status !== 'ready'
-        ? '请先完成模型连接检测'
-        : !contextWindow
-          ? '请先在成员配置中设置上下文窗口'
-          : busy
-            ? '当前任务结束后可压缩'
-            : '';
+  const resolveReason = () => {
+    if (!managed) {
+      return '此通道的上下文由原生运行时管理';
+    }
+    if (conversation.archived) {
+      return '恢复对话后可压缩';
+    }
+    if (connection.status !== 'ready') {
+      return '请先完成模型连接检测';
+    }
+    if (!contextWindow) {
+      return '请先在成员配置中设置上下文窗口';
+    }
+    if (busy) {
+      return '当前任务结束后可压缩';
+    }
+    return '';
+  };
+  const reason = resolveReason();
   const act = async (action: CompactionRequest, id: string) => {
     setPending(action);
     setError('');
@@ -64,11 +72,16 @@ export function ContextCompactionControl({
       setPending(undefined);
     }
   };
-  const actionLabel = !feedback?.busy
-    ? '立即压缩'
-    : feedback.tone === 'progress'
-      ? feedback.label
-      : '正在压缩…';
+  const resolveActionLabel = () => {
+    if (!feedback?.busy) {
+      return '立即压缩';
+    }
+    if (feedback.tone === 'progress') {
+      return feedback.label;
+    }
+    return '正在压缩…';
+  };
+  const actionLabel = resolveActionLabel();
   return (
     <div className="mt-4 border-t border-slate-100 pt-4">
       <div className="flex items-center justify-between gap-3">
@@ -101,12 +114,16 @@ export function ContextCompactionControl({
 }
 
 export function CompactionStatus({ feedback }: { feedback: CompactionFeedback }) {
-  const color =
-    feedback.tone === 'error'
-      ? 'text-red-600'
-      : feedback.tone === 'success'
-        ? 'text-emerald-700'
-        : 'text-slate-600';
+  const resolveColor = () => {
+    if (feedback.tone === 'error') {
+      return 'text-red-600';
+    }
+    if (feedback.tone === 'success') {
+      return 'text-emerald-700';
+    }
+    return 'text-slate-600';
+  };
+  const color = resolveColor();
   return (
     <div
       role={feedback.tone === 'error' ? 'alert' : 'status'}

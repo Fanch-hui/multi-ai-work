@@ -38,13 +38,16 @@ export function UserQuestionCard({
     !!question.autoAnswerAt &&
     !question.autoAnswerError &&
     data.settings.autoAnswerMemberQuestions;
-  const chiefAnswerStatus =
-    automatic &&
-    (chiefTask?.status === 'queued'
-      ? '等待主管代答；你仍可提交回答。'
-      : chiefTask?.status === 'running'
-        ? '主管正在代答；你仍可提交回答。'
-        : '2 分钟内未回答，将由主管决定回复。');
+  const getAutomaticAnswerHint = () => {
+    if (chiefTask?.status === 'queued') {
+      return '等待主管代答；你仍可提交回答。';
+    }
+    if (chiefTask?.status === 'running') {
+      return '主管正在代答；你仍可提交回答。';
+    }
+    return '2 分钟内未回答，将由主管决定回复。';
+  };
+  const chiefAnswerStatus = automatic && getAutomaticAnswerHint();
   const answer = text.trim() || selected;
   async function resolve(cancel = false) {
     if (submitting.current || !pending || (!cancel && !answer)) return;

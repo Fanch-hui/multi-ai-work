@@ -64,6 +64,15 @@ function PlanStepRow({
 }) {
   const dependencies = planDependencies(plan, step);
   const rooms = data.conversations.filter((room) => step.conversationIds.includes(room.id));
+  const getStepKindLabel = () => {
+    if (step.kind === 'discussion') {
+      return '共同讨论';
+    }
+    if (step.memberIds.length > 1) {
+      return '并行执行';
+    }
+    return '执行';
+  };
   return (
     <li className="flex min-w-0 items-start gap-3">
       <span
@@ -82,13 +91,7 @@ function PlanStepRow({
           <Badge status={step.status}>{planStepStatus(step, data)}</Badge>
         </div>
         <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
-          <span className="text-xs text-slate-400">
-            {step.kind === 'discussion'
-              ? '共同讨论'
-              : step.memberIds.length > 1
-                ? '并行执行'
-                : '执行'}
-          </span>
+          <span className="text-xs text-slate-400">{getStepKindLabel()}</span>
           {step.memberIds.map((id) => {
             const bot = data.bots.find((item) => item.id === id);
             return (

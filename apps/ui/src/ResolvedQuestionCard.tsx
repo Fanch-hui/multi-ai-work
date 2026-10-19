@@ -17,6 +17,15 @@ export function ResolvedQuestionCard({
   answer?: string;
 }) {
   const chiefAnswer = status === 'answered' && question.answerSource === 'chief';
+  const getAnswerStatusLabel = () => {
+    if (status === 'cancelled') {
+      return '已取消';
+    }
+    if (chiefAnswer) {
+      return '主管代答';
+    }
+    return '已回答';
+  };
   return (
     <details className="group min-w-0 w-full rounded-lg border border-slate-200 bg-slate-50/60">
       <summary className="flex min-h-10 min-w-0 cursor-pointer list-none items-center gap-2 px-3 py-2 text-xs [&::-webkit-details-marker]:hidden">
@@ -27,9 +36,7 @@ export function ResolvedQuestionCard({
         >
           {bot?.name || '智能体'}
         </span>
-        <span className="shrink-0 text-slate-400">
-          {status === 'cancelled' ? '已取消' : chiefAnswer ? '主管代答' : '已回答'}
-        </span>
+        <span className="shrink-0 text-slate-400">{getAnswerStatusLabel()}</span>
         <span className="min-w-0 flex-1 truncate text-slate-500" title={question.question}>
           {question.question}
         </span>

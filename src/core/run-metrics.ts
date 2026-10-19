@@ -124,12 +124,12 @@ function applyEvent(run: Run, event: RunEvent): Run {
 
 function requestEvent(event: RunEvent): RunEvent {
   if (event.type !== 'status' || !requestPhases.has(String(event.data.phase))) return event;
-  const requestId =
-    typeof event.data.requestId === 'string'
-      ? event.data.requestId
-      : count(event.data.step)
-        ? `${event.runId}:${event.data.step}`
-        : undefined;
+  let requestId: string | undefined;
+  if (typeof event.data.requestId === 'string') {
+    requestId = event.data.requestId;
+  } else if (count(event.data.step)) {
+    requestId = `${event.runId}:${event.data.step}`;
+  }
   return requestId
     ? {
         ...event,

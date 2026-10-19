@@ -58,23 +58,32 @@ function contextReading(events: RunEvent[], run?: Run) {
     (run
       ? events.filter((event) => event.runId === run.id && event.type === 'context').at(-1)?.data
       : undefined);
-  const source =
-    data?.source === 'app-estimated'
-      ? 'estimated'
-      : data?.source === 'native-reported'
-        ? 'reported'
-        : 'unknown';
+  const resolveSource = () => {
+    if (data?.source === 'app-estimated') {
+      return 'estimated';
+    }
+    if (data?.source === 'native-reported') {
+      return 'reported';
+    }
+    return 'unknown';
+  };
+  const source = resolveSource();
   const used = source === 'estimated' ? data?.estimatedTokens : data?.usedTokens;
   const window = data?.contextWindow;
   const direct = data?.usedPercentage ?? data?.percent;
-  const percent =
-    source === 'unknown'
-      ? undefined
-      : nonnegative(direct)
-        ? direct
-        : nonnegative(used) && nonnegative(window) && window > 0
-          ? (used / window) * 100
-          : undefined;
+  const resolvePercent = () => {
+    if (source === 'unknown') {
+      return undefined;
+    }
+    if (nonnegative(direct)) {
+      return direct;
+    }
+    if (nonnegative(used) && nonnegative(window) && window > 0) {
+      return (used / window) * 100;
+    }
+    return undefined;
+  };
+  const percent = resolvePercent();
   return {
     source,
     percent,

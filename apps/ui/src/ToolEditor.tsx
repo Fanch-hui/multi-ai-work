@@ -111,13 +111,15 @@ export function ToolEditor({
                   const method = event.target.value as typeof searchMethod;
                   const previousDefault = searchMethod === 'POST' ? 'query' : 'q';
                   setSearchMethod(method);
-                  setSearchQueryField((current) =>
-                    !current.trim() || current.trim() === previousDefault
-                      ? method === 'POST'
-                        ? 'query'
-                        : 'q'
-                      : current,
-                  );
+                  setSearchQueryField((current) => {
+                    if (!current.trim() || current.trim() === previousDefault) {
+                      if (method === 'POST') {
+                        return 'query';
+                      }
+                      return 'q';
+                    }
+                    return current;
+                  });
                 }}
               >
                 <option value="GET">GET</option>

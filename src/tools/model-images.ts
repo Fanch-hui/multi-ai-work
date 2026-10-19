@@ -27,12 +27,9 @@ export async function resolveModelArtifactImage(artifact: Artifact): Promise<Enc
     file.ctimeNs,
   ].join(':');
   const key = createHash('sha256').update(identity).digest('hex');
-  const format =
-    artifact.mimeType === 'image/jpeg'
-      ? 'jpeg'
-      : artifact.mimeType === 'image/webp'
-        ? 'webp'
-        : 'png';
+  let format: 'jpeg' | 'webp' | 'png' = 'png';
+  if (artifact.mimeType === 'image/jpeg') format = 'jpeg';
+  else if (artifact.mimeType === 'image/webp') format = 'webp';
   const cache = join(
     dirname(source),
     `${artifact.id}-preview`,
@@ -83,12 +80,9 @@ async function encode(original: Buffer, format: 'jpeg' | 'webp' | 'png'): Promis
     let pipeline = sharp(original, decodeOptions)
       .rotate()
       .resize({ width: 2048, height: 2048, fit: 'inside', withoutEnlargement: true });
-    pipeline =
-      format === 'jpeg'
-        ? pipeline.jpeg({ quality: 84 })
-        : format === 'webp'
-          ? pipeline.webp({ quality: 84 })
-          : pipeline.png({ compressionLevel: 9 });
+    if (format === 'jpeg') pipeline = pipeline.jpeg({ quality: 84 });
+    else if (format === 'webp') pipeline = pipeline.webp({ quality: 84 });
+    else pipeline = pipeline.png({ compressionLevel: 9 });
     return await pipeline.toBuffer();
   } catch (error) {
     if (error instanceof Error && error.message === '暂不支持动画图片，请上传静态图片') throw error;

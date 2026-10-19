@@ -76,13 +76,17 @@ function PermissionControls({
       return;
     }
     setCustomizing(false);
+    const getSelectedToolNames = () => {
+      if (value === 'full') {
+        return fullToolNames(chief);
+      }
+      if (value === 'read') {
+        return readOnlyToolNames(chief);
+      }
+      return defaultToolNames(chief);
+    };
     onPermissionsChange({
-      toolNames:
-        value === 'full'
-          ? fullToolNames(chief)
-          : value === 'read'
-            ? readOnlyToolNames(chief)
-            : defaultToolNames(chief),
+      toolNames: getSelectedToolNames(),
       approvalMode: value === 'full' ? 'auto' : 'ask',
     });
   }
@@ -161,28 +165,33 @@ function PermissionControls({
         <div className="mt-3 grid grid-cols-2 gap-2">
           {Object.entries(builtinToolLabels)
             .filter(([name]) => name !== 'read_skill' && (chief || !chiefOnlyTools.includes(name)))
-            .map(([name, label]) => (
-              <label
-                key={name}
-                className="flex min-w-0 items-center gap-2 text-xs text-slate-600"
-                title={name}
-              >
-                <input
-                  type="checkbox"
-                  checked={toolNames.includes(name)}
-                  onChange={() =>
-                    onPermissionsChange({ approvalMode, toolNames: toggle(toolNames, name) })
-                  }
-                />
-                <span>
-                  {chief && name === 'list_processes'
-                    ? '查看应用内命令'
-                    : chief && name === 'stop_process'
-                      ? '停止应用内命令'
-                      : label}
-                </span>
-              </label>
-            ))}
+            .map(([name, label]) => {
+              const getToolLabel = () => {
+                if (chief && name === 'list_processes') {
+                  return '查看应用内命令';
+                }
+                if (chief && name === 'stop_process') {
+                  return '停止应用内命令';
+                }
+                return label;
+              };
+              return (
+                <label
+                  key={name}
+                  className="flex min-w-0 items-center gap-2 text-xs text-slate-600"
+                  title={name}
+                >
+                  <input
+                    type="checkbox"
+                    checked={toolNames.includes(name)}
+                    onChange={() =>
+                      onPermissionsChange({ approvalMode, toolNames: toggle(toolNames, name) })
+                    }
+                  />
+                  <span>{getToolLabel()}</span>
+                </label>
+              );
+            })}
         </div>
       </details>
     </>

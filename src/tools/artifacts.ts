@@ -66,15 +66,13 @@ export async function createArtifact(
 }
 
 async function word(content: string, title?: string): Promise<Uint8Array> {
-  const children = content
-    .split('\n')
-    .map(
-      (line) =>
-        new Paragraph({
-          text: line.replace(/^#{1,6}\s/, ''),
-          heading: line.startsWith('# ') ? HeadingLevel.HEADING_1 : undefined,
-        }),
-    );
+  const children = content.split('\n').map(
+    (line) =>
+      new Paragraph({
+        text: line.replace(/^#{1,6}\s/, ''),
+        heading: line.startsWith('# ') ? HeadingLevel.HEADING_1 : undefined,
+      }),
+  );
   if (title) children.unshift(new Paragraph({ text: title, heading: HeadingLevel.TITLE }));
   return Packer.toBuffer(new Document({ sections: [{ children }] }));
 }

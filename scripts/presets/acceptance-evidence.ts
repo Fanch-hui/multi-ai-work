@@ -38,7 +38,15 @@ function sorted(value: unknown): unknown {
   if (value && typeof value === 'object')
     return Object.fromEntries(
       Object.entries(value)
-        .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+        .sort(([left], [right]) => {
+          if (left < right) {
+            return -1;
+          }
+          if (left > right) {
+            return 1;
+          }
+          return 0;
+        })
         .map(([key, item]) => [key, sorted(item)]),
     );
   return value;

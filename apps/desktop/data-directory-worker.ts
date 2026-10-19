@@ -8,12 +8,16 @@ try {
   setImmediate(() => process.exit(0));
 } catch (error) {
   const code = (error as NodeJS.ErrnoException).code;
-  const message =
-    code === 'ENOSPC'
-      ? '新位置的磁盘空间不足，请更换目录后重试'
-      : code === 'EACCES' || code === 'EPERM'
-        ? '无法写入新位置，请检查文件夹访问权限'
-        : '数据复制未完成，请检查新目录的权限和可用空间后重试';
+  const resolveMessage = () => {
+    if (code === 'ENOSPC') {
+      return '新位置的磁盘空间不足，请更换目录后重试';
+    }
+    if (code === 'EACCES' || code === 'EPERM') {
+      return '无法写入新位置，请检查文件夹访问权限';
+    }
+    return '数据复制未完成，请检查新目录的权限和可用空间后重试';
+  };
+  const message = resolveMessage();
   port?.postMessage({ type: 'error', error: message });
   setImmediate(() => process.exit(1));
 }

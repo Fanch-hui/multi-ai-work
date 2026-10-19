@@ -138,8 +138,17 @@ export class AppUpdater {
         this.selected.version === selected.version;
       if (!same) await this.clearDownload();
       this.selected = selected;
+      const resolvePhase = () => {
+        if (selected) {
+          if (this.packagePath) {
+            return 'ready';
+          }
+          return 'available';
+        }
+        return 'idle';
+      };
       this.change({
-        phase: selected ? (this.packagePath ? 'ready' : 'available') : 'idle',
+        phase: resolvePhase(),
         version: selected?.version,
         total: selected?.asset.size,
         received: this.packagePath ? selected?.asset.size : 0,

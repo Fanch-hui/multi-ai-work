@@ -253,22 +253,18 @@ export class TeamService {
           approvalMode: bot.approvalMode,
           chief: bot.id === this.state.settings().mainBotId,
         })),
-      workspaces: this.state.storage
-        .all<Workspace>('workspaces')
-        .map((workspace) => ({
-          id: workspace.id,
-          name: workspace.name,
-          writable: workspace.writable,
-        })),
-      connections: this.state.storage
-        .all<Connection>('connections')
-        .map((connection) => ({
-          id: connection.id,
-          name: connection.name,
-          provider: connection.provider,
-          status: connection.status,
-          models: connection.models,
-        })),
+      workspaces: this.state.storage.all<Workspace>('workspaces').map((workspace) => ({
+        id: workspace.id,
+        name: workspace.name,
+        writable: workspace.writable,
+      })),
+      connections: this.state.storage.all<Connection>('connections').map((connection) => ({
+        id: connection.id,
+        name: connection.name,
+        provider: connection.provider,
+        status: connection.status,
+        models: connection.models,
+      })),
     };
   }
 

@@ -159,12 +159,12 @@ export function searchAuthorizedMemories(
     });
   }
   const offset = Math.max(0, Math.floor(query.offset ?? 0));
-  const sliced =
-    query.limit !== undefined
-      ? mapped.slice(offset, offset + Math.max(1, Math.floor(query.limit)))
-      : offset > 0
-        ? mapped.slice(offset)
-        : mapped;
+  let sliced = mapped;
+  if (query.limit !== undefined) {
+    sliced = mapped.slice(offset, offset + Math.max(1, Math.floor(query.limit)));
+  } else if (offset > 0) {
+    sliced = mapped.slice(offset);
+  }
   return sliced.map(({ entry, ftsRank }) => ({ entry, ftsRank }));
 }
 

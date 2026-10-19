@@ -142,12 +142,15 @@ export function conversationMemberRecords(tasks: Task[], memberIds: string[]): M
     });
 }
 
-export const recordTaskTitle = (task: Task): string =>
-  task.kind === 'memory-review'
-    ? '整理长期记忆'
-    : task.kind === 'question-decision'
-      ? '为成员的问题提供回答'
-      : task.goal;
+export const recordTaskTitle = (task: Task): string => {
+  if (task.kind === 'memory-review') {
+    return '整理长期记忆';
+  }
+  if (task.kind === 'question-decision') {
+    return '为成员的问题提供回答';
+  }
+  return task.goal;
+};
 export function taskRecordActions(
   data: Pick<Snapshot, 'runs' | 'events'>,
   task: Task,
@@ -176,30 +179,37 @@ export function taskRecordActions(
         typeof event.data.commandStatus === 'string'
           ? processLabels[event.data.commandStatus]
           : undefined;
+      const getActionStatusLabel = () => {
+        if (status === 'completed') {
+          return '已完成';
+        }
+        if (status === 'failed') {
+          return '失败';
+        }
+        if (status === 'running' && !runs.get(event.runId)?.endedAt) {
+          return '执行中';
+        }
+        return '结果未报告';
+      };
       return {
         event,
         title: summary || toolLabels[name] || name,
-        status:
-          commandStatus ??
-          (status === 'completed'
-            ? '已完成'
-            : status === 'failed'
-              ? '失败'
-              : status === 'running' && !runs.get(event.runId)?.endedAt
-                ? '执行中'
-                : '结果未报告'),
+        status: commandStatus ?? getActionStatusLabel(),
       };
     });
 }
 
 function mergeAction(previous: RunEvent | undefined, event: RunEvent): RunEvent {
-  const status =
-    event.data.status ??
-    (event.data.phase === 'completed'
-      ? 'completed'
-      : event.data.phase === 'started'
-        ? 'running'
-        : undefined);
+  const getPhaseStatus = () => {
+    if (event.data.phase === 'completed') {
+      return 'completed';
+    }
+    if (event.data.phase === 'started') {
+      return 'running';
+    }
+    return undefined;
+  };
+  const status = event.data.status ?? getPhaseStatus();
   const data = { ...previous?.data, ...event.data, status };
   if (
     previous?.data.status &&

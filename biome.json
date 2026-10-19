@@ -31,7 +31,7 @@
   },
   "linter": {
     "rules": {
-      "recommended": false,
+      "preset": "none",
       "style": {
         "noNestedTernary": "error"
       },
@@ -47,9 +47,7 @@
   },
   "overrides": [
     {
-      "includes": [
-        "src/domain/**"
-      ],
+      "includes": ["src/domain/**"],
       "linter": {
         "rules": {
           "style": {
@@ -80,9 +78,7 @@
       }
     },
     {
-      "includes": [
-        "src/runtime/**"
-      ],
+      "includes": ["src/runtime/**"],
       "linter": {
         "rules": {
           "style": {
@@ -107,10 +103,7 @@
       }
     },
     {
-      "includes": [
-        "src/providers/**",
-        "src/tools/**"
-      ],
+      "includes": ["src/providers/**", "src/tools/**"],
       "linter": {
         "rules": {
           "style": {
@@ -119,11 +112,7 @@
               "options": {
                 "patterns": [
                   {
-                    "group": [
-                      "**/core/**",
-                      "**/security/**",
-                      "**/apps/**"
-                    ]
+                    "group": ["**/core/**", "**/security/**", "**/apps/**"]
                   }
                 ]
               }
@@ -133,9 +122,7 @@
       }
     },
     {
-      "includes": [
-        "apps/ui/src/**"
-      ],
+      "includes": ["apps/ui/src/**"],
       "linter": {
         "rules": {
           "style": {

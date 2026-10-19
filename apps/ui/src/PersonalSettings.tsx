@@ -13,6 +13,32 @@ export function PersonalSettings({ data, mutate }: { data: Snapshot; mutate: Mut
   const selected =
     state?.professions.filter((item) => state.preferences.professionIds.includes(item.id)) ?? [];
 
+  const renderCareers = () => {
+    if (!state && !error) {
+      return (
+        <div
+          role="status"
+          aria-label="正在读取职业信息"
+          className="h-8 w-48 rounded-lg bg-slate-100"
+        />
+      );
+    }
+    if (selected.length) {
+      return (
+        <div className="flex flex-wrap gap-2">
+          {selected.map((item) => (
+            <span
+              key={item.id}
+              className="rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700"
+            >
+              {item.name}
+            </span>
+          ))}
+        </div>
+      );
+    }
+    return state && <p className="text-sm text-slate-600">尚未选择职业或身份</p>;
+  };
   return (
     <div className="grid gap-8">
       <UserProfile data={data} mutate={mutate} />
@@ -22,26 +48,7 @@ export function PersonalSettings({ data, mutate }: { data: Snapshot; mutate: Mut
           <p className="text-pretty text-sm text-slate-500">
             管家会结合你的职业或身份提供帮助，并推荐适合的智能体伙伴。修改后从下一轮对话生效。
           </p>
-          {!state && !error ? (
-            <div
-              role="status"
-              aria-label="正在读取职业信息"
-              className="h-8 w-48 rounded-lg bg-slate-100"
-            />
-          ) : selected.length ? (
-            <div className="flex flex-wrap gap-2">
-              {selected.map((item) => (
-                <span
-                  key={item.id}
-                  className="rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700"
-                >
-                  {item.name}
-                </span>
-              ))}
-            </div>
-          ) : (
-            state && <p className="text-sm text-slate-600">尚未选择职业或身份</p>
-          )}
+          {renderCareers()}
           <ErrorNote error={error} />
           <div className="flex justify-end">
             {state ? (

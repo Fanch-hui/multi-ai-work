@@ -151,13 +151,11 @@ export class ResponsesAccumulator {
     const text = output
       .filter((item) => item.type === 'message')
       .flatMap((item) => item.content)
-      .map((content) =>
-        content.type === 'output_text'
-          ? content.text
-          : content.type === 'refusal'
-            ? content.refusal
-            : '',
-      )
+      .map((content) => {
+        if (content.type === 'output_text') return content.text;
+        if (content.type === 'refusal') return content.refusal;
+        return '';
+      })
       .join('');
     const usage = this.completed.usage;
     const cached = usage?.input_tokens_details?.cached_tokens;

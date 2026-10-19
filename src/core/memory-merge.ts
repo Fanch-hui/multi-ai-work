@@ -293,11 +293,12 @@ export function promoteMemory(
   const timestamp = now();
   const nextTopic = input.topic?.trim() || source.topic;
   const nextTags = input.tags?.length ? [...new Set(input.tags)] : source.tags;
-  const nextSummary = input.summary?.trim()
-    ? memorySummary({ content, summary: input.summary, revision: 1 })
-    : content === normalizeMemoryContent(source.content)
-      ? source.summary
-      : undefined;
+  let nextSummary: string | undefined;
+  if (input.summary?.trim()) {
+    nextSummary = memorySummary({ content, summary: input.summary, revision: 1 });
+  } else if (content === normalizeMemoryContent(source.content)) {
+    nextSummary = source.summary;
+  }
 
   const promoted: MemoryEntry = {
     id: id(),

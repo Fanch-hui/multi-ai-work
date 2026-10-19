@@ -98,6 +98,15 @@ export function MessageFeed({
   const questions = (data.questions ?? []).filter(
     (item) => item.conversationId === conversation.id && item.status === 'pending',
   );
+  const getEmptyTitle = () => {
+    if (main) {
+      return '今天想完成什么？';
+    }
+    if (conversation.kind === 'group') {
+      return conversation.name;
+    }
+    return '开始对话';
+  };
   return (
     <div
       ref={scrollRef}
@@ -121,13 +130,7 @@ export function MessageFeed({
         )}
         {!messages.length && !working.length && !questions.length && !approvals.length && (
           <div className="flex min-h-48 flex-col items-center justify-center gap-3 py-12 text-center">
-            <h2 className="text-balance text-xl font-medium text-slate-700">
-              {main
-                ? '今天想完成什么？'
-                : conversation.kind === 'group'
-                  ? conversation.name
-                  : '开始对话'}
-            </h2>
+            <h2 className="text-balance text-xl font-medium text-slate-700">{getEmptyTitle()}</h2>
             {!main && conversation.kind === 'group' && (
               <p className="max-w-lg text-xs leading-6 text-slate-400">
                 {conversation.memberIds

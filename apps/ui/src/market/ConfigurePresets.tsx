@@ -78,6 +78,18 @@ export function ConfigurePresets({
       setBusy(false);
     }
   }
+  const getHireLabel = () => {
+    if (busy) {
+      return '雇佣中…';
+    }
+    if (results.length) {
+      return '重试未完成成员';
+    }
+    if (installations.length === 1) {
+      return '完成雇佣';
+    }
+    return `雇佣 ${remaining.length} 位成员`;
+  };
   return (
     <Modal
       open
@@ -192,13 +204,7 @@ export function ConfigurePresets({
           </Button>
           {!!remaining.length && (
             <Button variant="primary" disabled={busy || !valid}>
-              {busy
-                ? '雇佣中…'
-                : results.length
-                  ? '重试未完成成员'
-                  : installations.length === 1
-                    ? '完成雇佣'
-                    : `雇佣 ${remaining.length} 位成员`}
+              {getHireLabel()}
             </Button>
           )}
         </div>

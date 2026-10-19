@@ -20,14 +20,10 @@ export interface ChatReplayOptions {
 function detail(value: unknown): ChatReasoningDetail | undefined {
   if (!value || typeof value !== 'object') return;
   const source = value as Record<string, unknown>;
-  const field =
-    source.type === 'reasoning.text'
-      ? 'text'
-      : source.type === 'reasoning.summary'
-        ? 'summary'
-        : source.type === 'reasoning.encrypted'
-          ? 'data'
-          : undefined;
+  let field: string | undefined;
+  if (source.type === 'reasoning.text') field = 'text';
+  else if (source.type === 'reasoning.summary') field = 'summary';
+  else if (source.type === 'reasoning.encrypted') field = 'data';
   if (!field || typeof source[field] !== 'string') return;
   return structuredClone(source) as ChatReasoningDetail;
 }

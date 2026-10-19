@@ -23,15 +23,31 @@ export function PresetCard({
 }) {
   const ready = installation?.status === 'installed';
   const downloading = installation?.status === 'downloading';
-  const label = memberCount
-    ? `${memberCount} 位成员`
-    : ready
-      ? '资源已准备'
-      : downloading
-        ? `下载中 ${installation.progress}%`
-        : installation?.status === 'failed'
-          ? '下载失败'
-          : '待雇佣';
+  const getInstallationLabel = () => {
+    if (memberCount) {
+      return `${memberCount} 位成员`;
+    }
+    if (ready) {
+      return '资源已准备';
+    }
+    if (downloading) {
+      return `下载中 ${installation.progress}%`;
+    }
+    if (installation?.status === 'failed') {
+      return '下载失败';
+    }
+    return '待雇佣';
+  };
+  const label = getInstallationLabel();
+  const getHireLabel = () => {
+    if (downloading) {
+      return '下载中…';
+    }
+    if (memberCount) {
+      return '再雇佣一位';
+    }
+    return '雇佣';
+  };
   return (
     <article
       className={cn(
@@ -88,7 +104,7 @@ export function PresetCard({
         </Button>
         <Button className="text-xs" disabled={downloading || hiring} onClick={hire}>
           <UserPlus size={14} />
-          {downloading ? '下载中…' : memberCount ? '再雇佣一位' : '雇佣'}
+          {getHireLabel()}
         </Button>
       </div>
     </article>

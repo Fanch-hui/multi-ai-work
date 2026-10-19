@@ -83,11 +83,9 @@ export class OAuthManager {
     this.cancel(connectionId);
     const oldValue = await this.store.get(reference(connectionId));
     const registration = await this.store.get(`chatgpt-registration:${connectionId}`);
-    const old: Registration | undefined = oldValue
-      ? parseTokens(oldValue)
-      : registration
-        ? JSON.parse(registration)
-        : undefined;
+    let old: Registration | undefined;
+    if (oldValue) old = parseTokens(oldValue);
+    else if (registration) old = JSON.parse(registration);
     let host = this.metadata.get('oauth.hostId');
     if (typeof host !== 'string') {
       host = `urn:uuid:${randomUUID()}`;
@@ -162,6 +160,9 @@ export class OAuthManager {
     this.attempts.set(connectionId, { server, timer, controller });
     this.statuses.set(connectionId, { status: 'pending' });
     const url = new URL(`${OAUTH_ISSUER}/api/accounts/authorize`);
+    let loginHint: Record<string, string> = {};
+    if (!old) loginHint = { agent_name_hint: 'multi-AI work' };
+    else if (old.id_token) loginHint = { id_token_hint: old.id_token };
     url.search = new URLSearchParams({
       client_id: old?.client_id ?? 'dynamic_agent_client',
       ext_agent_host_id: host as string,
@@ -173,11 +174,7 @@ export class OAuthManager {
       nonce,
       code_challenge_method: 'S256',
       code_challenge: createHash('sha256').update(verifier).digest('base64url'),
-      ...(old
-        ? old.id_token
-          ? { id_token_hint: old.id_token }
-          : {}
-        : { agent_name_hint: 'multi-AI work' }),
+      ...loginHint,
     }).toString();
     return { url: url.toString() };
   }
