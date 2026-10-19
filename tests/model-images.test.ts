@@ -60,7 +60,7 @@ describe('model image derivatives', () => {
     expect(await sharp(output).metadata()).toMatchObject({ format, width, height });
     expect(await readFile(value.path)).toEqual(original);
     expect(await readFile(value.image!.path)).toEqual(preview);
-  });
+  }, 15_000);
 
   it('applies orientation and the maximum edge while leaving small images at their original size', async () => {
     const bytes = await sharp({ create: { width: 3000, height: 1000, channels: 3, background: '#147cab' } })

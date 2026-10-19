@@ -103,7 +103,7 @@ describe('managed recovery lifecycle', () => {
     expect(() => harness.core.tasks.retry(seeded.task.id)).toThrow('尚未确认');
   });
 
-  it('preserves a posted message once when the same task resumes in another run', async () => {
+  it('preserves a posted message once and appends the final reply when the task resumes in another run', async () => {
     const model = modelFixture(index => [complete(index === 0 ? [{ type: 'function_call', id: 'post', call_id: 'post',
       name: 'post_message', arguments: JSON.stringify({ content: '已经即时发表的进展' }), status: 'completed' }] : [answer])]);
     let interrupted = false;
@@ -129,7 +129,12 @@ describe('managed recovery lifecycle', () => {
     const task = core.state.storage.get<Task>('tasks', taskId)!;
     expect(task.runIds).toHaveLength(2);
     expect(task.result).toBe('恢复后的最终结果');
-    expect(core.state.storage.messages().filter(message => message.conversationId === room.id && message.authorType === 'bot')).toEqual(published);
+    const replies = core.state.storage.messages().filter(message => message.conversationId === room.id && message.authorType === 'bot');
+    expect(replies).toEqual([published[0], expect.objectContaining({
+      content: '恢复后的最终结果', status: 'committed', runId: task.runIds[1], authorBotId: member.id,
+    })]);
+    expect(replies[1].id).not.toBe(published[0].id);
+    expect(replies[1].sequence).toBeGreaterThan(published[0].sequence);
     expect(core.state.storage.all('tool_operations')).toEqual([
       expect.objectContaining({ id: `${task.runIds[0]}:post`, status: 'succeeded', name: 'post_message' }),
     ]);

@@ -61,15 +61,21 @@ describe('conversation read receipts', () => {
     expect(core.state.snapshot().conversations.find(item => item.id === 'other')?.unreadCount).toBe(1);
   });
 
-  it('keeps a newly published reply unread when it replaces an already viewed stream', async () => {
+  it('retains a viewed progress bubble and keeps the newly published reply unread', async () => {
     const { core } = await setup(async () => ({ text: '完成' }));
     const room = core.state.snapshot().conversations[0], s = core.state.storage;
     const draft = s.appendMessage(message('stream', room.id, { status: 'draft', runId: 'run' }));
     await core.request('conversations.read', { id: room.id, messageIds: ['stream'] });
     const published = core.tasks.post(room.id, 'member', 'run', '正式群聊发言');
     expect(published.sequence).toBeGreaterThan(draft.sequence);
-    expect(s.getMessage(draft.id)).toBeUndefined();
+    const progress = { ...draft, status: 'committed' };
+    expect(s.getMessage(draft.id)).toEqual(progress);
+    expect(s.messages(room.id).filter(item => item.authorType === 'bot')).toEqual([progress, published]);
     expect(core.state.snapshot().conversations[0].unreadCount).toBe(1);
+    await core.request('conversations.read', { id: room.id, messageIds: [draft.id] });
+    expect(core.state.snapshot().conversations[0].unreadCount).toBe(1);
+    await core.request('conversations.read', { id: room.id, messageIds: [published.id] });
+    expect(core.state.snapshot().conversations[0].unreadCount).toBe(0);
   });
 
   it('initializes earlier history once and removes the receipt when a conversation is deleted', async () => {
