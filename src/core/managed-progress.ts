@@ -2,7 +2,7 @@ import type { ManagedProgress, ManagedProgressChange, RunContext } from '../doma
 import type { Message, Run, SessionBinding, Task, TaskInput } from '../domain/types.js';
 import type { ModelRecovery } from '../domain/recovery.js';
 import type { ToolExecutionContext } from '../domain/tools.js';
-import type { ProviderArchive } from './managed-context.js';
+import type { ProviderArchive } from './managed-history.js';
 import type { Storage } from './storage.js';
 import { now } from './state.js';
 import {
@@ -175,8 +175,8 @@ export function restoreProgressTools(
 
 export function recoverManagedRuns(storage: Storage, runIds: string[]) {
   for (const runId of runIds) {
-    const run = storage.get<Run>('runs', runId),
-      saved = progressForRun(storage, runId);
+    const run = storage.get<Run>('runs', runId);
+    const saved = progressForRun(storage, runId);
     const task = run && storage.get<Task>('tasks', run.taskId);
     if (
       !run ||
@@ -190,26 +190,12 @@ export function recoverManagedRuns(storage: Storage, runIds: string[]) {
       continue;
     const processes = storage.byField<{ status: string }>('processes', 'runId', runId);
     if (processes.some((process) => ['running', 'unknown'].includes(process.status))) continue;
-    const progress = structuredClone(saved.progress);
-    if (progress.phase === 'request') {
-      if (progress.attempt >= 5) {
-        storage.put('tasks', {
-          ...task,
-          status: 'failed',
-          error: '模型连接恢复已达到 5 次，请检查网络后继续原任务',
-        });
-        continue;
-      }
-      progress.phase = 'ready';
-      progress.attempt++;
+    const decision = prepareInterruptedProgress(saved.progress);
+    if (decision.kind === 'exhausted') {
+      storage.put('tasks', { ...task, status: 'failed', error: decision.error });
+      continue;
     }
-    const recovery: ModelRecovery = progress.recovery ?? {
-      attempt: progress.attempt,
-      maxAttempts: 5,
-      nextAttemptAt: now(),
-      reason: '继续上次中断的运行',
-    };
-    progress.recovery = recovery;
+    const { progress, recovery } = decision;
     const archive = storage.get<ProgressArchive>('provider_archive', runId)!;
     storage.transaction(() => {
       storage.put('provider_archive', { ...archive, checkpoint: { ...saved, progress } });
@@ -224,6 +210,29 @@ export function recoverManagedRuns(storage: Storage, runIds: string[]) {
       });
     });
   }
+}
+
+type InterruptedProgress =
+  | { kind: 'exhausted'; error: string }
+  | { kind: 'resume'; progress: ManagedProgress; recovery: ModelRecovery };
+
+function prepareInterruptedProgress(saved: ManagedProgress): InterruptedProgress {
+  const progress = structuredClone(saved);
+  if (progress.phase === 'request') {
+    if (progress.attempt >= 5) {
+      return { kind: 'exhausted', error: '模型连接恢复已达到 5 次，请检查网络后继续原任务' };
+    }
+    progress.phase = 'ready';
+    progress.attempt++;
+  }
+  const recovery: ModelRecovery = progress.recovery ?? {
+    attempt: progress.attempt,
+    maxAttempts: 5,
+    nextAttemptAt: now(),
+    reason: '继续上次中断的运行',
+  };
+  progress.recovery = recovery;
+  return { kind: 'resume', progress, recovery };
 }
 
 function progressMessages(progress: ManagedProgress) {

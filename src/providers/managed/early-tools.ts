@@ -47,13 +47,12 @@ export class EarlyResponseTools {
     if (this.assistantIndex === undefined && !this.canStart(calls)) return;
     await this.serialize(async () => {
       const message = this.message(output);
-      this.state.text = this.originalText + message.content;
       if (this.assistantIndex === undefined) {
         this.assistantIndex = this.state.messages.length;
-        this.state.messages.push(message);
+        this.state.appendAssistant(message);
         await this.state.save('tools');
       } else {
-        this.state.messages[this.assistantIndex] = message;
+        this.state.updateAssistant(this.assistantIndex, message, this.originalText);
         await this.state.save('tools', undefined, {
           type: 'assistant-item',
           assistantIndex: this.assistantIndex,
@@ -105,9 +104,12 @@ export class EarlyResponseTools {
         if (!terminal || JSON.stringify(terminal) !== JSON.stringify(call))
           throw new Error('模型终态修改已确认工具调用，需要对账');
       }
-      this.state.messages[this.assistantIndex] = message;
     }
-    this.state.text = this.originalText + this.state.messages[this.assistantIndex].content;
+    this.state.updateAssistant(
+      this.assistantIndex,
+      message ?? this.state.messages[this.assistantIndex],
+      this.originalText,
+    );
     await this.state.save('tools', undefined, {
       type: 'assistant-item',
       assistantIndex: this.assistantIndex,
@@ -193,19 +195,7 @@ export class EarlyResponseTools {
           call.id,
         );
         await this.serialize(async () => {
-          const calls = this.state.messages[this.assistantIndex!].toolCalls!;
-          const order = new Map(calls.map((entry, index) => [entry.id, index]));
-          const index = this.state.messages.findIndex(
-            (message, index) =>
-              index > this.assistantIndex! &&
-              message.role === 'tool' &&
-              order.get(message.callId!)! > order.get(call.id)!,
-          );
-          this.state.messages.splice(
-            index < 0 ? this.state.messages.length : index,
-            0,
-            toolResultMessage(call.id, result),
-          );
+          this.state.insertToolResult(this.assistantIndex!, toolResultMessage(call.id, result));
           await this.state.save('tools', undefined, {
             type: 'tool-result',
             assistantIndex: this.assistantIndex!,

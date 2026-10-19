@@ -15,6 +15,7 @@ import {
 import { BackupService } from '../src/core/backup.js';
 import { ArtifactContents } from '../src/core/artifact-contents.js';
 import type { State } from '../src/core/state.js';
+import { ManagedRunState } from '../src/providers/managed/progress.js';
 
 const resources: { root: string; storage: Storage }[] = [];
 afterEach(async () => {
@@ -122,6 +123,41 @@ describe('incremental managed checkpoints', () => {
     expect(saved.progress.messages[1].chatReplay).toEqual(f.progress.messages[1].chatReplay);
     expect(saved.progress.messages[0]).toEqual(f.progress.messages[0]);
     expect(progressForRun(f.resource.storage, 'run')?.progress).toEqual(saved.progress);
+  });
+
+  it('keeps live result ordering identical to the reopened incremental checkpoint', async () => {
+    const f = await fixture();
+    const input = {
+      progress: f.progress,
+      saveProgress: async (progress, change) => {
+        saveManagedProgress(
+          f.storage,
+          f.run,
+          f.task,
+          f.binding,
+          { id: 'draft' } as Message,
+          5,
+          {} as RunContext,
+          progress,
+          change,
+        );
+      },
+    } as RunContext;
+    const state = new ManagedRunState(input);
+    for (const callId of ['three', 'one', 'two']) {
+      state.insertToolResult(1, { role: 'tool', callId, content: `result-${callId}` });
+      await state.save('tools', undefined, { type: 'tool-result', assistantIndex: 1, callId });
+    }
+    expect(state.messages.slice(2).map((message) => message.callId)).toEqual([
+      'one',
+      'two',
+      'three',
+    ]);
+    f.storage.close();
+    f.resource.storage = new Storage(join(f.root, 'team.sqlite'));
+    expect(loadManagedProgress(f.resource.storage, f.task, f.binding)?.progress.messages).toEqual(
+      state.messages,
+    );
   });
 
   it('serializes only the completed result and compacts deltas at a full boundary', async () => {

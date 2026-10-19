@@ -13,52 +13,92 @@ import type { createResponsesTransport } from './responses-transport.js';
 import type { ResponsesCacheDiagnostics } from './cache-diagnostics.js';
 import type { ChatReplayCompatibility } from './chat-replay-compatibility.js';
 
+interface ManagedRequestOptions {
+  retryDelays?: readonly number[];
+  nextStep(): number;
+  recordDuration(durationMs: number): void;
+  recovered: boolean;
+  cacheDiagnostics?: ResponsesCacheDiagnostics;
+  transport?: ReturnType<typeof createResponsesTransport>;
+  chatReplay?: ChatReplayCompatibility;
+}
+
 export async function requestManagedTurn(
   client: OpenAI,
   context: RunContext,
   protocol: Protocol,
   state: ManagedRunState,
-  requestOptions: {
-    retryDelays?: readonly number[];
-    nextStep(): number;
-    recordDuration(durationMs: number): void;
-    recovered: boolean;
-    cacheDiagnostics?: ResponsesCacheDiagnostics;
-    transport?: ReturnType<typeof createResponsesTransport>;
-    chatReplay?: ChatReplayCompatibility;
-  },
+  options: ManagedRequestOptions,
 ) {
-  const compact = async (force: boolean) => {
-    context.signal.throwIfAborted();
-    const projection = await context.compactContext?.(state.messages, {
-      force,
-      currentStart: state.currentStart,
-    });
-    context.signal.throwIfAborted();
-    if (!projection) return false;
-    if (!isSmallerProjection(state.messages, projection.messages, state.currentStart, protocol))
-      throw new Error('上下文压缩未缩小历史或未保留用户输入与完整工具配对');
-    await state.applyProjection(projection.messages, projection.currentStart);
-    return true;
+  let replayDowngraded = false;
+  const request = async () => {
+    try {
+      return await requestTurnAttempt(client, context, protocol, state, options);
+    } catch (error) {
+      if (
+        protocol === 'responses' ||
+        replayDowngraded ||
+        !options.chatReplay?.reject(error, context, state.messages)
+      )
+        throw error;
+      replayDowngraded = true;
+      return requestTurnAttempt(client, context, protocol, state, options);
+    }
   };
-  const requestOnce = () => {
-    state.takeUserInput();
-    let early: EarlyResponseTools | undefined;
-    return requestWithRetry(
+  try {
+    const turn = await request();
+    options.recovered = false;
+    return turn;
+  } catch (error) {
+    context.signal.throwIfAborted();
+    if (!isContextOverflow(error)) throw error;
+    if (options.recovered || !context.compactContext) {
+      throw new Error('模型上下文超过窗口，无法继续本次运行', { cause: error });
+    }
+    options.recovered = true;
+    const changed = await compactRunContext(context, state, protocol, true);
+    if (!changed) {
+      throw new Error('上下文恢复未缩小历史或未保留当前完整轮次，需要分割资料', { cause: error });
+    }
+    try {
+      const turn = await request();
+      options.recovered = false;
+      return turn;
+    } catch (retryError) {
+      if (isContextOverflow(retryError)) {
+        throw new Error('压缩恢复后仍超过模型上下文窗口，需要分割资料', { cause: retryError });
+      }
+      throw retryError;
+    }
+  }
+}
+
+async function requestTurnAttempt(
+  client: OpenAI,
+  context: RunContext,
+  protocol: Protocol,
+  state: ManagedRunState,
+  options: ManagedRequestOptions,
+): Promise<Turn> {
+  state.takeUserInput();
+  let early: EarlyResponseTools | undefined;
+  try {
+    const turn = await requestWithRetry(
       context,
       async (_, requestId) => {
-        if (protocol !== 'responses')
-          return chatTurn(client, context, state.messages, requestId, requestOptions.chatReplay);
+        if (protocol !== 'responses') {
+          return chatTurn(client, context, state.messages, requestId, options.chatReplay);
+        }
         early = new EarlyResponseTools(context, state);
         try {
           return await responsesTurn(
             client,
             context,
             state.messages,
-            requestOptions.cacheDiagnostics,
+            options.cacheDiagnostics,
             requestId,
             (index, item) => early!.accept(index, item),
-            requestOptions.transport,
+            options.transport,
           );
         } catch (error) {
           early.stop();
@@ -66,84 +106,69 @@ export async function requestManagedTurn(
           throw error;
         }
       },
-      requestOptions.nextStep,
-      requestOptions.recordDuration,
-      requestOptions.retryDelays,
+      options.nextStep,
+      options.recordDuration,
+      options.retryDelays,
       async (recovery) => {
         context.emit({ type: 'text', data: { replace: state.text } });
-        state.attempt = recovery.attempt;
+        state.setAttempt(recovery.attempt);
         await state.save('ready', recovery);
       },
       state.attempt,
-      async (attempt) => {
-        state.attempt = attempt;
-        const images = await context.prepareImageInputs?.(state.messages, {
-          currentStart: state.currentStart,
-        });
-        context.signal.throwIfAborted();
-        if (images) await state.applyProjection(images, state.currentStart);
-        await compact(false);
-        await state.save('request');
-        context.signal.throwIfAborted();
-        if (context.userInput?.hasPending() && !state.waitingForInput())
-          throw new SupplementalInputError();
-      },
-    )
-      .then(async (turn) => {
-        state.earlyFailures = 0;
-        turn.persisted = await early?.finish(turn.message);
-        return turn;
-      })
-      .catch(async (error) => {
-        const recoverable =
-          error instanceof ConfirmedToolStreamError &&
-          (isTransientModelError(error.streamError) || isRecoverableStreamError(error.streamError));
-        if (recoverable) state.earlyFailures++;
-        const persisted = await early?.finish();
-        if (!(error instanceof ConfirmedToolStreamError) || !persisted) throw error;
-        context.emit({ type: 'text', data: { replace: state.text } });
-        context.signal.throwIfAborted();
-        if (!recoverable || state.earlyFailures > 5) throw error.streamError;
-        return { message: state.messages[early!.assistantIndex!], persisted: true } as Turn;
-      });
-  };
-  let replayDowngraded = false;
-  const request = async () => {
-    try {
-      return await requestOnce();
-    } catch (error) {
-      if (
-        protocol === 'responses' ||
-        replayDowngraded ||
-        !requestOptions.chatReplay?.reject(error, context, state.messages)
-      )
-        throw error;
-      replayDowngraded = true;
-      return requestOnce();
-    }
-  };
-  try {
-    const turn = await request();
-    requestOptions.recovered = false;
+      (attempt) => prepareRequest(context, state, protocol, attempt),
+    );
+    state.resetEarlyFailures();
+    turn.persisted = await early?.finish(turn.message);
     return turn;
   } catch (error) {
+    const recoverable =
+      error instanceof ConfirmedToolStreamError &&
+      (isTransientModelError(error.streamError) || isRecoverableStreamError(error.streamError));
+    if (recoverable) state.recordEarlyFailure();
+    const persisted = await early?.finish();
+    if (!(error instanceof ConfirmedToolStreamError) || !persisted) throw error;
+    context.emit({ type: 'text', data: { replace: state.text } });
     context.signal.throwIfAborted();
-    if (!isContextOverflow(error)) throw error;
-    if (requestOptions.recovered || !context.compactContext)
-      throw new Error('模型上下文超过窗口，无法继续本次运行', { cause: error });
-    requestOptions.recovered = true;
-    const changed = await compact(true);
-    if (!changed)
-      throw new Error('上下文恢复未缩小历史或未保留当前完整轮次，需要分割资料', { cause: error });
-    return request()
-      .then((result) => {
-        requestOptions.recovered = false;
-        return result;
-      })
-      .catch((retryError) => {
-        if (isContextOverflow(retryError))
-          throw new Error('压缩恢复后仍超过模型上下文窗口，需要分割资料', { cause: retryError });
-        throw retryError;
-      });
+    if (!recoverable || state.earlyFailures > 5) throw error.streamError;
+    return { message: state.messages[early!.assistantIndex!], persisted: true };
   }
+}
+
+async function prepareRequest(
+  context: RunContext,
+  state: ManagedRunState,
+  protocol: Protocol,
+  attempt: number,
+) {
+  state.setAttempt(attempt);
+  const images = await context.prepareImageInputs?.(state.messages, {
+    currentStart: state.currentStart,
+  });
+  context.signal.throwIfAborted();
+  if (images) await state.applyProjection(images, state.currentStart);
+  await compactRunContext(context, state, protocol, false);
+  await state.save('request');
+  context.signal.throwIfAborted();
+  if (context.userInput?.hasPending() && !state.waitingForInput())
+    throw new SupplementalInputError();
+}
+
+async function compactRunContext(
+  context: RunContext,
+  state: ManagedRunState,
+  protocol: Protocol,
+  force: boolean,
+) {
+  context.signal.throwIfAborted();
+  const projection = await context.compactContext?.(state.messages, {
+    force,
+    currentStart: state.currentStart,
+  });
+  context.signal.throwIfAborted();
+  if (!projection) return false;
+  if (!isSmallerProjection(state.messages, projection.messages, state.currentStart, protocol)) {
+    throw new Error('上下文压缩未缩小历史或未保留用户输入与完整工具配对');
+  }
+  await state.applyProjection(projection.messages, projection.currentStart);
+  return true;
 }

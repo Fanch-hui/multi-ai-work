@@ -1,19 +1,14 @@
 import type { ModelMessage, ProviderAdapter, RunContext } from '../domain/provider.js';
-import type {
-  ContextCheckpoint,
-  Message,
-  Usage,
-  Run,
-  Task,
-  Conversation,
-} from '../domain/types.js';
-import { ContextManager, contextSourceHash, contextCompatibilityHash } from '../runtime/context.js';
-import { modelMessageHistory, type ModelHistoryEntry } from '../runtime/model-history.js';
+import type { Message, Usage, Run, Task, Conversation } from '../domain/types.js';
+import {
+  ContextManager,
+  contextSourceHash,
+  contextCompatibilityHash,
+  type PreparedContext,
+} from '../runtime/context.js';
 import { State, id } from './state.js';
 import { addUsage } from '../domain/usage.js';
-import { modelImage } from './run-images.js';
 import { defaultContextWindow, managedContextBudget } from '../domain/context-settings.js';
-import { runMessageSources } from './run-message.js';
 import { compactRunMessages } from '../runtime/run-compaction.js';
 import { estimateTokens, estimateModelMessagesTokens } from '../runtime/model-history.js';
 import { ContextReferences } from './context-references.js';
@@ -27,12 +22,13 @@ import { prepareImageInputBudget } from './image-input-budget.js';
 
 export { addUsage } from '../domain/usage.js';
 
-export interface ProviderArchive {
-  id: string;
-  bindingId: string;
-  entries: ModelHistoryEntry[];
-  output?: string;
-}
+export {
+  workingHistory,
+  projectedHistory,
+  saveHistoryValidity,
+  type ProviderArchive,
+} from './managed-history.js';
+import { ManagedHistory } from './managed-history.js';
 
 interface ManagedContextPreparation {
   usage(): Usage | undefined;
@@ -49,20 +45,12 @@ export async function prepareManagedContext(
   force = false,
 ): Promise<ManagedContextPreparation> {
   const s = state.storage;
-  const savedHistory = s.metadata<ModelHistoryEntry[]>(`history:${input.binding.id}`);
-  let history =
-    savedHistory ??
-    modelMessageHistory(
-      archive.filter((message) => message.sequence <= delivered),
-      input.bot.id,
-      (artifactId) => modelImage(s.get('artifacts', artifactId)),
-    );
-  const loadArchiveHistory = () => {
-    const entries = s
-      .byField<ProviderArchive>('provider_archive', 'bindingId', input.binding.id)
-      .flatMap((record) => record.entries);
-    return entries.length ? cleanHistory(entries) : undefined;
-  };
+  const histories = new ManagedHistory(state);
+  const { history, historyIsCurrent, loadArchiveHistory } = histories.load(
+    input,
+    archive,
+    delivered,
+  );
   const window =
     input.bot.contextWindow ??
     defaultContextWindow(
@@ -76,8 +64,8 @@ export async function prepareManagedContext(
   );
   const { availableTokens: budget, triggerTokens } = settings;
   const run = s.get<Run>('runs', input.runId);
-  const task = run && s.get<Task>('tasks', run.taskId),
-    room = s.get<Conversation>('conversations', input.binding.conversationId);
+  const task = run && s.get<Task>('tasks', run.taskId);
+  const room = s.get<Conversation>('conversations', input.binding.conversationId);
   const references =
     task && room
       ? new ContextReferences(state, {
@@ -96,58 +84,38 @@ export async function prepareManagedContext(
   const { summarize, usage } = summaryRunner(input, adapter);
   const signature = contextCompatibilityHash({ ...input, protocol: input.connection.protocol });
   input.contextSignature = signature;
-  const validity = s.metadata<HistoryValidity>(`history-validity:${input.binding.id}`);
-  const sourceIds = new Set(validity?.sourceIds);
-  const sources = validity && archive.filter((message) => sourceIds.has(message.id));
-  const historyIsCurrent = !!(
-    savedHistory &&
-    validity &&
-    validity.generation === input.binding.generation &&
-    validity.signature === signature &&
-    sources?.length === validity.sourceIds.length &&
-    contextSourceHash(sources) === validity.sourceHash
-  );
   const currentRuntime = input.runtimeContext;
-  const cleanHistory = (entries: ModelHistoryEntry[]) =>
-    historyIsCurrent
-      ? entries
-      : entries.filter((entry) => entry.message.appContext?.source !== 'app.runtime');
-  history = cleanHistory(history);
-  const prepare = (force: boolean, currentInput: string) =>
-    manager.prepare({
-      binding: input.binding,
-      messages: archive,
-      instructions: input.instructions,
-      contextInstructions: input.contextInstructions,
-      protocol: input.connection.protocol,
-      tools: input.tools,
-      history,
-      historyIsCurrent,
-      loadArchiveHistory,
-      currentInput: `${currentInput}${
-        needsRuntimeContext(
-          history.map((entry) => entry.message),
-          currentRuntime,
-        )
-          ? `\n${currentRuntime!.content}`
-          : ''
-      }`,
-      preserveReferences,
-      contextWindow: budget,
-      triggerTokens,
-      force,
-      signal: input.signal,
-      summarize,
-      isSourceCurrent: (ids, hash) => {
-        const expected = new Set(ids);
-        return (
-          contextSourceHash(
-            s.messages(input.binding.conversationId).filter((message) => expected.has(message.id)),
-          ) === hash
-        );
-      },
-    });
-  const prepared = await prepare(force, input.prompt);
+  const includeRuntime = needsRuntimeContext(
+    history.map((entry) => entry.message),
+    currentRuntime,
+  );
+  const currentInput = input.prompt + (includeRuntime ? `\n${currentRuntime!.content}` : '');
+  const prepared = await manager.prepare({
+    binding: input.binding,
+    messages: archive,
+    instructions: input.instructions,
+    contextInstructions: input.contextInstructions,
+    protocol: input.connection.protocol,
+    tools: input.tools,
+    history,
+    historyIsCurrent,
+    loadArchiveHistory,
+    currentInput,
+    preserveReferences,
+    contextWindow: budget,
+    triggerTokens,
+    force,
+    signal: input.signal,
+    summarize,
+    isSourceCurrent: (ids, hash) => {
+      const expected = new Set(ids);
+      return (
+        contextSourceHash(
+          s.messages(input.binding.conversationId).filter((message) => expected.has(message.id)),
+        ) === hash
+      );
+    },
+  });
   prepareRuntimeContext(input, prepared.messages, signature);
   input.emit({
     type: 'context',
@@ -159,43 +127,56 @@ export async function prepareManagedContext(
     },
   });
   if (force) {
-    const { status, reason } = prepared.compaction ?? { status: 'unchanged', reason: 'no_history' };
-    if (status === 'failed') {
-      throw new Error(
-        reason === 'summary_failed' || reason === 'needs_split'
-          ? '摘要生成未完成，请稍后重试'
-          : reason === 'source_changed'
-            ? '对话内容已变化，请重新压缩'
-            : reason === 'over_budget'
-              ? '压缩后仍超过上下文预算，请减少本轮资料或调整上下文设置'
-              : '上下文压缩未完成，请稍后重试',
-      );
+    const compaction = manualCompactionResult(prepared.compaction);
+    if (compaction.outcome === 'compressed') {
+      s.transaction(() => {
+        const source = archive.at(-1)!;
+        histories.saveProjection(
+          input,
+          histories.mapSources(input, input.messages, source, source.sequence),
+        );
+      });
     }
-    if (status === 'unchanged')
-      return {
-        usage,
-        compaction: {
-          outcome: 'unchanged',
-          result:
-            reason === 'not_smaller'
-              ? '本次摘要未减少上下文占用，已保留原上下文'
-              : '当前没有可压缩的较早历史，可继续对话后再试',
-        },
-      };
-    s.transaction(() => {
-      const source = archive.at(-1)!;
-      s.setMetadata(
-        `history:${input.binding.id}`,
-        workingHistory(state, input, input.messages, source, source.sequence),
-      );
-      saveHistoryValidity(state, input);
-    });
+    return { usage, compaction };
+  }
+  input.compactContext = runCompactor(input, settings, references, summarize, currentRuntime);
+  return { usage };
+}
+
+function manualCompactionResult(
+  compaction: PreparedContext['compaction'],
+): NonNullable<ManagedContextPreparation['compaction']> {
+  const { status, reason } = compaction ?? { status: 'unchanged', reason: 'no_history' };
+  if (status === 'failed') {
+    if (reason === 'summary_failed' || reason === 'needs_split')
+      throw new Error('摘要生成未完成，请稍后重试');
+    if (reason === 'source_changed') throw new Error('对话内容已变化，请重新压缩');
+    if (reason === 'over_budget')
+      throw new Error('压缩后仍超过上下文预算，请减少本轮资料或调整上下文设置');
+    throw new Error('上下文压缩未完成，请稍后重试');
+  }
+  if (status === 'unchanged') {
     return {
-      usage,
-      compaction: { outcome: 'compressed', result: '上下文已压缩，完整聊天记录已保留' },
+      outcome: 'unchanged',
+      result:
+        reason === 'not_smaller'
+          ? '本次摘要未减少上下文占用，已保留原上下文'
+          : '当前没有可压缩的较早历史，可继续对话后再试',
     };
   }
-  input.compactContext = async (messages, options) => {
+  return { outcome: 'compressed', result: '上下文已压缩，完整聊天记录已保留' };
+}
+
+function runCompactor(
+  input: RunContext,
+  settings: ReturnType<typeof managedContextBudget>,
+  references: ContextReferences | undefined,
+  summarize: (prompt: string, signal: AbortSignal) => Promise<string>,
+  currentRuntime?: ModelMessage,
+) {
+  const { availableTokens: budget, triggerTokens } = settings;
+  const preserveReferences = references?.preserveReferences.bind(references);
+  const compact: NonNullable<RunContext['compactContext']> = async (messages, options) => {
     if (!budget || !triggerTokens) return undefined;
     const originalTokens =
       estimateTokens(input.instructions) +
@@ -269,7 +250,7 @@ export async function prepareManagedContext(
       });
     return next;
   };
-  return { usage };
+  return compact;
 }
 
 function summaryRunner(input: RunContext, adapter: ProviderAdapter) {
@@ -314,121 +295,4 @@ function summaryRunner(input: RunContext, adapter: ProviderAdapter) {
     return summary.text;
   };
   return { summarize, usage: () => summaryUsage };
-}
-
-export function workingHistory(
-  state: State,
-  input: RunContext,
-  messages: ModelMessage[],
-  draft: Message,
-  cutoff: number,
-): ModelHistoryEntry[] {
-  const s = state.storage;
-  const conversation = s.messages(draft.conversationId);
-  const previous =
-    s.metadata<ModelHistoryEntry[]>(`history:${input.binding.id}`) ??
-    modelMessageHistory(
-      conversation.filter((message) => message.sequence <= cutoff),
-      input.bot.id,
-      (artifactId) => modelImage(s.get('artifacts', artifactId)),
-    );
-  const source = conversation.filter((message) => message.sequence <= cutoff).at(-1) ?? draft;
-  const checkpoint = s
-    .byField<ContextCheckpoint>('context_checkpoints', 'bindingId', input.binding.id)
-    .at(-1);
-  const matchHistory = historyMatcher(previous);
-  let currentSource = source;
-  const sources = runMessageSources(s, input.runId);
-  const replies = conversation.filter(
-    (message) =>
-      message.runId && sources.has(message.runId) && message.authorBotId === input.bot.id,
-  );
-  const userSequences = messages.flatMap((message) =>
-    message.sourceSequence !== undefined ? [message.sourceSequence] : [],
-  );
-  const initialUser = messages.findIndex(
-    (message, index) =>
-      index >= input.messages.length && message.role === 'user' && !message.appContext,
-  );
-  return messages.map((message, index) => {
-    if (message.sourceMessageId && message.sourceSequence !== undefined) {
-      if (index >= input.messages.length)
-        currentSource = s.getMessage(message.sourceMessageId) ?? currentSource;
-      return { messageId: message.sourceMessageId, sequence: message.sourceSequence, message };
-    }
-    if (index < input.messages.length || message.contextSummary) {
-      if (checkpoint && message.content === `此前对话摘要（历史资料）：\n${checkpoint.content}`)
-        return {
-          messageId: checkpoint.sourceMessageIds.at(-1) ?? source.id,
-          sequence: checkpoint.throughSequence,
-          message,
-        };
-      const match = matchHistory(message);
-      if (match >= 0) return previous[match];
-      return { messageId: source.id, sequence: source.sequence, message };
-    }
-    if (message.appContext || index === initialUser)
-      return { messageId: source.id, sequence: source.sequence, message };
-    const nextUser =
-      userSequences.find((sequence) => sequence > currentSource.sequence) ?? Infinity;
-    const reply =
-      replies.find((item) => item.sequence > currentSource.sequence && item.sequence < nextUser) ??
-      currentSource;
-    return { messageId: reply.id, sequence: reply.sequence, message };
-  });
-}
-
-export function projectedHistory(
-  history: ModelHistoryEntry[],
-  messages: ModelMessage[],
-): ModelHistoryEntry[] {
-  const matchHistory = historyMatcher(history);
-  const matches = messages.map(matchHistory);
-  let next = history.length;
-  const result: ModelHistoryEntry[] = new Array(messages.length);
-  for (let index = messages.length - 1; index >= 0; index--) {
-    const match = matches[index];
-    const source = history[match >= 0 ? match : Math.max(0, next - 1)];
-    result[index] = { ...source, message: messages[index] };
-    if (match >= 0) next = match;
-  }
-  return result;
-}
-
-function historyMatcher(history: ModelHistoryEntry[]) {
-  const positions = new Map<string, { indices: number[]; offset: number }>();
-  history.forEach((entry, index) => {
-    const key = JSON.stringify(entry.message),
-      value = positions.get(key) ?? { indices: [], offset: 0 };
-    value.indices.push(index);
-    positions.set(key, value);
-  });
-  let cursor = 0;
-  return (message: ModelMessage) => {
-    const value = positions.get(JSON.stringify(message));
-    if (!value) return -1;
-    while (value.offset < value.indices.length && value.indices[value.offset] < cursor)
-      value.offset++;
-    const match = value.indices[value.offset++] ?? -1;
-    if (match >= 0) cursor = match + 1;
-    return match;
-  };
-}
-
-interface HistoryValidity {
-  generation: number;
-  signature: string;
-  sourceIds: string[];
-  sourceHash: string;
-}
-export function saveHistoryValidity(state: State, input: RunContext) {
-  const sources = state.storage
-    .messages(input.binding.conversationId)
-    .filter((message) => message.status === 'committed');
-  state.storage.setMetadata(`history-validity:${input.binding.id}`, {
-    generation: input.binding.generation,
-    signature: contextCompatibilityHash({ ...input, protocol: input.connection.protocol }),
-    sourceIds: sources.map((message) => message.id),
-    sourceHash: contextSourceHash(sources),
-  } satisfies HistoryValidity);
 }

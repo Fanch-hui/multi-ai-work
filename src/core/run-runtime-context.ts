@@ -115,8 +115,9 @@ export function prepareRuntimeContext(
   prepared: ModelMessage[],
   signature: string,
 ) {
-  const current = input.runtimeContext,
-    progress = input.progress;
+  // Core prepares this saved snapshot before handing ownership to ManagedRunState.
+  const current = input.runtimeContext;
+  const progress = input.progress;
   const resumedRuntime = progress?.phase === 'complete' ? undefined : current;
   const raw = progress?.compaction
     ? [...progress.compaction.archived, ...progress.messages.slice(progress.compaction.start)]

@@ -72,8 +72,7 @@ export async function runManaged(
       );
       if (!turn) continue;
       if (!turn.persisted) {
-        state.messages.push(turn.message);
-        state.text += turn.message.content;
+        state.appendAssistant(turn.message);
       }
       const calls = turn.message.toolCalls ?? [];
       await state.save(calls.length ? 'tools' : 'complete');

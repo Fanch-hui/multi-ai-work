@@ -1,5 +1,6 @@
 import type { ManagedProgress, ManagedProgressChange, ModelMessage } from '../domain/provider.js';
 import type { Storage } from './storage.js';
+import { insertOrderedToolResult } from '../runtime/tool-result-order.js';
 
 interface ProgressDelta {
   id: string;
@@ -80,25 +81,7 @@ export function replayProgressDeltas(storage: Storage, runId: string, progress: 
     progress.messages[delta.assistantIndex] = delta.message;
   }
   for (const delta of deltas.filter((delta) => delta.type === 'tool-result')) {
-    const calls = progress.messages[delta.assistantIndex]?.toolCalls;
-    const order = new Map(calls?.map((call, index) => [call.id, index]));
-    const position = order.get(delta.message.callId!);
-    if (position === undefined) continue;
-    const following = progress.messages.slice(delta.assistantIndex + 1);
-    if (
-      following.some(
-        (message) => message.role === 'tool' && message.callId === delta.message.callId,
-      )
-    )
-      continue;
-    const next = following.findIndex(
-      (message) => message.role !== 'tool' || (order.get(message.callId!) ?? Infinity) > position,
-    );
-    progress.messages.splice(
-      next < 0 ? progress.messages.length : delta.assistantIndex + 1 + next,
-      0,
-      delta.message,
-    );
+    insertOrderedToolResult(progress.messages, delta.assistantIndex, delta.message);
   }
 }
 

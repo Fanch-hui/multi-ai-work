@@ -5,43 +5,95 @@ import type {
   RunContext,
 } from '../../domain/provider.js';
 import type { ModelRecovery } from '../../domain/recovery.js';
+import { insertOrderedToolResult } from '../../runtime/tool-result-order.js';
 
 export class ManagedRunState {
-  messages: ModelMessage[];
-  currentStart: number;
-  archiveStart: number;
-  compaction?: ManagedProgress['compaction'];
-  text: string;
-  pendingInputIds: Set<string>;
-  turnId: string;
-  attempt: number;
-  earlyFailures: number;
-  phase: ManagedProgress['phase'];
+  private progress: Omit<ManagedProgress, 'pendingInputIds'>;
+  private pendingInputIds: Set<string>;
   private turnSequence = 0;
+
+  get messages() {
+    return this.progress.messages;
+  }
+  /** Start of the active user turn in the current working projection. */
+  get currentStart() {
+    return this.progress.currentStart;
+  }
+  /** Start of this run's additions in the unabridged protocol archive. */
+  get archiveStart() {
+    return this.progress.archiveStart!;
+  }
+  get compaction() {
+    return this.progress.compaction;
+  }
+  get text() {
+    return this.progress.text;
+  }
+  get attempt() {
+    return this.progress.attempt;
+  }
+  get earlyFailures() {
+    return this.progress.earlyFailures ?? 0;
+  }
+  get phase() {
+    return this.progress.phase;
+  }
 
   constructor(readonly context: RunContext) {
     const saved = context.progress;
-    this.messages = saved
-      ? [...saved.messages]
-      : [
-          ...context.messages,
-          ...(context.runtimeContext ? [context.runtimeContext] : []),
-          {
-            role: 'user',
-            content: context.prompt,
-            ...(context.images?.length ? { images: context.images } : {}),
-          },
-        ];
-    this.currentStart =
-      saved?.currentStart ?? context.messages.length + (context.runtimeContext ? 1 : 0);
-    this.compaction = saved?.compaction;
-    this.archiveStart = saved?.archiveStart ?? saved?.currentStart ?? context.messages.length;
-    this.text = saved?.text ?? '';
     this.pendingInputIds = new Set(saved?.pendingInputIds);
-    this.turnId = saved?.turnId ?? this.newTurnId();
-    this.attempt = saved?.attempt ?? 0;
-    this.earlyFailures = saved?.earlyFailures ?? 0;
-    this.phase = saved?.phase ?? 'ready';
+    this.progress = {
+      messages: saved
+        ? [...saved.messages]
+        : [
+            ...context.messages,
+            ...(context.runtimeContext ? [context.runtimeContext] : []),
+            {
+              role: 'user',
+              content: context.prompt,
+              ...(context.images?.length ? { images: context.images } : {}),
+            },
+          ],
+      currentStart:
+        saved?.currentStart ?? context.messages.length + (context.runtimeContext ? 1 : 0),
+      archiveStart: saved?.archiveStart ?? saved?.currentStart ?? context.messages.length,
+      compaction: saved?.compaction,
+      text: saved?.text ?? '',
+      turnId: saved?.turnId ?? this.newTurnId(),
+      attempt: saved?.attempt ?? 0,
+      earlyFailures: saved?.earlyFailures ?? 0,
+      phase: saved?.phase ?? 'ready',
+    };
+  }
+
+  appendAssistant(message: ModelMessage) {
+    this.progress.messages.push(message);
+    this.progress.text += message.content;
+  }
+
+  updateAssistant(index: number, message: ModelMessage, precedingText: string) {
+    this.progress.messages[index] = message;
+    this.progress.text = precedingText + message.content;
+  }
+
+  appendMessages(messages: ModelMessage[]) {
+    this.progress.messages.push(...messages);
+  }
+
+  insertToolResult(assistantIndex: number, message: ModelMessage) {
+    insertOrderedToolResult(this.progress.messages, assistantIndex, message);
+  }
+
+  setAttempt(attempt: number) {
+    this.progress.attempt = attempt;
+  }
+
+  resetEarlyFailures() {
+    this.progress.earlyFailures = 0;
+  }
+
+  recordEarlyFailure() {
+    this.progress.earlyFailures = this.earlyFailures + 1;
   }
 
   waitingForInput() {
@@ -54,9 +106,9 @@ export class ManagedRunState {
     const input = this.context.userInput?.take() ?? [];
     if (!input.length) return false;
     this.context.userInput!.beginReply(this.text);
-    this.text = '';
-    this.earlyFailures = 0;
-    this.messages.push(...input);
+    this.progress.text = '';
+    this.resetEarlyFailures();
+    this.appendMessages(input);
     for (const message of input)
       if (message.sourceMessageId) this.pendingInputIds.add(message.sourceMessageId);
     this.nextTurn();
@@ -71,9 +123,9 @@ export class ManagedRunState {
   }
 
   nextTurn() {
-    this.turnId = this.newTurnId();
-    this.attempt = 0;
-    this.phase = 'ready';
+    this.progress.turnId = this.newTurnId();
+    this.progress.attempt = 0;
+    this.progress.phase = 'ready';
   }
 
   archiveMessages(): ModelMessage[] {
@@ -84,9 +136,10 @@ export class ManagedRunState {
 
   async applyProjection(messages: ModelMessage[], currentStart: number) {
     const archived = this.archiveMessages();
-    this.messages = messages;
-    this.currentStart = currentStart;
-    this.compaction = { archived, start: messages.length };
+    this.progress.messages = messages;
+    this.progress.currentStart = currentStart;
+    // The compacted prefix is already in archived; only later additions are appended again.
+    this.progress.compaction = { archived, start: messages.length };
     await this.save('ready');
   }
 
@@ -95,20 +148,12 @@ export class ManagedRunState {
     recovery?: ModelRecovery,
     change?: ManagedProgressChange,
   ) {
-    this.phase = phase;
+    this.progress.phase = phase;
     await this.context.saveProgress?.(
       {
-        messages: this.messages,
-        currentStart: this.currentStart,
-        archiveStart: this.archiveStart,
+        ...this.progress,
         contextSignature: this.context.contextSignature,
-        compaction: this.compaction,
-        text: this.text,
         pendingInputIds: [...this.pendingInputIds],
-        turnId: this.turnId,
-        attempt: this.attempt,
-        earlyFailures: this.earlyFailures,
-        phase,
         ...(recovery ? { recovery } : {}),
       },
       change,

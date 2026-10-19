@@ -40,19 +40,8 @@ export async function completeToolBatch(
     }
   });
   const parallel = new Set(context.parallelToolNames);
-  const order = new Map(calls.map((call, index) => [call.id, index]));
   const saveResult = async (call: (typeof pending)[number], result: unknown) => {
-    const index = state.messages.findIndex(
-      (message, index) =>
-        index > assistantIndex &&
-        message.role === 'tool' &&
-        (order.get(message.callId!) ?? Infinity) > order.get(call.id)!,
-    );
-    state.messages.splice(
-      index < 0 ? state.messages.length : index,
-      0,
-      toolResultMessage(call.id, result),
-    );
+    state.insertToolResult(assistantIndex, toolResultMessage(call.id, result));
     executed.add(call.id);
     await state.save('tools', undefined, { type: 'tool-result', assistantIndex, callId: call.id });
     context.emit({ type: 'tool', data: { name: call.name, callId: call.id, phase: 'completed' } });
@@ -71,7 +60,7 @@ export async function completeToolBatch(
     calls.map((call) => call.id),
   );
   const projection = await context.prepareToolResults?.(state.messages, assistantIndex + 1);
-  state.messages.push(...reminders);
+  state.appendMessages(reminders);
   if (projection) await state.applyProjection([...projection, ...reminders], state.currentStart);
   else await state.save('ready');
 }
@@ -96,11 +85,10 @@ async function executeGroup<
           type: 'tool',
           data: { name: call.name, callId: call.id, phase: 'started' },
         });
-        const result = state.waitingForInput()
-          ? { error: '本轮正在等待用户回答，此调用未执行' }
-          : call.parseError
-            ? { error: call.parseError }
-            : await context.executeTool(call.name, call.args, call.id);
+        let result: unknown;
+        if (state.waitingForInput()) result = { error: '本轮正在等待用户回答，此调用未执行' };
+        else if (call.parseError) result = { error: call.parseError };
+        else result = await context.executeTool(call.name, call.args, call.id);
         // Persist every successful in-flight result, even after a sibling fails or is cancelled.
         const save = saving.then(() => saveResult(call, result));
         saving = save.catch((error) => {
