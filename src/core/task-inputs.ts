@@ -1,7 +1,7 @@
 import type { Message, Run, Task, TaskInput } from '../domain/types.js';
 import type { ModelMessage, RunUserInput } from '../domain/provider.js';
 import type { ToolExecutionContext } from '../domain/tools.js';
-import { State, id, now } from './state.js';
+import { State, now } from './state.js';
 import { modelImage } from './run-images.js';
 import { taskInputs } from './task-input-records.js';
 import { acknowledgeRequirement, updateRequirement } from './task-requirements.js';
@@ -29,7 +29,12 @@ export class TaskInputService {
     );
   }
 
-  forRun(run: Run, context: ToolExecutionContext, draft: Message, cutoff: number): RunUserInput {
+  forRun(
+    run: Run,
+    context: ToolExecutionContext,
+    cutoff: number,
+    beginReply: (output?: string) => void,
+  ): RunUserInput {
     const s = this.state.storage;
     this.claim(run, (input) => (s.getMessage(input.messageId)?.sequence ?? Infinity) <= cutoff);
     return {
@@ -83,7 +88,7 @@ export class TaskInputService {
         this.state.subscribe((kind) => {
           if (kind === 'state' && this.hasPending(run.taskId)) listener();
         }),
-      beginReply: (output) => this.beginReply(draft, output),
+      beginReply,
     };
   }
 
@@ -102,32 +107,6 @@ export class TaskInputService {
           s.put('deliveries', { ...input, status: 'claimed' as const, runId: run.id }),
         ),
     );
-  }
-
-  private beginReply(draft: Message, output?: string) {
-    const s = this.state.storage;
-    s.transaction(() => {
-      const previous = s.getMessage(draft.id);
-      if (previous?.status === 'draft') {
-        const content = output || previous.content;
-        if (content.trim() || previous.artifactIds.length)
-          s.updateMessage({ ...previous, content, status: 'committed' });
-        else s.deleteMessage(previous.id);
-      }
-      const next = s.appendMessage({
-        id: id(),
-        conversationId: draft.conversationId,
-        authorType: 'bot',
-        authorBotId: draft.authorBotId,
-        runId: draft.runId,
-        content: '',
-        artifactIds: [],
-        status: 'draft',
-        createdAt: now(),
-      });
-      Object.assign(draft, next);
-    });
-    this.state.changed();
   }
 
   complete(runId: string, cutoff: number) {

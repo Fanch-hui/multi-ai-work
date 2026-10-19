@@ -205,7 +205,7 @@ describe('主管群文件共享', () => {
       createdAt: now(),
     });
     const inputs = new TaskInputService(f.core.state);
-    const channel = inputs.forRun(worker.run, worker.context, draft, 0);
+    const channel = inputs.forRun(worker.run, worker.context, 0, () => {});
     expect(channel.take()).toEqual([
       expect.objectContaining({
         sourceMessageId: sent.messageId,

@@ -101,14 +101,10 @@ describe('主管任务控制与需求版本', () => {
       const before = f.core.state.storage.get<Task>('tasks', f.child.id)!;
       const messages = f.core.state.storage.messages(f.group.conversation.id);
       const inputs = f.core.state.snapshot().taskInputs;
-      const executing = f.control.tool(name, {
-        taskId: f.child.id,
-        ...(name === 'send_task_input'
-          ? { content: '新增要求' }
-          : name === 'reconcile_task'
-            ? { outcome: 'succeeded' }
-            : {}),
-      });
+      const args: Record<string, unknown> = { taskId: f.child.id };
+      if (name === 'send_task_input') args.content = '新增要求';
+      else if (name === 'reconcile_task') args.outcome = 'succeeded';
+      const executing = f.control.tool(name, args);
       await eventually(() =>
         f.core.state.snapshot().approvals.some((item) => item.status === 'pending'),
       );
@@ -182,7 +178,7 @@ describe('主管任务控制与需求版本', () => {
       createdAt: now(),
     });
     const inputs = new TaskInputService(f.core.state);
-    const channel = inputs.forRun(worker.run, worker.context, draft, 0);
+    const channel = inputs.forRun(worker.run, worker.context, 0, () => {});
     const messages = channel.take();
     expect(messages[0].content).toContain('预算改260元');
     channel.acknowledge!([sent.messageId]);
