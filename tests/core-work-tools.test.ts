@@ -2,8 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Artifact, Bot, Conversation, Task } from '../src/domain/types.js';
-import { resources, setup, eventually } from './core-harness.js';
-import { CoreService } from '../src/core/service.js';
+import { setup, eventually } from './core-harness.js';
 import { artifactGroups } from '../apps/ui/src/artifact-groups.js';
 
 describe('Core 常用工具', () => {

@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { toolConfiguration } from '../domain/tool-connection.js';
 import { mkdirSync, copyFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Artifact, Bot, Connection, Conversation, MemoryEntry, Run, Task, ToolConnection, Workspace, Skill } from '../domain/types.js';
+import type { Artifact, Bot, Connection, Conversation, MemoryEntry, Run, Task, ToolConnection, Workspace } from '../domain/types.js';
 import type { TaskGroupInput, ToolExecutionContext, ToolRegistry } from '../domain/tools.js';
 import type { ToolDefinition } from '../domain/provider.js';
 import { MemoryService } from '../runtime/memory.js';

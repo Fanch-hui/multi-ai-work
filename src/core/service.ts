@@ -1,7 +1,6 @@
 import { join } from 'node:path';
-import { readFile } from 'node:fs/promises';
 import { z } from 'zod';
-import type { Artifact, Bot, Connection, ContextCheckpoint, Conversation, MemoryEntry, ProcessRecord, Run, Task, UserQuestion } from '../domain/types.js';
+import type { Artifact, Bot, Connection, ContextCheckpoint, Conversation, Run, Task, UserQuestion } from '../domain/types.js';
 import { AuthenticationRequiredError, type ProviderAdapter } from '../domain/provider.js';
 import { MemoryService } from '../runtime/memory.js';
 import { ContextManager } from '../runtime/context.js';
@@ -12,7 +11,7 @@ import { supplementChatGptCatalog } from '../providers/managed/catalog.js';
 import { createToolRegistry } from '../tools/index.js';
 import { Vault, type CipherHost } from '../security/vault.js';
 import { OAuthManager } from '../security/oauth.js';
-import { State, id, now } from './state.js';
+import { State } from './state.js';
 import { EntityService } from './entities.js';
 import { TeamService } from './team.js';
 import { TaskService, terminal } from './tasks.js';

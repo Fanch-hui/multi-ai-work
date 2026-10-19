@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import type { PresetInstallation } from '../src/domain/market.js';
 import { MarketService } from '../src/core/market/service.js';
 import { configureMarketFetch } from '../src/core/market/network.js';
 import { digestBytes } from '../src/core/market/package-resources.js';

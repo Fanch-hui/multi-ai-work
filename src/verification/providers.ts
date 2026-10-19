@@ -137,7 +137,12 @@ async function checkCancellation(adapter: ProviderAdapter, context: RunContext, 
   context.signal = AbortSignal.any([controller.signal, AbortSignal.timeout(timeout)]);
   context.runId = randomUUID(); context.prompt = '只生成一篇很长的数字序列，从一到一万逐个列出，不调用工具。';
   context.emit = event => { if (event.type === 'text' && !sawText) { sawText = true; controller.abort(new Error('verification-cancel')); } };
-  try { await adapter.run(context); report.checks.cancel = unverified('生成已完成，未观察到可取消的活动轮次'); }
+  try {
+    await adapter.run(context);
+    report.checks.cancel = controller.signal.aborted
+      ? failed('收到文本后已请求取消，适配器仍返回完成结果')
+      : unverified('生成已完成，未观察到可取消的活动轮次');
+  }
   catch { report.checks.cancel = sawText && controller.signal.aborted ? passed('收到文本后发起取消，适配器未返回完成结果') : unverified('未观察到活动文本，无法证明取消路径'); }
 }
 

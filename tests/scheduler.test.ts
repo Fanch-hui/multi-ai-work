@@ -74,7 +74,8 @@ describe('任务并发与等待原因', () => {
       const room = core.entities.createConversation({ name: '工作', kind: 'private', memberIds: [botId], workspaceId: core.state.snapshot().workspaces[0].id });
       return core.tasks.create({ conversationId: room.id, botId, goal: '工作' });
     };
-    const a = create(first.id), b = create(next.id);
+    create(first.id);
+    const b = create(next.id);
     core.scheduler.resume();
     await eventually(() => held.started.has(first.id));
     expect(core.state.snapshot().tasks.find(task => task.id === b.id)).toMatchObject({ status: 'queued', queueReason: 'account_limit' });

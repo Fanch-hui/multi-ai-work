@@ -16,16 +16,6 @@ export function runMessageSources(storage: Storage, runId: string): Set<string> 
   return sources;
 }
 
-export function streamRunMessage(storage: Storage, messageId: string, delta: string) {
-  const message = currentDraft(storage, messageId);
-  if (message) storage.updateMessage({ ...message, content: message.content + delta });
-}
-
-export function replaceRunMessage(storage: Storage, messageId: string, content: string) {
-  const message = currentDraft(storage, messageId);
-  if (message) storage.updateMessage({ ...message, content });
-}
-
 export function completeRunMessage(storage: Storage, draft: Message, content: string, artifactIds: string[]): Message {
   const message = currentDraft(storage, draft.id);
   if (!message || !content.trim()) {

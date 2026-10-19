@@ -61,7 +61,7 @@ jobs:
       - name: Test
         run: pnpm test
       - name: Test preset packages
-        run: python scripts/presets/test_build.py
+        run: python -B -m unittest discover -s scripts/presets -p "test_*.py"
       - name: Build
         run: pnpm build
       - name: Report validation scope

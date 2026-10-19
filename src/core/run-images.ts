@@ -20,11 +20,6 @@ interface ImageLruCache {
 const MAX_IMAGE_CACHE_BYTES = 32 * 1024 * 1024;
 const sharedImageCache: ImageLruCache = { entries: new Map(), bytes: 0 };
 
-export function clearRunImageCache(): void {
-  sharedImageCache.entries.clear();
-  sharedImageCache.bytes = 0;
-}
-
 function readLru(store: ImageLruCache, key: string): EncodedImage | undefined {
   const entry = store.entries.get(key);
   if (!entry) return undefined;

@@ -152,9 +152,10 @@ describe('managed durable protocol progress', () => {
     context.messages = [{ role: 'user', content: 'history '.repeat(200) }];
     context.userInput = { hasPending: () => pending, subscribe: () => () => {}, beginReply: output => { if (output) replies.push(output); },
       take: () => { if (!pending) return []; pending = false; return [{ role: 'user', content: 'REVISED', sourceMessageId: 'revised' }]; } };
-    if (window === 'context recovery') context.recoverContext = async messages => {
+    if (window === 'context recovery') context.compactContext = async (messages, { force, currentStart }) => {
+      if (!force) return;
       pending = true;
-      return [{ role: 'user', content: 'summary' }, ...messages.slice(context.messages.length)];
+      return { messages: [{ role: 'user', content: 'summary' }, ...messages.slice(context.messages.length)], currentStart };
     };
     else context.saveProgress = async progress => {
       if (progress.phase === 'request' && !progress.messages.some(message => message.sourceMessageId === 'revised')) pending = true;

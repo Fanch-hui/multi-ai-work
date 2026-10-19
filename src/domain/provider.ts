@@ -68,7 +68,6 @@ export interface RunContext {
   getSecret(ref?: string): Promise<string | undefined>;
   saveSecret(ref: string, value: string): Promise<void>;
   persistBinding(nativeSessionId: string): void;
-  recoverContext?(messages: ModelMessage[]): Promise<ModelMessage[] | undefined>;
   compactContext?(messages: ModelMessage[], options: { force: boolean; currentStart: number }): Promise<{ messages: ModelMessage[]; currentStart: number } | undefined>;
   prepareToolResults?(messages: ModelMessage[], batchStart: number): Promise<ModelMessage[] | undefined>;
   prepareImageInputs?(messages: ModelMessage[], options: { currentStart: number }): Promise<ModelMessage[] | undefined>;

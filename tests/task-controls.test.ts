@@ -6,7 +6,7 @@ import { TaskInputService } from '../src/core/task-inputs.js';
 import { eventually, setup } from './core-harness.js';
 
 async function fixture(execute: (context: RunContext) => Promise<{ text: string }> = async () => ({ text: '完成' })) {
-  const { core, bot, connection } = await setup(execute);
+  const { core, bot } = await setup(execute);
   core.scheduler.pause();
   const chief = core.entities.saveBot({ ...bot('Chief', ['get_task', 'read_artifact', 'send_task_input', 'stop_task', 'reconcile_task']),
     approvalMode: 'auto', memoryMode: 'off' });

@@ -45,7 +45,11 @@ describe('managed context overflow recovery', () => {
       : index === 2 ? { code: 'context_length_exceeded' } : { output: [answer] });
     let writes = 0, recoveries = 0;
     context.executeTool = async () => { writes++; return { saved: true }; };
-    context.recoverContext = async messages => { recoveries++; return [{ role: 'user', content: 'Summary' }, ...messages.slice(2)]; };
+    context.compactContext = async (messages, { force, currentStart }) => {
+      if (!force) return;
+      recoveries++;
+      return { messages: [{ role: 'user', content: 'Summary' }, ...messages.slice(2)], currentStart: currentStart - 1 };
+    };
     const result = await new CustomApiAdapter().run(context);
     expect(result.text).toBe('Saved');
     expect(writes).toBe(1); expect(recoveries).toBe(1); expect(requests).toHaveLength(3);
@@ -56,7 +60,11 @@ describe('managed context overflow recovery', () => {
   it('does not compact for unrelated 400 errors', async () => {
     const { context, requests } = await fixture(() => ({ code: 'invalid_parameter' }));
     let recoveries = 0;
-    context.recoverContext = async () => { recoveries++; return []; };
+    context.compactContext = async (_messages, { force }) => {
+      if (!force) return;
+      recoveries++;
+      return { messages: [], currentStart: 0 };
+    };
     await expect(new CustomApiAdapter().run(context)).rejects.toThrow();
     expect(recoveries).toBe(0); expect(requests).toHaveLength(1);
   });
@@ -64,7 +72,11 @@ describe('managed context overflow recovery', () => {
   it('stops after the single recovery attempt also overflows', async () => {
     const { context, requests } = await fixture(() => ({ code: 'context_window_exceeded' }));
     let recoveries = 0;
-    context.recoverContext = async messages => { recoveries++; return messages.slice(2); };
+    context.compactContext = async (messages, { force, currentStart }) => {
+      if (!force) return;
+      recoveries++;
+      return { messages: messages.slice(2), currentStart: currentStart - 2 };
+    };
     await expect(new CustomApiAdapter().run(context)).rejects.toThrow('压缩恢复后仍超过');
     expect(recoveries).toBe(1); expect(requests).toHaveLength(2);
   });
@@ -73,8 +85,9 @@ describe('managed context overflow recovery', () => {
     const { context, requests } = await fixture((_request, index) => index === 1 ? { output: [opaque, call] } : { code: 'context_length_exceeded' });
     let writes = 0;
     context.executeTool = async () => { writes++; return { saved: true }; };
-    context.recoverContext = async () => [{ role: 'user', content: context.prompt }];
-    await expect(new CustomApiAdapter().run(context)).rejects.toThrow('未保留当前完整轮次');
+    context.compactContext = async (_messages, { force }) => force
+      ? { messages: [{ role: 'user', content: context.prompt }], currentStart: 0 } : undefined;
+    await expect(new CustomApiAdapter().run(context)).rejects.toThrow('未保留用户输入与完整工具配对');
     expect(writes).toBe(1); expect(requests).toHaveLength(2);
   });
 });

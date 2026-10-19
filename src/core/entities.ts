@@ -1,5 +1,5 @@
-import { mkdir, realpath, readFile } from 'node:fs/promises';
-import { isAbsolute, join, basename } from 'node:path';
+import { mkdir, realpath } from 'node:fs/promises';
+import { isAbsolute, join } from 'node:path';
 import { z } from 'zod';
 import type { Bot, Connection, Conversation, Skill, ToolConnection, Workspace } from '../domain/types.js';
 import { State, id, now } from './state.js';

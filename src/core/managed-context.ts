@@ -126,7 +126,7 @@ function summaryRunner(input: RunContext, adapter: ProviderAdapter) {
   const summarize = async (prompt: string, signal: AbortSignal) => {
     const runId = `${input.runId}:summary:${id()}`;
     const summary = await adapter.run({ ...input, runId, prompt, messages: [], images: [], tools: [],
-      instructions: '将提供的历史整理为摘要，只输出摘要，不执行操作。', signal, recoverContext: undefined, compactContext: undefined,
+      instructions: '将提供的历史整理为摘要，只输出摘要，不执行操作。', signal, compactContext: undefined,
       userInput: undefined, progress: undefined, saveProgress: undefined, runtimeContext: undefined, prepareToolResults: undefined, prepareImageInputs: undefined, deferRecovery: false,
       emit: event => {
         if (event.type === 'usage') input.emit({ ...event, data: { ...event.data, phase: 'compaction' } });

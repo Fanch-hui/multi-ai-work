@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ArrowUpRight, Inbox } from "lucide-react";
+import { Inbox } from "lucide-react";
 import { cn } from "./classNames.js";
 export { cn } from "./classNames.js";
 export { Button, Field, ErrorNote, inputClass } from "./controls.js";
@@ -107,17 +107,6 @@ export function Avatar({ name, color, small }: { name: string; color?: string; s
     >
       {name.slice(0, 1)}
     </span>
-  );
-}
-export function LinkAction({ children, onClick }: { children: ReactNode; onClick: () => void }) {
-  return (
-    <button
-      className="inline-flex items-center gap-1 text-sm font-medium text-blue-700 hover:underline"
-      onClick={onClick}
-    >
-      {children}
-      <ArrowUpRight size={14} />
-    </button>
   );
 }
 export function timeLabel(value: string): string {

@@ -82,19 +82,10 @@ export async function requestManagedTurn(client: OpenAI, context: RunContext, pr
   catch (error) {
     context.signal.throwIfAborted();
     if (!isContextOverflow(error)) throw error;
-    if (requestOptions.recovered || !context.compactContext && !context.recoverContext)
+    if (requestOptions.recovered || !context.compactContext)
       throw new Error('模型上下文超过窗口，无法继续本次运行', { cause: error });
     requestOptions.recovered = true;
-    let changed = await compact(true);
-    if (!changed && !context.compactContext && context.recoverContext) {
-      const current = state.messages.slice(state.currentStart);
-      const projection = await context.recoverContext(state.messages);
-      if (projection && isSmallerProjection(state.messages, projection, undefined, protocol) && projection.length >= current.length
-        && JSON.stringify(projection.slice(-current.length)) === JSON.stringify(current)) {
-        await state.applyProjection(projection, projection.length - current.length);
-        changed = true;
-      }
-    }
+    const changed = await compact(true);
     if (!changed) throw new Error('上下文恢复未缩小历史或未保留当前完整轮次，需要分割资料', { cause: error });
     return request().then(result => { requestOptions.recovered = false; return result; }).catch(retryError => {
       if (isContextOverflow(retryError)) throw new Error('压缩恢复后仍超过模型上下文窗口，需要分割资料', { cause: retryError });

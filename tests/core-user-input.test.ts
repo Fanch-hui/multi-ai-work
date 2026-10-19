@@ -164,7 +164,7 @@ describe('执行中的用户补充', () => {
     const { core, connection } = await setup(async () => ({ text: '回复' }));
     core.scheduler.pause();
     await core.request('chief.configure', { input: { connectionId: connection.id, model: 'test', memoryMode: 'off' } });
-    const room = core.state.settings().mainConversationId!, chief = core.state.settings().mainBotId!;
+    const room = core.state.settings().mainConversationId!;
     const original = core.tasks.send({ conversationId: room, content: '原任务' });
     core.tasks.update(core.state.storage.get<Task>('tasks', original.taskIds[0])!, { status: 'running' });
     const supplement = core.tasks.send({ conversationId: room, content: '不能丢失的补充' });

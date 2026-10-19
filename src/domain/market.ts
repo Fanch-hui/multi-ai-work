@@ -33,7 +33,6 @@ export interface AgentPreset {
   platforms: ('darwin' | 'win32' | 'linux')[]; license: string; releaseNotes: string;
   download?: { url: string; sha256: string; bytes: number };
 }
-export interface PresetManifest { formatVersion: 1; preset: AgentPreset; }
 export interface PresetCatalog { formatVersion: 1; presets: AgentPreset[]; }
 export interface PresetInstallation {
   id: string; preset: AgentPreset; source: 'official' | 'local';

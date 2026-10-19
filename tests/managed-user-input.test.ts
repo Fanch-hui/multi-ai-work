@@ -136,8 +136,9 @@ describe('supplemental messages and context recovery', () => {
       ? { tools: ['write'] } : { overflow: true });
     context.messages = [{ role: 'user', content: 'old'.repeat(1000) }, { role: 'assistant', content: 'Old answer' }];
     context.executeTool = async () => { pending.push(followup()); return { saved: true }; };
-    context.recoverContext = async messages => [messages.at(-1)!];
-    await expect(new CustomApiAdapter().run(context)).rejects.toThrow('未保留当前完整轮次');
+    context.compactContext = async (messages, { force }) => force
+      ? { messages: [messages.at(-1)!], currentStart: 0 } : undefined;
+    await expect(new CustomApiAdapter().run(context)).rejects.toThrow('未保留用户输入与完整工具配对');
     expect(requests).toHaveLength(2);
   });
 
@@ -147,7 +148,8 @@ describe('supplemental messages and context recovery', () => {
     context.messages = [{ role: 'user', content: 'old'.repeat(1000) }, { role: 'assistant', content: 'Old answer' }];
     let writes = 0;
     context.executeTool = async () => { writes++; pending.push(followup()); return { saved: true }; };
-    context.recoverContext = async messages => [{ role: 'user', content: 'Summary' }, ...messages.slice(2)];
+    context.compactContext = async (messages, { force, currentStart }) => force
+      ? { messages: [{ role: 'user', content: 'Summary' }, ...messages.slice(2)], currentStart: currentStart - 1 } : undefined;
     const result = await new CustomApiAdapter().run(context);
     expect(result.text).toBe('Revised answer'); expect(writes).toBe(1); expect(requests).toHaveLength(3);
     expect(requests[2].input).toContainEqual({ type: 'function_call_output', call_id: 'call-1-0', output: '{"saved":true}' });

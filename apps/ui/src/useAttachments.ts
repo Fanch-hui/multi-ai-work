@@ -45,8 +45,9 @@ export function useAttachments(conversationId: string, mutate: Mutate) {
   }
   function upload(files: File[]) {
     return importItems(files.length, async append => {
+      const oversized = files.find(file => file.size > 25 * 1024 * 1024);
+      if (oversized) throw new Error(`${oversized.name} 超过 25 MB，请选择较小的文件。`);
       for (const file of files) {
-        if (file.size > 25 * 1024 * 1024) throw new Error(`${file.name} 超过 25 MB，请选择较小的文件。`);
         const result = await mutate<AttachResult>("conversations.attachBytes", {
           conversationId, name: file.name || "图片.png", mimeType: file.type, data: await encodeFile(file),
         });
