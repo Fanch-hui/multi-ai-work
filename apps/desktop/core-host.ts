@@ -1,87 +1,52 @@
-import {
-  app,
-  utilityProcess,
-  dialog,
-  shell,
-  safeStorage,
-  nativeImage,
-  net,
-  type BrowserWindow,
-  type UtilityProcess,
-} from 'electron';
+import { app, utilityProcess, net, type BrowserWindow, type UtilityProcess } from 'electron';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { stat } from 'node:fs/promises';
+import type {
+  CoreHostRequest,
+  CoreResult,
+  CoreToDesktopMessage,
+  DesktopToCoreMessage,
+} from '../../src/domain/core-ipc.js';
 import type { ProviderSocket } from '../../src/providers/network.js';
 import { createProviderSocketHost } from './provider-sockets.js';
+import { handleCorePlatformRequest } from './core-platform.js';
+
+type RequestHandler = { resolve(value: unknown): void; reject(error: Error): void };
+type StartupHandler = { resolve(): void; reject(error: Error): void };
 
 export class CoreHost {
   private child?: UtilityProcess;
   private closing?: Promise<void>;
-  private pending = new Map<
-    string,
-    { resolve(value: unknown): void; reject(error: Error): void }
-  >();
+  private pending = new Map<string, RequestHandler>();
   onChange?: () => void;
+
   get running() {
     return !!this.child;
   }
+
   async start(window?: BrowserWindow, dataDirectory = app.getPath('userData')) {
     if (this.child) throw new Error('Core 已经启动');
-    const child = utilityProcess.fork(join(app.getAppPath(), 'dist/src/core/entry.js'), [], {
-      env: {
-        ...process.env,
-        AI_TEAM_DATA_DIR: dataDirectory,
-        MULTI_AI_WORKSPACE_RUNTIME: app.isPackaged
-          ? join(process.resourcesPath, 'workspace-runtime')
-          : join(
-              app.getAppPath(),
-              'workspace-runtime',
-              process.platform === 'darwin' ? 'mac-arm64' : 'win-x64',
-            ),
-      },
-      stdio: 'pipe',
-      serviceName: 'multi-AI work Core',
-    });
+    const child = this.createChild(dataDirectory);
     this.child = child;
     const sockets = createProviderSocketHost(
       (url, headers) =>
         new net.WebSocket(url, { headers, useSessionCookies: false }) as unknown as ProviderSocket,
       (value) => child.postMessage(value),
     );
-    child.stdout?.resume();
-    if (process.argv.includes('--smoke-core')) child.stderr?.pipe(process.stderr);
-    else child.stderr?.resume();
+    this.drainChildOutput(child);
     await new Promise<void>((resolve, reject) => {
+      const startup = { resolve, reject };
       child.on('message', (input) => {
         if (sockets.receive(input)) return;
-        if (input.type === 'ready') resolve();
-        if (input.type === 'changed') this.onChange?.();
-        if (input.type === 'fatal') reject(new Error(input.error));
-        if (input.type === 'host')
-          void this.host(input.method, input.params, window)
-            .then((result) => child.postMessage({ type: 'host-result', id: input.id, result }))
-            .catch((error) =>
-              child.postMessage({ type: 'host-result', id: input.id, error: error.message }),
-            );
-        if (input.type === 'result') {
-          const handler = this.pending.get(input.id);
-          this.pending.delete(input.id);
-          if (input.error) handler?.reject(new Error(input.error));
-          else handler?.resolve(input.result);
-        }
+        this.receive(child, input as CoreToDesktopMessage, startup, window);
       });
       child.on('exit', (code) => {
         sockets.close();
-        if (this.child === child) this.child = undefined;
-        reject(new Error(`Core 已停止 (${code})`));
-        for (const handler of this.pending.values())
-          handler.reject(new Error('Core 已断开，请重新启动应用'));
-        this.pending.clear();
-        this.onChange?.();
+        this.childExited(child, code, startup);
       });
     });
   }
+
   request(method: string, params: Record<string, unknown>): Promise<unknown> {
     const id = randomUUID();
     return new Promise((resolve, reject) => {
@@ -90,21 +55,113 @@ export class CoreHost {
         return;
       }
       this.pending.set(id, { resolve, reject });
-      this.child.postMessage({ type: 'request', id, method, params });
+      this.send(this.child, { type: 'request', id, method, params });
     });
   }
+
   async close() {
     const child = this.child;
     if (!child) return;
-    this.closing ??= new Promise<void>((resolve, reject) => {
+    this.closing ??= this.waitForChildClose(child).finally(() => {
+      this.closing = undefined;
+    });
+    await this.closing;
+  }
+
+  private createChild(dataDirectory: string) {
+    const runtimeDirectory = app.isPackaged
+      ? join(process.resourcesPath, 'workspace-runtime')
+      : join(
+          app.getAppPath(),
+          'workspace-runtime',
+          process.platform === 'darwin' ? 'mac-arm64' : 'win-x64',
+        );
+    return utilityProcess.fork(join(app.getAppPath(), 'dist/src/core/entry.js'), [], {
+      env: {
+        ...process.env,
+        AI_TEAM_DATA_DIR: dataDirectory,
+        MULTI_AI_WORKSPACE_RUNTIME: runtimeDirectory,
+      },
+      stdio: 'pipe',
+      serviceName: 'multi-AI work Core',
+    });
+  }
+
+  private drainChildOutput(child: UtilityProcess) {
+    child.stdout?.resume();
+    if (process.argv.includes('--smoke-core')) child.stderr?.pipe(process.stderr);
+    else child.stderr?.resume();
+  }
+
+  private send(child: UtilityProcess, message: DesktopToCoreMessage) {
+    child.postMessage(message);
+  }
+
+  private receive(
+    child: UtilityProcess,
+    input: CoreToDesktopMessage,
+    startup: StartupHandler,
+    window?: BrowserWindow,
+  ) {
+    switch (input.type) {
+      case 'ready':
+        startup.resolve();
+        return;
+      case 'changed':
+        this.onChange?.();
+        return;
+      case 'fatal':
+        startup.reject(new Error(input.error));
+        return;
+      case 'host':
+        void this.respondToHostRequest(child, input, window);
+        return;
+      case 'result':
+        this.settleRequest(input);
+        return;
+      case 'closed':
+        return;
+    }
+  }
+
+  private settleRequest(input: CoreResult) {
+    const handler = this.pending.get(input.id);
+    this.pending.delete(input.id);
+    if (input.error) handler?.reject(new Error(input.error));
+    else handler?.resolve(input.result);
+  }
+
+  private async respondToHostRequest(
+    child: UtilityProcess,
+    input: CoreHostRequest,
+    window?: BrowserWindow,
+  ) {
+    try {
+      const result = await handleCorePlatformRequest(input.method, input.params, window);
+      this.send(child, { type: 'host-result', id: input.id, result });
+    } catch (error) {
+      this.send(child, { type: 'host-result', id: input.id, error: (error as Error).message });
+    }
+  }
+
+  private childExited(child: UtilityProcess, code: number, startup: StartupHandler) {
+    if (this.child === child) this.child = undefined;
+    startup.reject(new Error(`Core 已停止 (${code})`));
+    for (const handler of this.pending.values()) {
+      handler.reject(new Error('Core 已断开，请重新启动应用'));
+    }
+    this.pending.clear();
+    this.onChange?.();
+  }
+
+  private waitForChildClose(child: UtilityProcess): Promise<void> {
+    return new Promise((resolve, reject) => {
       let closed = false;
-      const message = (input: { type?: string }) => {
+      const message = (input: CoreToDesktopMessage) => {
         if (input.type === 'closed') closed = true;
       };
       child.on('message', message);
-      const forced = setTimeout(() => {
-        child.kill();
-      }, 15000);
+      const forced = setTimeout(() => child.kill(), 15000);
       const timeout = setTimeout(() => reject(new Error('应用数据仍在使用，请退出后重试')), 20000);
       child.once('exit', (code) => {
         clearTimeout(forced);
@@ -113,61 +170,7 @@ export class CoreHost {
         if (closed && code === 0) resolve();
         else reject(new Error('数据服务未正常关闭，请重试'));
       });
-      child.postMessage({ type: 'close' });
-    }).finally(() => {
-      this.closing = undefined;
+      this.send(child, { type: 'close' });
     });
-    await this.closing;
-  }
-  private async host(method: string, params: Record<string, unknown>, window?: BrowserWindow) {
-    if (method === 'encrypt' || method === 'decrypt') {
-      if (
-        !safeStorage.isEncryptionAvailable() ||
-        (process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text')
-      )
-        throw new Error('系统凭据保护不可用，请配置安全后端');
-      return method === 'encrypt'
-        ? safeStorage.encryptString(String(params.value)).toString('base64')
-        : safeStorage.decryptString(Buffer.from(String(params.value), 'base64'));
-    }
-    if (method === 'chooseDirectory' || method === 'chooseFile') {
-      if (!window) throw new Error('目录选择需要桌面窗口');
-      const result = await dialog.showOpenDialog(window, {
-        properties:
-          method === 'chooseDirectory'
-            ? ['openDirectory', 'createDirectory']
-            : params.multiple
-              ? ['openFile', 'multiSelections']
-              : ['openFile'],
-      });
-      return {
-        path: result.canceled ? undefined : result.filePaths[0],
-        paths: result.canceled ? [] : result.filePaths,
-      };
-    }
-    if (method === 'chooseAvatar') {
-      if (!window) throw new Error('选择头像需要桌面窗口');
-      const result = await dialog.showOpenDialog(window, {
-        properties: ['openFile'],
-        filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp'] }],
-      });
-      if (result.canceled) return { cancelled: true };
-      const path = result.filePaths[0];
-      if ((await stat(path)).size > 12 * 1024 * 1024) throw new Error('请选择小于 12 MB 的图片');
-      const image = nativeImage.createFromPath(path);
-      if (image.isEmpty()) throw new Error('图片无法读取，请选择 PNG、JPEG 或 WebP');
-      const size = image.getSize();
-      const avatar = image
-        .resize(size.width > size.height ? { width: 192 } : { height: 192 })
-        .toDataURL();
-      if (avatar.length > 260000) throw new Error('头像图片过大，请换一张图片');
-      return { avatar };
-    }
-    if (method === 'openPath') {
-      const error = await shell.openPath(String(params.path));
-      if (error) throw new Error(error);
-      return { ok: true };
-    }
-    throw new Error('不支持的平台操作');
   }
 }

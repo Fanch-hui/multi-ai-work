@@ -20,7 +20,8 @@ export function useMarket() {
   }, []);
   useEffect(() => {
     alive.current = true;
-    void refresh().then(async (value) => {
+    async function loadInitialCatalog() {
+      const value = await refresh();
       if (!alive.current || !value?.catalogConfigured || value.refreshedAt) return;
       try {
         const catalog = await request<MarketState>('market.refresh');
@@ -28,7 +29,8 @@ export function useMarket() {
       } catch (cause) {
         if (alive.current) setError(errorMessage(cause));
       }
-    });
+    }
+    void loadInitialCatalog();
     return () => {
       alive.current = false;
     };

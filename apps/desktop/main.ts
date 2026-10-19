@@ -71,6 +71,15 @@ async function smokeCore() {
 }
 async function start() {
   const currentDirectory = await readDataDirectory(app.getPath('userData'));
+  createWindow();
+  configureUpdater();
+  configureDataDirectory(currentDirectory);
+  configureWindowNavigation();
+  registerRendererRequests();
+  await startCoreAndShowWindow(currentDirectory);
+  configureTrayAndWindowClose();
+}
+function createWindow() {
   window = new BrowserWindow({
     width: 1400,
     height: 900,
@@ -89,6 +98,8 @@ async function start() {
       sandbox: true,
     },
   });
+}
+function configureUpdater() {
   updater = new AppUpdater({
     version: app.getVersion(),
     enabled:
@@ -120,6 +131,8 @@ async function start() {
       if (!window.isDestroyed()) window.webContents.send('team:update', state);
     },
   });
+}
+function configureDataDirectory(currentDirectory: string) {
   dataDirectory = new DataDirectoryController({
     defaultDirectory: app.getPath('userData'),
     currentDirectory,
@@ -137,6 +150,8 @@ async function start() {
       if (!window.isDestroyed()) window.webContents.send('team:changed');
     },
   });
+}
+function configureWindowNavigation() {
   window.webContents.setWindowOpenHandler(({ url }) => {
     if (allowedExternal(url)) void shell.openExternal(url);
     return { action: 'deny' };
@@ -147,6 +162,8 @@ async function start() {
       if (allowedExternal(url)) void shell.openExternal(url);
     }
   });
+}
+function registerRendererRequests() {
   ipcMain.handle('team:request', async (event, method: unknown, params: unknown) => {
     if (
       event.sender !== window.webContents ||
@@ -185,6 +202,8 @@ async function start() {
     }
     return result;
   });
+}
+async function startCoreAndShowWindow(currentDirectory: string) {
   core.onChange = () => {
     if (!window.isDestroyed() && !dataDirectory?.busy) window.webContents.send('team:changed');
   };
@@ -193,7 +212,9 @@ async function start() {
   trayEnabled = snapshot.settings.trayEnabled;
   await window.loadFile(pagePath);
   window.show();
-  void updater.start();
+  void updater!.start();
+}
+function configureTrayAndWindowClose() {
   const icon = nativeImage.createFromPath(
     join(
       app.getAppPath(),
@@ -225,6 +246,7 @@ async function start() {
     }
   });
 }
+
 function allowedExternal(url: string) {
   try {
     const parsed = new URL(url);
@@ -240,14 +262,16 @@ app.on('window-all-closed', () => {
 app.on('before-quit', (event) => {
   event.preventDefault();
   exiting = true;
-  shutdown ??= (async () => {
-    try {
-      await dataDirectory?.settle();
-      await updater?.close();
-      await core.close();
-    } finally {
-      tray?.destroy();
-      app.exit(0);
-    }
-  })();
+  shutdown ??= shutdownDesktop();
 });
+
+async function shutdownDesktop() {
+  try {
+    await dataDirectory?.settle();
+    await updater?.close();
+    await core.close();
+  } finally {
+    tray?.destroy();
+    app.exit(0);
+  }
+}

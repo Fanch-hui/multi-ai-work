@@ -89,6 +89,127 @@ export function Market({
   const outdated = detail
     ? rowMembers(detail, data.bots).filter((bot) => bot.preset?.version !== detail.preset.version)
     : [];
+  function importPreset() {
+    void action('market.import');
+  }
+  function checkCatalogUpdates() {
+    setBusy(true);
+    void action('market.refresh').finally(() => setBusy(false));
+  }
+  function showDownloaded() {
+    setDownloaded(true);
+    setSelection([]);
+  }
+  function showAllPresets() {
+    setDownloaded(false);
+    setSelection([]);
+  }
+  function hireSelected() {
+    void hire(selected);
+  }
+  function hireRow(row: MarketRow) {
+    void hire([row]);
+  }
+  function toggleSelection(key: string) {
+    setSelection((values) =>
+      values.includes(key) ? values.filter((id) => id !== key) : [...values, key],
+    );
+  }
+  function refreshMarket() {
+    void refresh();
+  }
+  function careerSaved() {
+    careerHandled?.();
+    setDownloaded(false);
+    refreshMarket();
+  }
+  function hireDetail() {
+    if (!detail) return;
+    void hire([{ ...detail, installation: detailInstallation }]);
+    setDetail(undefined);
+  }
+  function cancelDetailDownload() {
+    if (detailInstallation) void action('market.cancel', { id: detailInstallation.id });
+  }
+  async function removeDetail() {
+    await run('market.remove', { id: detailInstallation?.id });
+    setDetail(undefined);
+  }
+  function openMember(bot: Bot) {
+    setEditing(bot);
+    setDetail(undefined);
+  }
+  function checkDetailUpdates() {
+    if (!detail) return;
+    void action('market.refresh').then((value) => {
+      const latest = (value as MarketState | undefined)?.presets.find(
+        (preset) => preset.id === detail.preset.id,
+      );
+      if (latest && detail.source === 'official') {
+        setDetail({ ...detail, preset: latest, installation: undefined });
+      }
+    });
+  }
+  function updateDetail() {
+    setUpdate(detailInstallation);
+    setDetail(undefined);
+  }
+  function emptyDescription() {
+    if (query || profession) return '尝试其他关键词或职业。';
+    if (downloaded) return '返回全部预设，选择适合你的智能体。';
+    return '通过内容验收的岗位会在这里上架，也可以导入本地预设包。';
+  }
+  function renderCatalog() {
+    if (!state)
+      return (
+        <div aria-busy="true" className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {[1, 2, 3].map((id) => (
+            <div key={id} className="h-56 rounded-2xl bg-slate-50" />
+          ))}
+        </div>
+      );
+    if (!visible.length)
+      return (
+        <Empty
+          title={downloaded && !query && !profession ? '还没有下载的预设' : '暂时没有匹配的预设'}
+          description={emptyDescription()}
+          action={
+            downloaded ? (
+              <Button onClick={showAllPresets}>浏览全部预设</Button>
+            ) : (
+              <Button onClick={importPreset}>导入预设</Button>
+            )
+          }
+        />
+      );
+    return sections.map((section) => {
+      return (
+        <section key={section.key} className="mb-9">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className="text-balance text-base font-semibold text-slate-900">{section.title}</h2>
+            <span className="text-xs tabular-nums text-slate-400">
+              {section.rows.length} 个预设
+            </span>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {section.rows.map((row) => (
+              <PresetCard
+                key={row.key}
+                preset={row.preset}
+                installation={row.installation}
+                memberCount={rowMembers(row, data.bots).length}
+                selected={selection.includes(row.key)}
+                toggle={() => toggleSelection(row.key)}
+                details={() => setDetail(row)}
+                hiring={hiring}
+                hire={() => hireRow(row)}
+              />
+            ))}
+          </div>
+        </section>
+      );
+    });
+  }
   return (
     <PageSurface
       headerLeading={headerLeading}
@@ -98,31 +219,18 @@ export function Market({
           title="智能体市场"
           action={
             <div className="flex gap-2">
-              <Button
-                onClick={() => {
-                  void action('market.import');
-                }}
-              >
+              <Button onClick={importPreset}>
                 <Upload size={15} />
                 导入预设
               </Button>
-              <Button
-                disabled={busy}
-                onClick={() => {
-                  setBusy(true);
-                  void action('market.refresh').finally(() => setBusy(false));
-                }}
-              >
+              <Button disabled={busy} onClick={checkCatalogUpdates}>
                 <RefreshCw size={15} />
                 检查更新
               </Button>
               <Button
                 variant={downloaded ? 'primary' : 'default'}
                 aria-pressed={downloaded}
-                onClick={() => {
-                  setDownloaded(true);
-                  setSelection([]);
-                }}
+                onClick={showDownloaded}
               >
                 <Download size={15} />
                 已下载
@@ -136,14 +244,7 @@ export function Market({
         <ErrorNote error={error} />
         {downloaded && (
           <div className="mb-4">
-            <Button
-              variant="ghost"
-              className="px-0"
-              onClick={() => {
-                setDownloaded(false);
-                setSelection([]);
-              }}
-            >
+            <Button variant="ghost" className="px-0" onClick={showAllPresets}>
               <ArrowLeft size={15} />
               返回全部预设
             </Button>
@@ -183,97 +284,20 @@ export function Market({
             <Button
               variant="primary"
               disabled={busy || hiring || !selected.length}
-              onClick={() => void hire(selected)}
+              onClick={hireSelected}
             >
               {hiring ? '准备中…' : `雇佣 ${selected.length} 位成员`}
             </Button>
           </div>
         )}
-        {!state ? (
-          <div aria-busy="true" className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {[1, 2, 3].map((id) => (
-              <div key={id} className="h-56 rounded-2xl bg-slate-50" />
-            ))}
-          </div>
-        ) : !visible.length ? (
-          <Empty
-            title={downloaded && !query && !profession ? '还没有下载的预设' : '暂时没有匹配的预设'}
-            description={
-              query || profession
-                ? '尝试其他关键词或职业。'
-                : downloaded
-                  ? '返回全部预设，选择适合你的智能体。'
-                  : '通过内容验收的岗位会在这里上架，也可以导入本地预设包。'
-            }
-            action={
-              downloaded ? (
-                <Button
-                  onClick={() => {
-                    setDownloaded(false);
-                    setSelection([]);
-                  }}
-                >
-                  浏览全部预设
-                </Button>
-              ) : (
-                <Button
-                  onClick={() => {
-                    void action('market.import');
-                  }}
-                >
-                  导入预设
-                </Button>
-              )
-            }
-          />
-        ) : (
-          sections.map((section) => {
-            return (
-              <section key={section.key} className="mb-9">
-                <div className="mb-4 flex items-center justify-between gap-3">
-                  <h2 className="text-balance text-base font-semibold text-slate-900">
-                    {section.title}
-                  </h2>
-                  <span className="text-xs tabular-nums text-slate-400">
-                    {section.rows.length} 个预设
-                  </span>
-                </div>
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  {section.rows.map((row) => (
-                    <PresetCard
-                      key={row.key}
-                      preset={row.preset}
-                      installation={row.installation}
-                      memberCount={rowMembers(row, data.bots).length}
-                      selected={selection.includes(row.key)}
-                      toggle={() =>
-                        setSelection((values) =>
-                          values.includes(row.key)
-                            ? values.filter((id) => id !== row.key)
-                            : [...values, row.key],
-                        )
-                      }
-                      details={() => setDetail(row)}
-                      hiring={hiring}
-                      hire={() => void hire([row])}
-                    />
-                  ))}
-                </div>
-              </section>
-            );
-          })
-        )}
+        {renderCatalog()}
       </div>
       <ModalPresence show={careerTrigger && !!state}>
         {careerTrigger && state && (
           <CareerPicker
             preferences={state.preferences}
             close={() => careerHandled?.()}
-            saved={() => {
-              careerHandled?.();
-              setDownloaded(false);
-              void refresh();
-            }}
+            saved={careerSaved}
           />
         )}
       </ModalPresence>
@@ -284,7 +308,7 @@ export function Market({
             data={data}
             mutate={mutate}
             close={() => setConfigure(undefined)}
-            created={() => void refresh()}
+            created={refreshMarket}
             configureConnection={configureConnection}
           />
         )}
@@ -297,36 +321,14 @@ export function Market({
             bots={rowMembers(detail, data.bots)}
             close={() => setDetail(undefined)}
             hiring={hiring}
-            hire={() => {
-              void hire([{ ...detail, installation: detailInstallation }]);
-              setDetail(undefined);
-            }}
-            cancel={() => {
-              if (detailInstallation) void action('market.cancel', { id: detailInstallation.id });
-            }}
-            remove={async () => {
-              await run('market.remove', { id: detailInstallation?.id });
-              setDetail(undefined);
-            }}
-            openMember={(bot) => {
-              setEditing(bot);
-              setDetail(undefined);
-            }}
-            checkUpdates={() => {
-              void action('market.refresh').then((value) => {
-                const latest = (value as MarketState | undefined)?.presets.find(
-                  (preset) => preset.id === detail.preset.id,
-                );
-                if (latest && detail.source === 'official')
-                  setDetail({ ...detail, preset: latest, installation: undefined });
-              });
-            }}
+            hire={hireDetail}
+            cancel={cancelDetailDownload}
+            remove={removeDetail}
+            openMember={openMember}
+            checkUpdates={checkDetailUpdates}
             update={
               detailInstallation?.status === 'installed' && outdated.length
-                ? () => {
-                    setUpdate(detailInstallation);
-                    setDetail(undefined);
-                  }
+                ? updateDetail
                 : undefined
             }
           />
@@ -364,7 +366,7 @@ export function Market({
             data={data}
             mutate={mutate}
             close={() => setUpdate(undefined)}
-            applied={() => void refresh()}
+            applied={refreshMarket}
           />
         )}
       </ModalPresence>
