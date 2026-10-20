@@ -11,7 +11,7 @@ export function createTaskPlanTools() {
   return {
     set_task_plan: {
       description:
-        '为当前任务建立或调整团队工作安排，不启动执行。使用稳定步骤 ID，填写可共享的工作内容、实际 memberIds、work 或 discussion 类型和必须等待的 dependencyIds。多个成员表示并行工作或共同讨论；无依赖的步骤可并行。已经开始的步骤保留，后续步骤可调整。实际成员任务仍由 create_task_group 和 delegate_task 执行。',
+        '为当前任务建立或调整团队工作安排，不启动执行。使用稳定步骤 ID，填写可共享的工作内容、实际 memberIds、work 或 discussion 类型和必须等待的 dependencyIds。多个成员表示并行工作或共同讨论；无依赖的步骤可并行。已委派步骤保留成员和类型；从未执行的排队步骤可调整 dependencyIds，并同步实际任务依赖，显式委派依赖继续生效；执行过的步骤保留依赖。实际成员任务仍由 create_task_group 和 delegate_task 执行。',
       schema: taskPlanSchema,
       available: (context: ToolExecutionContext) => !!context.setTaskPlan,
       execute: (args: TaskPlanInput, context: ToolExecutionContext) => context.setTaskPlan!(args),

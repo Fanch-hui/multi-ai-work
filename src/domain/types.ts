@@ -181,6 +181,7 @@ export interface Task {
   botId: string;
   parentId?: string;
   dependencyIds: string[];
+  explicitDependencyIds?: string[];
   goal: string;
   expectedOutput: string;
   status: TaskStatus;

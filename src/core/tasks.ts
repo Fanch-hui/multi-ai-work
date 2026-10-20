@@ -155,6 +155,7 @@ export class TaskService {
       botId: bot.id,
       parentId: parent?.id,
       dependencyIds: dependencies,
+      ...(planned ? { explicitDependencyIds: [...new Set(input.dependencyIds ?? [])] } : {}),
       goal: input.goal,
       expectedOutput: input.expectedOutput ?? '',
       status: 'queued',

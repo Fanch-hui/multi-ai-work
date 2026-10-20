@@ -11,6 +11,11 @@ import { terminal } from '../domain/task-status.js';
 import { required } from './errors.js';
 import { State, now } from './state.js';
 import { taskPlanRoot, taskPlanView } from './task-plan-view.js';
+import {
+  planStepDependencies,
+  rescheduledPlanTasks,
+  samePlanDependencies,
+} from './task-plan-dependencies.js';
 
 export class TaskPlanService {
   constructor(private state: State) {}
@@ -44,7 +49,7 @@ export class TaskPlanService {
       fields = taskPlanSchema.parse(input),
       s = this.state.storage;
     const old = s.get<TaskPlanRecord>('task_plans', root.id);
-    const tasks = s.all<Task>('tasks').filter((item) => item.planId === root.id);
+    const tasks = s.all<Task>('tasks');
     const steps = fields.steps.map((step) => ({
       ...step,
       memberIds: [...new Set(step.memberIds)],
@@ -63,14 +68,7 @@ export class TaskPlanService {
       if (step.kind === 'discussion' && step.memberIds.every((memberId) => memberId === root.botId))
         throw new Error('讨论步骤需要团队成员参与');
     }
-    for (const previous of old?.steps ?? []) {
-      const started =
-        tasks.some((item) => item.planStepId === previous.id) ||
-        (previous.chiefStatus && previous.chiefStatus !== 'pending');
-      const next = steps.find((step) => step.id === previous.id);
-      if (started && (!next || this.assignment(previous) !== this.assignment(next)))
-        throw new Error('已开始的步骤须保留参与成员和依赖，可调整后续步骤');
-    }
+    this.requireAssignments(old, steps, tasks);
     const plan: TaskPlanRecord = {
       id: root.id,
       taskId: root.id,
@@ -84,7 +82,11 @@ export class TaskPlanService {
       createdAt: old?.createdAt ?? now(),
       updatedAt: now(),
     };
-    s.put('task_plans', plan);
+    const updated = rescheduledPlanTasks(old, plan, tasks, root.botId);
+    s.transaction(() => {
+      s.put('task_plans', plan);
+      for (const task of updated) s.put('tasks', task);
+    });
     this.state.changed();
     return this.view(plan);
   }
@@ -139,30 +141,14 @@ export class TaskPlanService {
     if (!step.memberIds.includes(botId) || botId === root.botId)
       throw new Error('被委派成员不属于此步骤');
     if (step.chiefStatus === 'skipped') throw new Error('步骤已跳过');
-    const view = this.view(plan),
-      dependencies: string[] = [];
-    for (const dependencyId of step.dependencyIds) {
-      const previous = required(
-        view.steps.find((item) => item.id === dependencyId),
-        '前置步骤不存在',
-      );
-      if (previous.status === 'completed' || previous.status === 'skipped') continue;
-      const tasks = previous.taskIds.map((taskId) =>
-        required(s.get<Task>('tasks', taskId), '前置任务不存在'),
-      );
-      if (
-        (previous.memberIds.includes(root.botId) &&
-          previous.kind === 'work' &&
-          plan.steps.find((item) => item.id === previous.id)?.chiefStatus !== 'completed') ||
-        previous.memberIds
-          .filter((memberId) => memberId !== root.botId)
-          .some((memberId) => !tasks.some((item) => item.botId === memberId)) ||
-        !tasks.length ||
-        tasks.some((item) => item.parentId !== parent.id || item.conversationId !== room.id)
-      )
-        throw new Error('请先完成管家前置工作，并完整派发前置步骤的成员任务');
-      dependencies.push(...tasks.map((item) => item.id));
-    }
+    const dependencies = planStepDependencies(
+      plan,
+      step,
+      s.all<Task>('tasks'),
+      root.botId,
+      parent.id,
+      room.id,
+    );
     return { planId: plan.id, planStepId: step.id, dependencyIds: dependencies };
   }
 
@@ -178,11 +164,32 @@ export class TaskPlanService {
     )
       throw new Error('请先完成前置步骤');
   }
+  private requireAssignments(
+    old: TaskPlanRecord | undefined,
+    steps: PlanStepInput[],
+    tasks: Task[],
+  ) {
+    if (!old) return;
+    for (const previous of old.steps) {
+      const assigned = tasks.filter(
+        (item) => item.planId === old.id && item.planStepId === previous.id,
+      );
+      const chiefStarted = previous.chiefStatus && previous.chiefStatus !== 'pending';
+      const started = assigned.some((item) => item.status !== 'queued' || item.runIds.length);
+      const next = steps.find((step) => step.id === previous.id);
+      if (
+        (assigned.length || chiefStarted) &&
+        (!next || this.assignment(previous) !== this.assignment(next))
+      )
+        throw new Error('已开始或已委派的步骤须保留参与成员和类型，可调整后续步骤');
+      if ((started || chiefStarted) && next && !samePlanDependencies(previous, next))
+        throw new Error('已开始的步骤须保留依赖，可调整尚未开始的步骤');
+    }
+  }
   private assignment(step: PlanStepInput) {
     return JSON.stringify({
       kind: step.kind,
       members: [...step.memberIds].sort(),
-      dependencies: [...step.dependencyIds].sort(),
     });
   }
   private view(plan: TaskPlanRecord) {

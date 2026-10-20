@@ -3,6 +3,7 @@ import type { Bot, Task } from '../src/domain/types.js';
 import type { TaskPlanInput } from '../src/domain/task-plan.js';
 import { taskPlanToolNames } from '../src/domain/tool-permissions.js';
 import { State } from '../src/core/state.js';
+import { TaskPlanService } from '../src/core/task-plans.js';
 import { eventually, setup } from './core-harness.js';
 
 async function arrangedTask() {
@@ -134,6 +135,128 @@ describe('管家任务安排', () => {
       note: '用户缩小交付范围',
     });
     expect(core.tools.plans.get(source)?.steps[1].status).toBe('skipped');
+  });
+
+  it('排队成员可随安排改为并行，实际任务保留额外依赖并同步新前置步骤', async () => {
+    const { core, a, b, c, source, input, group, delegate } = await arrangedTask();
+    core.tools.plans.update(source, { stepId: 'prepare', status: 'completed' });
+    const first = delegate(a.id, 'parallel');
+    const second = delegate(b.id, 'parallel');
+    const extra = core.tasks.create({
+      conversationId: group.conversation.id,
+      botId: b.id,
+      parentId: group.task.id,
+      goal: '额外前置资料',
+    });
+    const follow = core.tasks.create({
+      conversationId: group.conversation.id,
+      botId: c.id,
+      parentId: group.task.id,
+      goal: '核查成果',
+      planStepId: 'follow',
+      dependencyIds: [extra.id, first.id],
+    });
+    core.tasks.update(first, { status: 'running', runIds: ['running-work'] });
+    const parallel = {
+      ...input,
+      steps: input.steps.map((step) =>
+        step.id === 'follow' ? { ...step, dependencyIds: [] } : step,
+      ),
+    };
+    expect(core.tools.plans.set(source, parallel).steps[2].dependencyIds).toEqual([]);
+    expect(core.state.storage.get<Task>('tasks', follow.id)?.dependencyIds).toEqual([
+      extra.id,
+      first.id,
+    ]);
+    expect(core.state.storage.get<Task>('tasks', first.id)?.status).toBe('running');
+    const reopened = new State(core.state.dataDirectory);
+    try {
+      expect(reopened.storage.get<Task>('tasks', follow.id)?.explicitDependencyIds).toEqual([
+        extra.id,
+        first.id,
+      ]);
+      new TaskPlanService(reopened).set(source, input);
+    } finally {
+      reopened.storage.close();
+    }
+    expect(core.state.storage.get<Task>('tasks', follow.id)?.dependencyIds).toEqual([
+      extra.id,
+      first.id,
+      second.id,
+    ]);
+    core.tasks.update(follow, { status: 'running', runIds: ['follow-work'] });
+    expect(() => core.tools.plans.set(source, parallel)).toThrow('已开始');
+    expect(core.tools.plans.get(source)?.steps[2].dependencyIds).toEqual(['parallel']);
+  });
+
+  it('拒绝造成实际任务循环或改变已执行后重试步骤的安排，失败时保留原依赖', async () => {
+    const { core, a, c, source, input, group, delegate } = await arrangedTask();
+    core.tools.plans.update(source, { stepId: 'prepare', status: 'completed' });
+    const parallel = {
+      ...input,
+      steps: input.steps.map((step) =>
+        step.id === 'follow' ? { ...step, dependencyIds: [] } : step,
+      ),
+    };
+    core.tools.plans.set(source, parallel);
+    const follow = delegate(c.id, 'follow');
+    const first = core.tasks.create({
+      conversationId: group.conversation.id,
+      botId: a.id,
+      parentId: group.task.id,
+      goal: '等待核查资料',
+      planStepId: 'parallel',
+      dependencyIds: [follow.id],
+    });
+    delegate(input.steps[1].memberIds[1], 'parallel');
+    expect(() => core.tools.plans.set(source, input)).toThrow('循环');
+    expect(core.tools.plans.get(source)?.steps[2].dependencyIds).toEqual([]);
+    expect(core.state.storage.get<Task>('tasks', follow.id)?.dependencyIds).toEqual([]);
+    expect(core.state.storage.get<Task>('tasks', first.id)?.dependencyIds).toEqual([follow.id]);
+    core.tasks.update(follow, { runIds: ['previous-attempt'] });
+    expect(() => core.tools.plans.set(source, input)).toThrow('已开始');
+  });
+
+  it('旧任务依赖来源不明时明确提示重新委派，保留原安排与实际约束', async () => {
+    const { core, a, b, c, source, input, delegate } = await arrangedTask();
+    core.tools.plans.update(source, { stepId: 'prepare', status: 'completed' });
+    const first = delegate(a.id, 'parallel');
+    const second = delegate(b.id, 'parallel');
+    const follow = delegate(c.id, 'follow');
+    core.state.storage.put('tasks', { ...follow, explicitDependencyIds: undefined });
+    expect(() =>
+      core.tools.plans.set(source, {
+        ...input,
+        steps: input.steps.map((step) =>
+          step.id === 'follow' ? { ...step, dependencyIds: [] } : step,
+        ),
+      }),
+    ).toThrow('在新任务中按新安排重新委派');
+    expect(core.tools.plans.get(source)?.steps[2].dependencyIds).toEqual(['parallel']);
+    expect(core.state.storage.get<Task>('tasks', follow.id)?.dependencyIds).toEqual([
+      first.id,
+      second.id,
+    ]);
+  });
+
+  it('旧排队任务可以增加明确的前置依赖', async () => {
+    const { core, a, b, c, source, input, delegate } = await arrangedTask();
+    core.tools.plans.update(source, { stepId: 'prepare', status: 'completed' });
+    core.tools.plans.set(source, {
+      ...input,
+      steps: input.steps.map((step) =>
+        step.id === 'follow' ? { ...step, dependencyIds: [] } : step,
+      ),
+    });
+    const first = delegate(a.id, 'parallel');
+    const second = delegate(b.id, 'parallel');
+    const follow = delegate(c.id, 'follow');
+    core.state.storage.put('tasks', { ...follow, explicitDependencyIds: undefined });
+    core.tools.plans.set(source, input);
+    expect(core.state.storage.get<Task>('tasks', follow.id)?.dependencyIds).toEqual([
+      first.id,
+      second.id,
+    ]);
   });
 
   it('任务间安排独立，普通成员不能读写主管安排，已关闭权限不被再次迁移覆盖', async () => {
