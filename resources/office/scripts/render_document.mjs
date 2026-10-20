@@ -10,7 +10,8 @@ process.env.TMPDIR = temporary;
 process.env.TEMP = temporary;
 process.env.TMP = temporary;
 const { createConverter } = await import(pathToFileURL(path.join(root, 'node_modules', '@deepseek-ai', 'libreoffice-kit', 'lib', 'index.js')).href);
-const converter = await createConverter({ timeoutMs: 150_000, maxInputBytes: 25 * 1024 * 1024,
+const maxInputBytes = (path.extname(request.inputPath).toLowerCase() === '.pdf' ? 64 : 25) * 1024 * 1024;
+const converter = await createConverter({ timeoutMs: 150_000, maxInputBytes,
   maxOutputBytes: 100 * 1024 * 1024, fontDirectories: [path.join(root, 'fonts')],
   fontMetadataCacheDirectory: false });
 const controller = new AbortController();

@@ -4,13 +4,15 @@ import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import mammoth from 'mammoth';
 import ExcelJS from 'exceljs';
+import { documentInputLimit } from './file-policy.js';
 
-const MAX_BYTES = 25 * 1024 * 1024;
 const MAX_TEXT = 120_000;
 
 export async function readDocument(target: string): Promise<unknown> {
-  if (!(await stat(target)).isFile()) throw new Error('目标不是普通文件');
-  if ((await stat(target)).size > MAX_BYTES) throw new Error('文件超过 25 MiB 读取限制');
+  const info = await stat(target);
+  if (!info.isFile()) throw new Error('目标不是普通文件');
+  const limit = documentInputLimit(target);
+  if (info.size > limit) throw new Error(`文件超过 ${limit / 1024 / 1024} MiB 读取限制`);
   const extension = path.extname(target).toLowerCase();
   if (extension === '.pdf') return readPdf(target);
   if (extension === '.docx') {

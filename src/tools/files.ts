@@ -6,6 +6,7 @@ import { readDocument } from './documents.js';
 import { ensureParent } from './paths.js';
 import {
   approveFileChange,
+  documentVersion,
   existingVersion,
   filePath,
   fileVersion,
@@ -88,15 +89,16 @@ async function readWorkspaceFile(
   context: ToolExecutionContext,
 ): Promise<unknown> {
   const target = await filePath(input.path, context);
-  const bytes = await readFileBytes(target);
-  const version = fileVersion(bytes);
   if (['.pdf', '.docx', '.xlsx'].includes(path.extname(target).toLowerCase())) {
+    const version = await documentVersion(target);
     const document = (await readDocument(target)) as Record<string, unknown>;
-    if (fileVersion(await readFileBytes(target)) !== version)
+    if ((await documentVersion(target)) !== version)
       throw new Error('文件读取期间已变化，请重新读取');
     context.observeFile?.(target, version);
     return { ...document, path: target, version };
   }
+  const bytes = await readFileBytes(target);
+  const version = fileVersion(bytes);
   if (bytes.includes(0)) throw new Error('不支持读取此二进制格式');
   const source = bytes.toString('utf8');
   const lines = source ? source.split(/\r?\n/) : [];

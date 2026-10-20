@@ -3,7 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { ToolExecutionContext } from '../domain/tools.js';
-import { filePath, MAX_FILE_BYTES } from './file-policy.js';
+import { documentInputLimit, filePath, MAX_FILE_BYTES } from './file-policy.js';
 import { loadWorkspaceDependencies } from './office-runtime.js';
 
 const inputSchema = z
@@ -42,8 +42,9 @@ export async function authorizedOfficeDocument(
     throw new Error('只支持 Office 文档或 PDF 预览');
   }
   const info = await stat(target);
-  if (!info.isFile() || info.size > MAX_FILE_BYTES)
-    throw new Error('文档必须为不超过 25 MiB 的普通文件');
+  const limit = documentInputLimit(target);
+  if (!info.isFile() || info.size > limit)
+    throw new Error(`文档必须为不超过 ${limit / 1024 / 1024} MiB 的普通文件`);
   if (input.format === 'pdf' && (input.pages || input.sheet || input.range))
     throw new Error('页面和工作表选择仅用于 PNG 预览');
   if (input.format === 'pdf' && path.extname(target).toLowerCase() === '.pdf')

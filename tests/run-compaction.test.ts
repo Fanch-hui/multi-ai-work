@@ -112,6 +112,79 @@ describe('compaction inside a long tool conversation', () => {
     expect(isSmallerProjection(original, projected!.messages, 0)).toBe(true);
   });
 
+  it('reaches completed work after a user correction when an earlier summary stands alone', async () => {
+    const runtime: ModelMessage = {
+      role: 'user',
+      content: '当前团队和授权资料',
+      appContext: { source: 'app.runtime', version: 'current' },
+    };
+    const original: ModelMessage[] = [
+      { role: 'user', content: '完成法律服务方案' },
+      runtime,
+      { role: 'assistant', content: '已经完成的工作'.repeat(100), contextSummary: true },
+      { role: 'user', content: '补充：为所有公司分别分析', sourceMessageId: 'correction' },
+      ...exchange('remaining-history', '待汇总的事实与工具结果'.repeat(500)),
+      { role: 'user', content: '按最新方案继续', sourceMessageId: 'continue' },
+      ...exchange('latest', '刚完成的检查结果'),
+    ];
+    const prompts: string[] = [];
+    const projected = await compactRunMessages(original, {
+      ...options,
+      trigger: 1500,
+      summarize: async (prompt) => {
+        prompts.push(prompt);
+        return '已核对完整历史并保留关键结论。';
+      },
+    });
+    expect(projected).toBeDefined();
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toContain('remaining-history');
+    expect(projected!.messages.filter((message) => message.role === 'user')).toEqual(
+      original.filter((message) => message.role === 'user'),
+    );
+    expect(projected!.messages.slice(-2)).toEqual(original.slice(-2));
+    expect(isSmallerProjection(original, projected!.messages, 0)).toBe(true);
+  });
+
+  it('compacts active work after a summary and runtime prefix without summarizing the prefix again', async () => {
+    const summary: ModelMessage = {
+      role: 'assistant',
+      content: '此前已经整理的工作摘要'.repeat(150),
+      contextSummary: true,
+    };
+    const runtime: ModelMessage = {
+      role: 'user',
+      content: '当前团队和授权资料'.repeat(40),
+      appContext: { source: 'app.runtime', version: 'current' },
+    };
+    const original: ModelMessage[] = [
+      summary,
+      runtime,
+      { role: 'user', content: '继续完成当前任务，保留已经执行的工作。' },
+      ...exchange('active-history', '已完成的材料分析'.repeat(600)),
+      ...exchange('latest', '最近生成的文档'),
+    ];
+    const before = structuredClone(original);
+    const prompts: string[] = [];
+    const projected = await compactRunMessages(original, {
+      ...options,
+      currentStart: 2,
+      trigger: 3500,
+      summarize: async (prompt) => {
+        prompts.push(prompt);
+        return prompt.includes('active-history') ? '材料分析已经完成。' : summary.content;
+      },
+    });
+    expect(projected).toBeDefined();
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toContain('active-history');
+    expect(projected!.messages.slice(0, 3)).toEqual(original.slice(0, 3));
+    expect(projected!.messages.slice(-2)).toEqual(original.slice(-2));
+    expect(projected!.currentStart).toBe(2);
+    expect(isSmallerProjection(original, projected!.messages, 2)).toBe(true);
+    expect(original).toEqual(before);
+  });
+
   it('declines a summary that still cannot fit instead of publishing a partial replacement', async () => {
     const original: ModelMessage[] = [
       { role: 'user', content: '必须保留'.repeat(2000) },

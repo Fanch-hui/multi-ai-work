@@ -162,7 +162,7 @@ function removableRange(
   if (
     currentStart > 0 &&
     estimateModelMessagesTokens(messages.slice(0, currentStart)) > 256 &&
-    !(currentStart === 1 && messages[0].contextSummary) &&
+    messages.slice(0, currentStart).some(hasUnsummarizedHistory) &&
     toolsPaired(
       messages
         .slice(0, currentStart)
@@ -183,6 +183,7 @@ function removableRange(
   });
   let start = -1,
     end = -1;
+  let hasHistory = false;
   for (let index = 0; index < units.length; index++) {
     const unit = units[index];
     const eligible =
@@ -197,7 +198,16 @@ function removableRange(
     if (eligible) {
       start = start < 0 ? unit[0].sequence : start;
       end = unit.at(-1)!.sequence + 1;
-    } else if (start >= 0) break;
+      hasHistory ||= unit.some((entry) => hasUnsummarizedHistory(entry.message));
+    } else if (start >= 0) {
+      if (hasHistory) return [start, end];
+      // A summary separated by user input cannot absorb the later completed work.
+      start = end = -1;
+    }
   }
-  return start >= 0 ? [start, end] : undefined;
+  return hasHistory ? [start, end] : undefined;
+}
+
+function hasUnsummarizedHistory(message: ModelMessage): boolean {
+  return !message.contextSummary && message.appContext?.source !== 'app.runtime';
 }

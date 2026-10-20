@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { createReadStream } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { ToolExecutionContext } from '../domain/tools.js';
@@ -31,6 +32,31 @@ const privateName =
   /^(?:\.env(?:\..*)?|credentials(?:\..*)?|secrets?(?:\..*)?|id_(?:rsa|ed25519|ecdsa)(?:\.pub)?|.*\.(?:pem|p12|pfx|key))$/i;
 const privateDirectories = new Set(['.ssh', '.aws', '.gnupg', '.codex', '.agents']);
 export const MAX_FILE_BYTES = 25 * 1024 * 1024;
+export const MAX_PDF_INPUT_BYTES = 64 * 1024 * 1024;
+
+export function documentInputLimit(target: string): number {
+  return path.extname(target).toLowerCase() === '.pdf' ? MAX_PDF_INPUT_BYTES : MAX_FILE_BYTES;
+}
+
+export async function documentVersion(target: string): Promise<string> {
+  const info = await stat(target);
+  const limit = documentInputLimit(target);
+  if (!info.isFile()) throw new Error('目标不是普通文件');
+  if (info.size > limit) throw new Error(`文件超过 ${limit / 1024 / 1024} MiB 读取限制`);
+  const hash = createHash('sha256');
+  const stream = createReadStream(target);
+  let size = 0;
+  try {
+    for await (const bytes of stream) {
+      size += bytes.length;
+      if (size > limit) throw new Error(`文件超过 ${limit / 1024 / 1024} MiB 读取限制`);
+      hash.update(bytes);
+    }
+    return hash.digest('hex');
+  } finally {
+    stream.destroy();
+  }
+}
 
 export function sensitivePath(relative: string): boolean {
   const parts = relative.split(/[\\/]/);
