@@ -24,7 +24,11 @@ export function MessageArtifacts({
     .filter(
       (artifact): artifact is Artifact =>
         !!artifact &&
-        (user || artifact.source === 'user-attachment' || isDeliverableArtifact(artifact)),
+        (user ||
+          isDeliverableArtifact(artifact) ||
+          (conversation.kind === 'group' &&
+            artifact.source === 'user-attachment' &&
+            artifact.conversationId !== conversation.id)),
     );
   if (!files.length) return null;
   if (!user && conversation.kind === 'group') {
