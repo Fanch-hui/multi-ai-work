@@ -17,7 +17,8 @@ export function createHelperLaunch(input: {
       if (child) throw new Error('更新安装已经开始');
       child = spawn(input.executable, input.args, {
         cwd: dirname(dirname(input.readyPath)),
-        detached: true,
+        // PowerShell exits before reading its script with DETACHED_PROCESS on Windows.
+        detached: process.platform !== 'win32',
         stdio: 'ignore',
         windowsHide: true,
       });
@@ -58,7 +59,8 @@ export function createHelperLaunch(input: {
         if (!hasExited) throw new Error('无法取消更新安装进程', { cause: error });
       });
       if (hasExited) return;
-      child.kill();
+      // The Windows bootstrap must wait until the independent helper honors cancellation.
+      if (process.platform !== 'win32') child.kill();
       let timeout: NodeJS.Timeout | undefined;
       try {
         await Promise.race([

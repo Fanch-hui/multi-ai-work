@@ -2,6 +2,16 @@ export const windowsVersionCheck = String.raw`function Test-AppVersion([string]$
   return ($actual -ceq $expected -or $actual -ceq ($expected + '.0'))
 }`;
 
+export const windowsUpdateBootstrap = String.raw`param([Parameter(Mandatory=$true)][string]$ConfigPath)
+$ErrorActionPreference = 'Stop'
+$scriptPath = [IO.Path]::Combine([IO.Path]::GetDirectoryName($ConfigPath), 'install.ps1')
+$arguments = @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File',
+  ('"' + $scriptPath + '"'), '-ConfigPath', ('"' + $ConfigPath + '"'))
+$helper = Start-Process -FilePath ([IO.Path]::Combine($PSHOME, 'powershell.exe')) -ArgumentList $arguments -WindowStyle Hidden -PassThru
+$helper.WaitForExit()
+exit $helper.ExitCode
+`;
+
 export const windowsUpdateHelper = String.raw`param([Parameter(Mandatory=$true)][string]$ConfigPath)
 $ErrorActionPreference = 'Stop'
 $config = Get-Content -LiteralPath $ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -48,7 +58,7 @@ try {
   $failed = $true
   Write-Receipt $config.receiptPath @{ status='failed'; version=$config.version; message='Application update installation failed' }
 } finally {
-  Remove-Item -LiteralPath $config.packagePath -Force -ErrorAction SilentlyContinue
+  if ($parentExited) { Remove-Item -LiteralPath $config.packagePath -Force -ErrorAction SilentlyContinue }
   Remove-Item -LiteralPath $config.jobDirectory -Recurse -Force -ErrorAction SilentlyContinue
 }
 if ($parentExited -and (Test-Path -LiteralPath $config.executablePath -PathType Leaf)) {

@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 import { createHelperLaunch } from './update-helpers/launcher.js';
 import { prepareMacApplication } from './update-helpers/mac-prepare.js';
 import { macUpdateHelper } from './update-helpers/mac-script.js';
-import { windowsUpdateHelper } from './update-helpers/windows-script.js';
+import { windowsUpdateBootstrap, windowsUpdateHelper } from './update-helpers/windows-script.js';
 
 const execute = promisify(execFile);
 
@@ -88,11 +88,14 @@ export async function prepareUpdateInstaller(input: UpdateInstallerInput): Promi
         '-ExecutionPolicy',
         'Bypass',
         '-File',
-        join(jobDirectory, 'install.ps1'),
+        join(jobDirectory, 'launch.ps1'),
         '-ConfigPath',
         join(jobDirectory, 'config.json'),
       ];
       await writeFile(join(jobDirectory, 'install.ps1'), '\ufeff' + windowsUpdateHelper, {
+        mode: 0o600,
+      });
+      await writeFile(join(jobDirectory, 'launch.ps1'), '\ufeff' + windowsUpdateBootstrap, {
         mode: 0o600,
       });
     }

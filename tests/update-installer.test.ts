@@ -1,11 +1,13 @@
 import { execFile, spawn } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve, win32 } from 'node:path';
 import { promisify } from 'node:util';
+import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createHelperLaunch } from '../apps/desktop/update-helpers/launcher.js';
 import { macUpdateHelper } from '../apps/desktop/update-helpers/mac-script.js';
+import { windowsUpdateBootstrap } from '../apps/desktop/update-helpers/windows-script.js';
 
 const directories: string[] = [];
 afterEach(async () => {
@@ -20,6 +22,58 @@ async function fixture() {
   return directory;
 }
 
+async function windowsFixture() {
+  const directory = await fixture();
+  const job = join(directory, 'Windows 更新', 'job');
+  await mkdir(job, { recursive: true });
+  const readyPath = join(job, 'ready.json');
+  const cancelPath = join(job, 'cancel');
+  const stoppedPath = join(directory, 'stopped');
+  const configPath = join(job, 'config.json');
+  const bootstrapPath = join(job, 'launch.ps1');
+  await writeFile(configPath, JSON.stringify({ readyPath, cancelPath, stoppedPath }));
+  await writeFile(bootstrapPath, '\ufeff' + windowsUpdateBootstrap);
+  await writeFile(
+    join(job, 'install.ps1'),
+    `\ufeffparam([string]$ConfigPath)
+$ErrorActionPreference = 'Stop'
+$config = Get-Content -LiteralPath $ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
+[IO.File]::WriteAllText($config.readyPath, '{"ready":true}')
+$deadline = [DateTime]::UtcNow.AddSeconds(20)
+while (!(Test-Path -LiteralPath $config.cancelPath) -and [DateTime]::UtcNow -lt $deadline) {
+  Start-Sleep -Milliseconds 100
+}
+[IO.File]::WriteAllText($config.stoppedPath, 'stopped')
+`,
+  );
+  return {
+    directory,
+    stoppedPath,
+    input: {
+      executable: win32.join(
+        process.env.SystemRoot || 'C:\\Windows',
+        'System32',
+        'WindowsPowerShell',
+        'v1.0',
+        'powershell.exe',
+      ),
+      args: [
+        '-NoProfile',
+        '-NonInteractive',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        bootstrapPath,
+        '-ConfigPath',
+        configPath,
+      ],
+      readyPath,
+      cancelPath,
+      receiptPath: join(directory, 'receipt.json'),
+    },
+  };
+}
+
 describe('update installer helpers', () => {
   it('launch resolves only after the independent helper acknowledges readiness', async () => {
     const directory = await fixture();
@@ -29,11 +83,12 @@ describe('update installer helpers', () => {
     const scriptPath = join(directory, 'helper.cjs');
     await writeFile(
       scriptPath,
-      `const fs = require('node:fs'); setTimeout(() => fs.writeFileSync(process.argv[2], '{}'), 150); setInterval(() => {}, 1000);`,
+      `const fs = require('node:fs'); setTimeout(() => fs.writeFileSync(process.argv[2], '{}'), 150);
+setInterval(() => { if (fs.existsSync(process.argv[3])) process.exit(0); }, 50);`,
     );
     const helper = createHelperLaunch({
       executable: process.execPath,
-      args: [scriptPath, readyPath],
+      args: [scriptPath, readyPath, cancelPath],
       readyPath,
       cancelPath,
       receiptPath,
@@ -58,6 +113,55 @@ describe('update installer helpers', () => {
     await expect(helper.launch()).rejects.toThrow('更新安装进程未能就绪');
     await helper.cancel();
   });
+
+  it.skipIf(process.platform !== 'win32')(
+    'keeps the Windows PowerShell helper running after its launcher exits',
+    async () => {
+      const { directory, input, stoppedPath } = await windowsFixture();
+      const parentPath = join(directory, 'parent.mjs');
+      await writeFile(
+        parentPath,
+        `const [moduleUrl, config] = process.argv.slice(2);
+const { createHelperLaunch } = await import(moduleUrl);
+await createHelperLaunch(JSON.parse(config)).launch();
+`,
+      );
+      try {
+        await promisify(execFile)(
+          process.execPath,
+          [
+            '--import',
+            'tsx',
+            parentPath,
+            pathToFileURL(resolve('apps/desktop/update-helpers/launcher.ts')).href,
+            JSON.stringify(input),
+          ],
+          { windowsHide: true, timeout: 20_000 },
+        );
+        expect(JSON.parse(await readFile(input.readyPath, 'utf8'))).toEqual({ ready: true });
+        await expect(readFile(stoppedPath)).rejects.toMatchObject({ code: 'ENOENT' });
+      } finally {
+        await writeFile(input.cancelPath, '');
+      }
+      await expect.poll(() => readFile(stoppedPath, 'utf8'), { timeout: 10_000 }).toBe('stopped');
+    },
+    35_000,
+  );
+
+  it.skipIf(process.platform !== 'win32')(
+    'waits for the independent Windows helper to acknowledge cancellation',
+    async () => {
+      const { input, stoppedPath } = await windowsFixture();
+      const helper = createHelperLaunch(input);
+      try {
+        await helper.launch();
+      } finally {
+        await helper.cancel();
+      }
+      expect(await readFile(stoppedPath, 'utf8')).toBe('stopped');
+    },
+    25_000,
+  );
 
   it.skipIf(process.platform === 'win32')(
     'cancellation waits for the independent helper to exit before returning',
