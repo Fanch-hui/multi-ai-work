@@ -22,6 +22,16 @@ async function fixture() {
   return directory;
 }
 
+function processIsRunning(pid: number) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+    return false;
+  }
+}
+
 async function windowsFixture() {
   const directory = await fixture();
   const job = join(directory, 'Windows 更新', 'job');
@@ -32,23 +42,35 @@ async function windowsFixture() {
   const configPath = join(job, 'config.json');
   const bootstrapPath = join(job, 'launch.ps1');
   await writeFile(configPath, JSON.stringify({ readyPath, cancelPath, stoppedPath }));
-  await writeFile(bootstrapPath, '\ufeff' + windowsUpdateBootstrap);
+  await writeFile(
+    bootstrapPath,
+    '\ufeff' +
+      windowsUpdateBootstrap.replace(
+        '\n',
+        "\n[IO.File]::WriteAllText(($ConfigPath + '.pid'), [string]$PID)\n",
+      ),
+  );
   await writeFile(
     join(job, 'install.ps1'),
     `\ufeffparam([string]$ConfigPath)
 $ErrorActionPreference = 'Stop'
 $config = Get-Content -LiteralPath $ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
+[IO.File]::WriteAllText(($ConfigPath + '.helper.pid'), [string]$PID)
 [IO.File]::WriteAllText($config.readyPath, '{"ready":true}')
 $deadline = [DateTime]::UtcNow.AddSeconds(20)
 while (!(Test-Path -LiteralPath $config.cancelPath) -and [DateTime]::UtcNow -lt $deadline) {
   Start-Sleep -Milliseconds 100
 }
 [IO.File]::WriteAllText($config.stoppedPath, 'stopped')
+# Keep acknowledgement and actual process exit observably separate.
+Start-Sleep -Milliseconds 200
 `,
   );
   return {
     directory,
     stoppedPath,
+    bootstrapPidPath: configPath + '.pid',
+    helperPidPath: configPath + '.helper.pid',
     input: {
       executable: win32.join(
         process.env.SystemRoot || 'C:\\Windows',
@@ -117,7 +139,8 @@ setInterval(() => { if (fs.existsSync(process.argv[3])) process.exit(0); }, 50);
   it.skipIf(process.platform !== 'win32')(
     'keeps the Windows PowerShell helper running after its launcher exits',
     async () => {
-      const { directory, input, stoppedPath } = await windowsFixture();
+      const { directory, input, stoppedPath, bootstrapPidPath, helperPidPath } =
+        await windowsFixture();
       const parentPath = join(directory, 'parent.mjs');
       await writeFile(
         parentPath,
@@ -139,11 +162,24 @@ await createHelperLaunch(JSON.parse(config)).launch();
           { windowsHide: true, timeout: 20_000 },
         );
         expect(JSON.parse(await readFile(input.readyPath, 'utf8'))).toEqual({ ready: true });
+        expect(processIsRunning(Number(await readFile(helperPidPath, 'utf8')))).toBe(true);
         await expect(readFile(stoppedPath)).rejects.toMatchObject({ code: 'ENOENT' });
       } finally {
         await writeFile(input.cancelPath, '');
+        try {
+          await expect
+            .poll(() => readFile(stoppedPath, 'utf8'), { timeout: 10_000 })
+            .toBe('stopped');
+        } finally {
+          const pids = await Promise.all(
+            [bootstrapPidPath, helperPidPath].map(async (path) =>
+              Number(await readFile(path, 'utf8')),
+            ),
+          );
+          // The independent helper can outlive its bootstrap and writes stopped before exiting.
+          await expect.poll(() => pids.some(processIsRunning), { timeout: 10_000 }).toBe(false);
+        }
       }
-      await expect.poll(() => readFile(stoppedPath, 'utf8'), { timeout: 10_000 }).toBe('stopped');
     },
     35_000,
   );
