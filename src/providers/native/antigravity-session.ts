@@ -1,6 +1,7 @@
 import { createInterface } from 'node:readline';
 import type { ModelMessage, ProviderEvent, RunUserInput } from '../../domain/provider.js';
 import type { Usage } from '../../domain/types.js';
+import { waitForChildExit } from '../../runtime/process-tree.js';
 import { antigravityImagePrompt } from '../images.js';
 import { bounded, launch, stop } from './runtime.js';
 import {
@@ -83,8 +84,10 @@ export async function runAntigravitySession(
       options.timeoutMs ?? 30 * 60 * 1000,
     );
     child.stdin.end();
-    const code = await bounded(exit, signal, 2000);
-    if (code !== 0) throw new Error('Antigravity CLI 未正常结束当前轮次');
+    const exited = await waitForChildExit(child, 2000);
+    signal.throwIfAborted();
+    if (exited && (await exit) !== 0) throw new Error('Antigravity CLI 未正常结束当前轮次');
+    // SUCCESS completes the turn; the finally block still waits for process-tree cleanup.
     return result;
   } catch (error) {
     options.signal.throwIfAborted();
