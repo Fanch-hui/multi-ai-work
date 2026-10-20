@@ -11,6 +11,7 @@ import { Onboarding } from './Onboarding.js';
 import { isChiefProvider } from '../../../src/domain/chief-provider.js';
 import { ModalPresence } from './ModalPresence.js';
 import { CareerPrompt } from './market/CareerPrompt.js';
+import { useAttachmentDraftRetention } from './useAttachmentDraftRetention.js';
 const Market = lazy(() => import('./Market.js').then((module) => ({ default: module.Market })));
 const Agents = lazy(() => import('./Agents.js').then((module) => ({ default: module.Agents })));
 const Tasks = lazy(() => import('./Tasks.js').then((module) => ({ default: module.Tasks })));
@@ -20,6 +21,7 @@ const Settings = lazy(() =>
 );
 
 export function App() {
+  useAttachmentDraftRetention();
   const { data, error, refresh, mutate, selectConversation, nextBefore, loadingHistory, loadMore } =
     useTeamStore();
   const [page, setPage] = useState<Page>('chat');

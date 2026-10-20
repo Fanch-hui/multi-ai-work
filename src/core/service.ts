@@ -40,6 +40,7 @@ import { MaintenanceAdmission } from './maintenance-admission.js';
 import { createStorageMemoryStore, ensureMemoryContentHashes } from './memory-storage.js';
 import { queueContextCompaction } from './conversation-compaction.js';
 import { migrateReplyArtifacts } from './reply-artifacts.js';
+import { ArtifactStorage } from './artifact-storage.js';
 
 export type { HostRequest } from './artifact-requests.js';
 export class CoreService {
@@ -58,6 +59,7 @@ export class CoreService {
   readonly questionDecisions: QuestionDecisions;
   readonly market: MarketService;
   readonly previews: ArtifactPreviews;
+  readonly files: ArtifactStorage;
   private toolConnections: ToolConnections;
   private connectionRequests: CoreConnections;
   private artifactRequests: ArtifactRequests;
@@ -142,7 +144,8 @@ export class CoreService {
     this.backup = new BackupService(this.state);
     this.market = new MarketService(this.state, this.entities);
     this.previews = new ArtifactPreviews(this.state);
-    this.artifactRequests = new ArtifactRequests(this.state, this.previews, this.host);
+    this.files = new ArtifactStorage(this.state, this.previews);
+    this.artifactRequests = new ArtifactRequests(this.state, this.previews, this.files, this.host);
     this.historyRequests = new HistoryRequests(this.state);
     this.admission = new MaintenanceAdmission(
       this.state,
@@ -161,8 +164,10 @@ export class CoreService {
       () => !this.maintenance && !this.scheduler.hasActive(),
       () => this.state.changed('content'),
     );
+    this.files.start(() => !this.maintenance && !this.scheduler.hasActive());
   }
   async close() {
+    await this.files.close();
     await this.state.artifactContents.close();
     this.connectionRequests.closeLogins();
     await this.toolConnections.close();
@@ -458,10 +463,13 @@ export class CoreService {
     switch (method) {
       case 'backup.create': {
         this.maintenance = true;
-        await this.market.quiesce();
+        let resumeFiles: (() => void) | undefined;
         try {
+          resumeFiles = await this.files.pause();
+          await this.market.quiesce();
           return await this.backup.create();
         } finally {
+          resumeFiles?.();
           this.market.resume();
           this.maintenance = false;
         }
@@ -469,9 +477,11 @@ export class CoreService {
       case 'backup.restore': {
         if (this.scheduler.hasActive()) throw new Error('请先停止所有运行，再恢复备份');
         this.maintenance = true;
+        let resumeFiles: (() => void) | undefined;
         this.scheduler.pause();
-        await this.market.quiesce();
         try {
+          resumeFiles = await this.files.pause();
+          await this.market.quiesce();
           const result = await this.backup.restore(z.string().parse(params.path));
           migrateProviders(s);
           migrateContextSettings(s);
@@ -483,6 +493,7 @@ export class CoreService {
         } finally {
           this.market.resume();
           this.scheduler.resume(true);
+          resumeFiles?.();
           this.maintenance = false;
           this.state.changed();
         }

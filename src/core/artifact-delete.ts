@@ -5,19 +5,40 @@ import type { State } from './state.js';
 import type { ArtifactPreviews } from './artifact-preview.js';
 import { required } from './errors.js';
 
-export async function deleteArtifact(state: State, artifactId: string, previews: ArtifactPreviews) {
-  const artifact = required(state.storage.get<Artifact>('artifacts', artifactId), '成果不存在');
-  await state.artifactContents.remove(artifact, async () => {
+export async function deleteArtifact(
+  state: State,
+  artifactId: string,
+  previews: ArtifactPreviews,
+  eligible?: () => boolean,
+) {
+  const stored = state.storage.get<Artifact>('artifacts', artifactId);
+  if (eligible && !stored) return { ok: false };
+  const artifact = required(stored, '成果不存在');
+  const removed = await state.artifactContents.remove(artifact, async () => {
     await previews.remove(artifactId);
+    if (eligible) {
+      if (state.artifactContents.isOpened(artifactId) || !eligible()) return false;
+      // Invalidate the record synchronously with the lease/reference check, before filesystem awaits.
+      forgetArtifact(state, artifactId);
+      state.changed();
+    }
     const directory = path.resolve(state.dataDirectory, 'artifacts', artifact.id);
-    const root = path.resolve(state.dataDirectory, 'artifacts');
-    if (path.dirname(directory) === root && path.dirname(path.resolve(artifact.path)) === directory)
-      await rm(directory, { recursive: true, force: true });
+    if (state.artifactObjects.owns(artifact)) await rm(directory, { recursive: true, force: true });
     else await removeRestoredCopy(state.dataDirectory, artifact);
-    state.storage.delete('artifacts', artifactId);
+    if (!eligible) forgetArtifact(state, artifactId);
+    if (artifact.objectHash) state.artifactObjects.removeUnused(artifact.objectHash);
   });
-  state.changed();
-  return { ok: true };
+  if (removed && !eligible) state.changed();
+  return { ok: removed };
+}
+
+function forgetArtifact(state: State, artifactId: string) {
+  state.storage.transaction(() => {
+    state.storage.delete('artifacts', artifactId);
+    state.storage.db
+      .prepare('DELETE FROM metadata WHERE key = ?')
+      .run(`artifact-draft:${artifactId}`);
+  });
 }
 
 async function removeRestoredCopy(dataDirectory: string, artifact: Artifact) {

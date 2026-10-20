@@ -24,7 +24,7 @@ export async function qoderImageResult(
   const staging = join(dataDirectory, 'qoder-media', id());
   await mkdir(staging, { recursive: true });
   try {
-    await normalizeImageBytes(bytes, staging, mimeType);
+    await normalizeImageBytes(bytes, staging, mimeType, dataDirectory);
     context.signal.throwIfAborted();
     const artifact = context.registerArtifact({
       name: basename(target),

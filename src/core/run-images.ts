@@ -66,7 +66,7 @@ export function imageResolver(state: State, context: ToolExecutionContext) {
     const key = imageVersion(artifact);
     let work = normalizing.get(key);
     if (!work) {
-      work = normalizeArtifactImage({ ...artifact });
+      work = normalizeArtifactImage({ ...artifact }, state.dataDirectory);
       normalizing.set(key, work);
     }
     let image: ImageMetadata;
@@ -110,7 +110,7 @@ export function imageResolver(state: State, context: ToolExecutionContext) {
     if (!result) {
       let work = pending.get(key);
       if (!work) {
-        work = resolveModelArtifactImage(artifact);
+        work = resolveModelArtifactImage(artifact, state.dataDirectory);
         pending.set(key, work);
       }
       try {

@@ -4,19 +4,28 @@ import { dirname, join, resolve } from 'node:path';
 import sharp from 'sharp';
 import type { Artifact } from '../domain/types.js';
 import { attachmentSizeLimit, detectImageMimeType, imageMimeTypes } from './images.js';
+import { withDerivedCache } from './derived-cache.js';
 
 export const MODEL_IMAGE_ENCODING_VERSION = 1;
 type EncodedImage = { mimeType: string; data: string };
 const pending = new Map<string, Promise<EncodedImage>>();
 const decodeOptions = { failOn: 'error' as const, limitInputPixels: 64 * 1024 * 1024 };
 
-export async function resolveModelArtifactImage(artifact: Artifact): Promise<EncodedImage> {
+export async function resolveModelArtifactImage(
+  artifact: Artifact,
+  dataDirectory?: string,
+): Promise<EncodedImage> {
   if (!imageMimeTypes.has(artifact.mimeType)) throw new Error('成果不是支持的图片');
   const source = resolve(artifact.path);
   const file = await stat(source, { bigint: true });
   if (!file.isFile() || file.size <= 0 || file.size > BigInt(attachmentSizeLimit)) {
     throw new Error('图片需为不超过 25 MiB 的普通文件');
   }
+  const original = await readFile(source);
+  if (!original.length || original.length > attachmentSizeLimit)
+    throw new Error('图片需为不超过 25 MiB 的普通文件');
+  if (detectImageMimeType(original) !== artifact.mimeType)
+    throw new Error('图片内容与文件类型不一致');
   const identity = [
     MODEL_IMAGE_ENCODING_VERSION,
     source,
@@ -26,19 +35,34 @@ export async function resolveModelArtifactImage(artifact: Artifact): Promise<Enc
     file.mtimeNs,
     file.ctimeNs,
   ].join(':');
-  const key = createHash('sha256').update(identity).digest('hex');
+  const key = createHash('sha256')
+    .update(
+      dataDirectory
+        ? JSON.stringify([
+            'model-image',
+            MODEL_IMAGE_ENCODING_VERSION,
+            sharp.versions,
+            artifact.mimeType,
+            2048,
+            84,
+            9,
+          ])
+        : identity,
+    )
+    .update(original)
+    .digest('hex');
   let format: 'jpeg' | 'webp' | 'png' = 'png';
   if (artifact.mimeType === 'image/jpeg') format = 'jpeg';
   else if (artifact.mimeType === 'image/webp') format = 'webp';
-  const cache = join(
-    dirname(source),
-    `${artifact.id}-preview`,
-    '.image',
-    `input-v${MODEL_IMAGE_ENCODING_VERSION}-${key}.${format}`,
-  );
+  const directory = dataDirectory
+    ? join(dataDirectory, 'derived-cache', key)
+    : join(dirname(source), `${artifact.id}-preview`, '.image');
+  const cache = join(directory, `input-v${MODEL_IMAGE_ENCODING_VERSION}-${key}.${format}`);
   const existing = pending.get(cache);
   if (existing) return existing;
-  const work = loadOrEncode(source, cache, artifact.mimeType, format);
+  const work = dataDirectory
+    ? withDerivedCache(directory, () => loadOrEncode(original, cache, format))
+    : loadOrEncode(original, cache, format);
   pending.set(cache, work);
   try {
     return await work;
@@ -48,9 +72,8 @@ export async function resolveModelArtifactImage(artifact: Artifact): Promise<Enc
 }
 
 async function loadOrEncode(
-  source: string,
+  original: Buffer,
   cache: string,
-  mimeType: string,
   format: 'jpeg' | 'webp' | 'png',
 ): Promise<EncodedImage> {
   try {
@@ -58,8 +81,6 @@ async function loadOrEncode(
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
-  const original = await readFile(source);
-  if (detectImageMimeType(original) !== mimeType) throw new Error('图片内容与文件类型不一致');
   const encoded = await encode(original, format);
   await mkdir(dirname(cache), { recursive: true, mode: 0o700 });
   const temporary = `${cache}.${randomUUID()}.tmp`;

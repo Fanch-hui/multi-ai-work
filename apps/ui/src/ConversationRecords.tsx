@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ArrowLeft, ChevronRight } from 'lucide-react';
 import type { Conversation, Snapshot, Task } from '../../../src/domain/types.js';
+import { isDeliverableArtifact } from '../../../src/domain/artifact-purpose.js';
 import type { Mutate } from './store.js';
 import { Avatar } from './Avatar.js';
 import { Badge, Button, Empty, cn, timeLabel } from './components.js';
@@ -166,6 +167,9 @@ function TaskRecord({
   const processes = (data.processes ?? []).filter((process) => process.taskId === task.id);
   const room = data.conversations.find((item) => item.id === task.conversationId);
   const activeCommands = processes.filter((process) => process.status === 'running').length;
+  const deliverableCount = data.artifacts.filter(
+    (artifact) => task.artifactIds.includes(artifact.id) && isDeliverableArtifact(artifact),
+  ).length;
   const getBackgroundTaskLabel = () => {
     if (task.kind === 'memory-review') {
       return '记忆整理';
@@ -199,7 +203,7 @@ function TaskRecord({
             </p>
           )}
           <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs tabular-nums text-slate-500">
-            {!!task.artifactIds.length && <span>{task.artifactIds.length} 项成果</span>}
+            {!!deliverableCount && <span>{deliverableCount} 项成果</span>}
             {!!processes.length && (
               <span>
                 {processes.length} 条命令{activeCommands ? ` · ${activeCommands} 条仍在运行` : ''}

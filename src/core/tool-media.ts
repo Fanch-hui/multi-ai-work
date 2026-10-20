@@ -39,7 +39,7 @@ export async function storeToolMedia(
       await mkdir(directory, { recursive: true });
       const path = join(directory, `image.${String(media.mimeType).split('/')[1]}`);
       try {
-        await normalizeImageBytes(bytes, directory, String(media.mimeType));
+        await normalizeImageBytes(bytes, directory, String(media.mimeType), dataDirectory);
         await writeFile(path, bytes, { mode: 0o600 });
         const artifact = context.registerArtifact({
           name: '工具图片.' + String(media.mimeType).split('/')[1],
@@ -49,6 +49,7 @@ export async function storeToolMedia(
           sha256: createHash('sha256').update(bytes).digest('hex'),
           conversationId: context.conversation.id,
           source: 'mcp-image',
+          purpose: 'intermediate',
         });
         content.push({
           type: 'image',

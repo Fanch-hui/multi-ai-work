@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 import sharp from 'sharp';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Artifact } from '../src/domain/types.js';
+import { maintainDerivedCache } from '../src/tools/derived-cache.js';
 import { normalizeArtifactImage } from '../src/tools/images.js';
 import {
   MODEL_IMAGE_ENCODING_VERSION,
@@ -169,5 +170,33 @@ describe('model image derivatives', () => {
     await writeFile(value.path, repaired);
     const output = Buffer.from((await resolveModelArtifactImage(value)).data, 'base64');
     expect(await sharp(output).metadata()).toMatchObject({ width: 3, height: 2 });
+  });
+  it('shares content-addressed previews and model copies, rebuilds collected files and checks each source', async () => {
+    const png = await sharp({ create: { width: 8, height: 6, channels: 3, background: 'blue' } })
+      .png()
+      .toBuffer();
+    const first = await artifact(png);
+    const second = { ...first, id: 'second', path: join(directory, 'second.png') };
+    await writeFile(second.path, png);
+    const dataDirectory = join(directory, 'data');
+    const images = await Promise.all([
+      normalizeArtifactImage(first, dataDirectory),
+      normalizeArtifactImage(second, dataDirectory),
+    ]);
+    expect(images[0].path).toBe(images[1].path);
+    const results = await Promise.all([
+      resolveModelArtifactImage(first, dataDirectory),
+      resolveModelArtifactImage(second, dataDirectory),
+    ]);
+    expect(results[0]).toEqual(results[1]);
+    const root = join(dataDirectory, 'derived-cache');
+    expect(await readdir(root)).toHaveLength(2);
+    await maintainDerivedCache(root, { clear: true });
+    expect(await resolveModelArtifactImage(first, dataDirectory)).toEqual(results[0]);
+    expect(await normalizeArtifactImage(first, dataDirectory)).toEqual(images[0]);
+    await rm(second.path);
+    await expect(resolveModelArtifactImage(second, dataDirectory)).rejects.toThrow();
+    await expect(normalizeArtifactImage(second, dataDirectory)).rejects.toThrow();
+    expect(await readFile(first.path)).toEqual(png);
   });
 });

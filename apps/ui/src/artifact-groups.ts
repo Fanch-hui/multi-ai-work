@@ -1,12 +1,16 @@
 import type { Artifact, Bot, Conversation, Snapshot, Task } from '../../../src/domain/types.js';
 import { isDeliverableArtifact } from '../../../src/domain/artifact-purpose.js';
-import { latestArtifactVersions } from '../../../src/domain/artifact-versions.js';
+import {
+  artifactVersionKey,
+  latestArtifactVersions,
+} from '../../../src/domain/artifact-versions.js';
 
 export interface ArtifactGroup {
   id: string;
   title: string;
   updatedAt: string;
   artifacts: Artifact[];
+  history?: Map<string, Artifact[]>;
 }
 
 interface GroupOrigin {
@@ -71,7 +75,15 @@ export function artifactGroups(
   const tasks = new Map(data.tasks.map((task) => [task.id, task]));
   const conversations = new Map(data.conversations.map((room) => [room.id, room]));
   const groups = new Map<string, ArtifactGroup>();
-  const current = latestArtifactVersions(data.artifacts.filter(isDeliverableArtifact), tasks);
+  const deliverables = data.artifacts.filter(isDeliverableArtifact);
+  const current = latestArtifactVersions(deliverables, tasks);
+  const versions = new Map<string, Artifact[]>();
+  for (const artifact of deliverables) {
+    const key = artifactVersionKey(artifact, tasks);
+    const history = versions.get(key) ?? [];
+    history.push(artifact);
+    versions.set(key, history);
+  }
   const search = query.toLocaleLowerCase();
   for (const artifact of current) {
     if (!artifact.name.toLocaleLowerCase().includes(search)) continue;
@@ -82,6 +94,21 @@ export function artifactGroups(
       groups.set(id, group);
     }
     group.artifacts.push(artifact);
+    const seenContent = new Set([artifact.sha256]);
+    const history = versions
+      .get(artifactVersionKey(artifact, tasks))!
+      .filter((version) => version.id !== artifact.id)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .filter((version) => {
+        if (!/^[a-f0-9]{64}$/.test(version.sha256)) return true;
+        if (seenContent.has(version.sha256)) return false;
+        seenContent.add(version.sha256);
+        return true;
+      });
+    if (history.length) {
+      group.history ??= new Map();
+      group.history.set(artifact.id, history);
+    }
     if (artifact.createdAt > group.updatedAt) group.updatedAt = artifact.createdAt;
   }
   for (const group of groups.values())

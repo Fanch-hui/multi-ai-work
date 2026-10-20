@@ -9,12 +9,14 @@ import { Workspaces } from './Workspaces.js';
 import { General } from './GeneralSettings.js';
 import { PersonalSettings } from './PersonalSettings.js';
 import { ArchivedConversations } from './ArchivedConversations.js';
+import { FileStorageSettings } from './FileStorageSettings.js';
 const tabs = [
   { id: 'personal', label: '个人信息' },
   { id: 'connections', label: '模型供应' },
   { id: 'tools', label: '工具与 Skills' },
   { id: 'workspaces', label: '工作目录' },
   { id: 'archived', label: '已归档会话' },
+  { id: 'storage', label: '文件存储' },
   { id: 'general', label: '运行与备份' },
 ] as const;
 export function Settings({
@@ -65,6 +67,7 @@ export function Settings({
           {tab === 'tools' && <Integrations data={data} mutate={mutate} />}
           {tab === 'workspaces' && <Workspaces data={data} mutate={mutate} />}
           {tab === 'general' && <General data={data} mutate={mutate} />}
+          {tab === 'storage' && <FileStorageSettings />}
           {tab === 'archived' && (
             <ArchivedConversations
               data={data}

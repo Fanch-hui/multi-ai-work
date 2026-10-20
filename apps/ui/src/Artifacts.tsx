@@ -60,27 +60,50 @@ export function ArtifactGroups({
           </div>
           <ul className="@container list-none divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white">
             {group.artifacts.map((artifact) => (
-              <li key={artifact.id} className="flex items-center">
-                {selection.selecting && (
-                  <input
-                    type="checkbox"
-                    className="ml-3 shrink-0"
-                    aria-label={`选择${artifact.name}`}
-                    disabled={selection.busy}
-                    checked={selection.checked.has(artifact.id)}
-                    onChange={() => selection.toggle(artifact.id)}
-                  />
-                )}
-                <div className="min-w-0 flex-1">
-                  <ArtifactItem
-                    artifact={artifact}
-                    producer={artifactProducer(artifact, tasks, bots)}
-                    showProducer
-                    layout="row"
-                    allowDelete={!selection.selecting}
-                    mutate={mutate}
-                  />
+              <li key={artifact.id}>
+                <div className="flex items-center">
+                  {selection.selecting && (
+                    <input
+                      type="checkbox"
+                      className="ml-3 shrink-0"
+                      aria-label={`选择${artifact.name}`}
+                      disabled={selection.busy}
+                      checked={selection.checked.has(artifact.id)}
+                      onChange={() => selection.toggle(artifact.id)}
+                    />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <ArtifactItem
+                      artifact={artifact}
+                      producer={artifactProducer(artifact, tasks, bots)}
+                      showProducer
+                      layout="row"
+                      allowDelete={!selection.selecting}
+                      mutate={mutate}
+                    />
+                  </div>
                 </div>
+                {!selection.selecting && group.history?.has(artifact.id) && (
+                  <details className="mx-3 mb-3 rounded-lg bg-slate-50 text-xs text-slate-500">
+                    <summary className="cursor-pointer px-3 py-2">
+                      历史版本 · {group.history.get(artifact.id)!.length}
+                    </summary>
+                    <ul className="list-none divide-y divide-slate-200 border-t border-slate-200">
+                      {group.history.get(artifact.id)!.map((version) => (
+                        <li key={version.id}>
+                          <ArtifactItem
+                            artifact={version}
+                            producer={artifactProducer(version, tasks, bots)}
+                            showProducer
+                            layout="row"
+                            allowDelete
+                            mutate={mutate}
+                          />
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
               </li>
             ))}
           </ul>
@@ -146,7 +169,7 @@ export function ArtifactItem({
           ? result
           : (result as { content?: string; text?: string })?.content ||
               (result as { text?: string })?.text ||
-              '该文件暂无文字预览，请打开原文件。',
+              '该文件暂无文字预览，请打开文件。',
       );
     } catch (cause) {
       setError(errorMessage(cause));
@@ -236,7 +259,7 @@ export function ArtifactItem({
           )}
           <Button onClick={() => void open()}>
             <ExternalLink size={15} />
-            打开原文件
+            打开文件
           </Button>
         </div>
       </Modal>

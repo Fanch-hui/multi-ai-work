@@ -1,6 +1,4 @@
 import { createHash } from 'node:crypto';
-import { mkdirSync, copyFileSync } from 'node:fs';
-import { join } from 'node:path';
 import type {
   Artifact,
   Bot,
@@ -16,7 +14,7 @@ import type { TaskGroupInput, ToolExecutionContext } from '../domain/tools.js';
 import type { MemoryService } from '../runtime/memory.js';
 import type { ApprovalService } from './approvals.js';
 import type { TaskService } from './tasks.js';
-import { id, now, type State } from './state.js';
+import type { State } from './state.js';
 import type { TeamService } from './team.js';
 import type { MemoryManagement } from './memories.js';
 import { accessibleArtifacts, messageTools, ownsTaskFile } from './tool-access.js';
@@ -31,6 +29,7 @@ import { scopedTask, returnTaskArtifacts } from './task-access.js';
 import { artifactRequirement } from './task-requirements.js';
 import type { TaskControlService } from './task-control.js';
 import { assertUserMemorySources } from './memory-policy.js';
+import { registerTaskArtifact } from './artifact-registration.js';
 
 export class ToolContextFactory {
   private observations = new Map<string, Map<string, string>>();
@@ -118,30 +117,7 @@ export class ToolContextFactory {
           }
         : {}),
       registerArtifact: (input) => {
-        const artifactId = id();
-        const directory = join(this.state.dataDirectory, 'artifacts', artifactId);
-        mkdirSync(directory, { recursive: true });
-        const path = join(directory, input.name);
-        copyFileSync(input.path, path);
-        const artifact: Artifact = {
-          ...input,
-          id: artifactId,
-          path,
-          workingPath: input.workingPath ?? (input.source ? undefined : input.path),
-          taskId: task.id,
-          botId: bot.id,
-          conversationId: room.id,
-          createdAt: now(),
-          requirementVersion:
-            input.requirementVersion ?? s.get<Run>('runs', run.id)?.requirementVersion,
-        };
-        s.transaction(() => {
-          s.put('artifacts', artifact);
-          const current = s.get<Task>('tasks', task.id)!;
-          s.put('tasks', { ...current, artifactIds: [...current.artifactIds, artifact.id] });
-        });
-        this.state.changed();
-        return artifact;
+        return registerTaskArtifact(this.state, input, task, bot, room, run);
       },
       postMessage: (content, artifacts, conversationId) =>
         this.tasks.post(room.id, bot.id, run.id, content, artifacts, conversationId).id,

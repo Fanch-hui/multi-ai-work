@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, stat } from 'node:fs/promises';
 import { basename, extname, join } from 'node:path';
 import type { Artifact, Conversation } from '../domain/types.js';
 import { State, id, now } from './state.js';
 import { required } from './errors.js';
 import { attachmentSizeLimit, imageMimeTypes, normalizeImageBytes } from '../tools/images.js';
+import { trackAttachmentDraft } from './artifact-drafts.js';
 
 const mime: Record<string, string> = {
   '.pdf': 'application/pdf',
@@ -92,13 +93,14 @@ async function storeAttachment(
   };
   try {
     if (imageMimeTypes.has(type))
-      artifact.image = await normalizeImageBytes(bytes, directory, type);
-    await writeFile(path, bytes, { mode: 0o600, flag: 'wx' });
+      artifact.image = await normalizeImageBytes(bytes, directory, type, state.dataDirectory);
+    Object.assign(artifact, state.artifactObjects.publish(artifactId, name, bytes));
   } catch (error) {
     await rm(directory, { recursive: true, force: true });
     throw error;
   }
   state.storage.put('artifacts', artifact);
+  trackAttachmentDraft(state, artifact);
   state.changed();
   return artifact;
 }

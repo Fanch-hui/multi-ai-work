@@ -122,7 +122,7 @@ describe('App 工具资料缓存', () => {
   });
 
   it('旧文件逐个匹配真实记录，内容相同才迁移并回收', async () => {
-    const { s, contents, add } = await fixture(toolResultCacheBytes);
+    const { core, root, s, contents, add } = await fixture(toolResultCacheBytes);
     const content = '旧版本留下的完整工具结果';
     s.put('tasks', { id: 'task', botId: 'bot', runIds: ['run'] });
     s.put('runs', { id: 'run', taskId: 'task', botId: 'bot' });
@@ -141,8 +141,13 @@ describe('App 工具资料缓存', () => {
       const past = new Date(Date.now() - toolResultCacheIdleMs - 60000);
       await utimes(artifact.path, past, past);
     }
+    await core.files.maintain();
+    expect(s.get<Artifact>('artifacts', matched.id)?.objectHash).toBeUndefined();
     await contents.maintain();
     expect(s.get<Artifact>('artifacts', matched.id)?.contentSource?.kind).toBe('tool-operation');
+    await expect(stat(join(root, 'artifact-objects', matched.sha256))).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
     await expect(stat(matched.path)).rejects.toMatchObject({ code: 'ENOENT' });
     expect((await contents.read(matched)).toString()).toBe(content);
     expect(s.get<Artifact>('artifacts', unique.id)?.contentSource).toBeUndefined();
@@ -162,6 +167,24 @@ describe('App 工具资料缓存', () => {
     s.delete('artifacts', artifact.id);
     expect(await contents.canRead(artifact)).toBe(false);
     await expect(contents.read(artifact)).rejects.toThrow('成果不存在');
+  });
+
+  it('手动清理保留已核验的完整来源和打开中的文件', async () => {
+    const { core, s, contents, add } = await fixture();
+    const cached = add('cache', '可重建正文');
+    const opened = add('opened-cache', '打开中的正文');
+    const unique = add('unique-file', '唯一正文', 'room', true);
+    await contents.materialize(cached);
+    await core.state.artifactContents.materialize(opened, true);
+    await mkdir(dirname(unique.path), { recursive: true });
+    await writeFile(unique.path, '唯一正文');
+    const result = await core.files.clean();
+    expect(result.removedBytes).toBe(cached.size);
+    await expect(stat(cached.path)).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(s.metadata('artifact-text:cache')).toBe('可重建正文');
+    expect((await contents.read(cached)).toString()).toBe('可重建正文');
+    expect(await readFile(opened.path, 'utf8')).toBe('打开中的正文');
+    expect(await readFile(unique.path, 'utf8')).toBe('唯一正文');
   });
 
   it('界面查看和打开可按需恢复文件，用户删除后同时清除目录正文', async () => {

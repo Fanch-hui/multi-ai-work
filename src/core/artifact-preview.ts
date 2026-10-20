@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { mkdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { Artifact } from '../domain/types.js';
+import { withDerivedCache } from '../tools/derived-cache.js';
 import { loadWorkspaceDependencies } from '../tools/office-runtime.js';
 import { MAX_FILE_BYTES } from '../tools/file-policy.js';
 import { startCommand } from '../tools/process-runner.js';
@@ -44,7 +45,7 @@ const digest = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest(
 
 export class ArtifactPreviews {
   private controller = new AbortController();
-  private pending = new Map<string, Promise<PreviewReport>>();
+  private pending = new Set<Promise<unknown>>();
   constructor(private state: Pick<State, 'storage' | 'dataDirectory'>) {}
 
   async describe(artifactId: string): Promise<DocumentPreview> {
@@ -65,12 +66,13 @@ export class ArtifactPreviews {
 
   async page(artifactId: string, index: number): Promise<{ mimeType: string; data: string }> {
     if (!Number.isSafeInteger(index) || index < 1) throw new Error('预览页码无效');
-    const report = await this.report(artifactId);
-    const page = report.files[index - 1];
-    if (!page) throw new Error('预览页码超出范围');
-    const info = await stat(page.path);
-    if (!info.isFile() || info.size > MAX_FILE_BYTES) throw new Error('预览图片超过 25 MiB 限制');
-    return { mimeType: 'image/png', data: (await readFile(page.path)).toString('base64') };
+    return this.report(artifactId, async (report) => {
+      const page = report.files[index - 1];
+      if (!page) throw new Error('预览页码超出范围');
+      const info = await stat(page.path);
+      if (!info.isFile() || info.size > MAX_FILE_BYTES) throw new Error('预览图片超过 25 MiB 限制');
+      return { mimeType: 'image/png', data: (await readFile(page.path)).toString('base64') };
+    });
   }
 
   async close(): Promise<void> {
@@ -79,7 +81,6 @@ export class ArtifactPreviews {
   }
 
   async remove(artifactId: string): Promise<void> {
-    await this.pending.get(artifactId)?.catch(() => {});
     const key = this.state.storage.metadata<string>(`artifact-preview:${artifactId}`);
     if (key && /^[a-f0-9]{64}$/.test(key))
       await rm(path.join(this.state.dataDirectory, 'artifact-previews', key), {
@@ -89,7 +90,10 @@ export class ArtifactPreviews {
     this.state.storage.setMetadata(`artifact-preview:${artifactId}`, null);
   }
 
-  private report(artifactId: string): Promise<PreviewReport> {
+  private async report<T = PreviewReport>(
+    artifactId: string,
+    read: (report: PreviewReport) => Promise<T> = async (report) => report as T,
+  ): Promise<T> {
     this.controller.signal.throwIfAborted();
     const artifact = required(
       this.state.storage.get<Artifact>('artifacts', artifactId),
@@ -97,24 +101,53 @@ export class ArtifactPreviews {
     );
     if (!formats.has(path.extname(artifact.path).toLowerCase()))
       throw new Error('此成果不支持文档预览');
-    const current = this.pending.get(artifactId);
-    if (current) return current;
-    const pending = this.render(artifact).finally(() => this.pending.delete(artifactId));
-    this.pending.set(artifactId, pending);
-    return pending;
+    return this.render(artifact, read);
   }
 
-  private async render(artifact: Artifact): Promise<PreviewReport> {
+  private async render<T>(
+    artifact: Artifact,
+    read: (report: PreviewReport) => Promise<T>,
+  ): Promise<T> {
     const source = await stat(artifact.path);
     if (!source.isFile() || source.size > MAX_FILE_BYTES)
       throw new Error('文档必须为不超过 25 MiB 的普通文件');
     const dependencies = await loadWorkspaceDependencies();
     const bytes = await readFile(artifact.path);
     const key = digest(
-      Buffer.concat([Buffer.from(artifact.id), bytes, await readFile(dependencies.renderScript)]),
+      Buffer.concat([
+        Buffer.from(
+          JSON.stringify([
+            'document-preview',
+            path.extname(artifact.path).toLowerCase(),
+            'png',
+            120,
+            10000,
+          ]),
+        ),
+        bytes,
+        await readFile(dependencies.renderScript),
+      ]),
     );
-    const output = path.join(this.state.dataDirectory, 'artifact-previews', key);
+    const output = path.join(this.state.dataDirectory, 'derived-cache', key);
     this.state.storage.setMetadata(`artifact-preview:${artifact.id}`, key);
+    const work = withDerivedCache(output, async () => {
+      const report = await this.renderReport(artifact, bytes, output, dependencies);
+      return read(report);
+    });
+    this.pending.add(work);
+    try {
+      return await work;
+    } finally {
+      this.pending.delete(work);
+    }
+  }
+
+  private async renderReport(
+    artifact: Artifact,
+    bytes: Buffer,
+    output: string,
+    dependencies: Awaited<ReturnType<typeof loadWorkspaceDependencies>>,
+  ): Promise<PreviewReport> {
     const reportPath = path.join(output, 'render-report.json');
     this.controller.signal.throwIfAborted();
     try {

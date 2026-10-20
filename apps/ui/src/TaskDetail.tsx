@@ -10,6 +10,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import type { Approval, Snapshot, Task } from '../../../src/domain/types.js';
+import { isDeliverableArtifact } from '../../../src/domain/artifact-purpose.js';
 import type { Mutate } from './store.js';
 import { errorMessage } from './api.js';
 import { Badge, Button, Confirm, ErrorNote, activeTask, timeLabel } from './components.js';
@@ -88,7 +89,9 @@ export function TaskDetail({
   const [busy, setBusy] = useState(false);
   const bot = data.bots.find((item) => item.id === task.botId);
   const children = data.tasks.filter((item) => item.parentId === task.id);
-  const artifacts = data.artifacts.filter((item) => task.artifactIds.includes(item.id));
+  const artifacts = data.artifacts.filter(
+    (item) => task.artifactIds.includes(item.id) && isDeliverableArtifact(item),
+  );
   const approvals = data.approvals.filter(
     (item) => item.taskId === task.id && item.status === 'pending',
   );

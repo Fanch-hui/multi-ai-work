@@ -16,6 +16,10 @@ export interface ComposerDraft {
   error: string;
 }
 type DraftContent = Pick<ComposerDraft, 'content' | 'targets' | 'attachments'>;
+export interface DraftAttachmentReference {
+  conversationId: string;
+  artifactIds: string[];
+}
 
 export function composerSubmission(conversation: Conversation, draft: ComposerDraft) {
   return {
@@ -31,6 +35,37 @@ export function composerSubmission(conversation: Conversation, draft: ComposerDr
 export class ComposerDraftStore {
   private drafts = new Map<string, ComposerDraft>();
   private listeners = new Map<string, Set<() => void>>();
+  private attachmentListeners = new Set<() => void>();
+  private sendingAttachments = new Map<string, string[]>();
+  private attachmentSignature = '[]';
+
+  attachmentSnapshot(): DraftAttachmentReference[] {
+    const result: DraftAttachmentReference[] = [];
+    for (const [conversationId, draft] of this.drafts) {
+      const artifactIds = [
+        ...new Set([
+          ...draft.attachments.map((artifact) => artifact.id),
+          ...(this.sendingAttachments.get(conversationId) ?? []),
+        ]),
+      ].sort();
+      if (artifactIds.length) result.push({ conversationId, artifactIds });
+    }
+    return result.sort((left, right) => left.conversationId.localeCompare(right.conversationId));
+  }
+
+  subscribeAttachments(listener: () => void) {
+    this.attachmentListeners.add(listener);
+    return () => {
+      this.attachmentListeners.delete(listener);
+    };
+  }
+
+  private notifyAttachments() {
+    const signature = JSON.stringify(this.attachmentSnapshot());
+    if (signature === this.attachmentSignature) return;
+    this.attachmentSignature = signature;
+    this.attachmentListeners.forEach((listener) => listener());
+  }
 
   read(id: string): ComposerDraft {
     let draft = this.drafts.get(id);
@@ -61,6 +96,7 @@ export class ComposerDraftStore {
 
   update(id: string, patch: Partial<ComposerDraft>) {
     this.drafts.set(id, { ...this.read(id), ...patch });
+    if (patch.attachments !== undefined || patch.sending !== undefined) this.notifyAttachments();
     this.listeners.get(id)?.forEach((listener) => listener());
   }
 
@@ -72,11 +108,16 @@ export class ComposerDraftStore {
     const draft = this.read(id);
     if (draft.sending || draft.attaching || (!draft.content.trim() && !draft.attachments.length))
       return;
+    this.sendingAttachments.set(
+      id,
+      draft.attachments.map((artifact) => artifact.id),
+    );
     this.update(id, { sending: true, error: '' });
     return draft;
   }
 
   finishSend(id: string, requestId: string, error?: string) {
+    this.sendingAttachments.delete(id);
     if (error !== undefined) {
       this.update(id, { sending: false, error });
       return;

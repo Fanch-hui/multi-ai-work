@@ -7,6 +7,7 @@ import type { Storage } from './storage.js';
 import {
   artifactContentLookup,
   findArtifactContentSource,
+  sourceContent,
   matchesArtifact,
   maxArtifactBytes,
   readArtifactBytes,
@@ -41,11 +42,47 @@ export class ArtifactContents {
   pauseMaintenance() {
     return this.maintenance.pause();
   }
+  async cachedBytes() {
+    let bytes = 0;
+    for (const artifact of this.storage.all<Artifact>('artifacts')) {
+      if (!artifact.contentSource || !this.ownsCachePath(artifact)) continue;
+      const file = await stat(artifact.path).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === 'ENOENT') return undefined;
+        throw error;
+      });
+      if (file?.isFile()) bytes += file.size;
+    }
+    return bytes;
+  }
+  async clearCache() {
+    let removed = 0;
+    for (const artifact of this.storage.all<Artifact>('artifacts')) {
+      if (!artifact.contentSource || !this.ownsCachePath(artifact) || this.isPinned(artifact.id))
+        continue;
+      removed += await this.withPinned(artifact, async () => {
+        const current = this.current(artifact);
+        if (!current.contentSource) return 0;
+        const source = sourceContent(current.contentSource, artifactContentLookup(this.storage));
+        if (source === undefined || !matchesArtifact(Buffer.from(source), current)) return 0;
+        const file = await stat(current.path).catch((error: NodeJS.ErrnoException) => {
+          if (error.code === 'ENOENT') return undefined;
+          throw error;
+        });
+        if (!file?.isFile()) return 0;
+        await rm(current.path, { force: true });
+        return file.size;
+      });
+    }
+    return removed;
+  }
   findSource(taskId: string, content: string, hint?: { runId?: string; callId?: string }) {
     return findArtifactContentSource(this.storage, taskId, content, hint);
   }
   isPinned(id: string) {
     return this.opened.has(id) || this.locks.has(id);
+  }
+  isOpened(id: string) {
+    return this.opened.has(id);
   }
   ownsCachePath(artifact: Artifact) {
     return (
@@ -94,7 +131,10 @@ export class ArtifactContents {
   async materialize(artifact: Artifact, keepOpen = false): Promise<string> {
     return this.withPinned(artifact, async () => {
       const current = this.current(artifact);
-      if (!current.contentSource) return current.path;
+      if (!current.contentSource) {
+        if (keepOpen) this.opened.add(current.id);
+        return current.path;
+      }
       await this.write(
         current,
         await readArtifactBytes(current, artifactContentLookup(this.storage)),
@@ -133,9 +173,9 @@ export class ArtifactContents {
     }
   }
 
-  async remove(artifact: Artifact, action: () => Promise<void>) {
-    await this.withPinned(artifact, async () => {
-      await action();
+  async remove(artifact: Artifact, action: () => Promise<void | boolean>) {
+    return this.withPinned(artifact, async () => {
+      if ((await action()) === false) return false;
       if (
         artifact.contentSource?.kind === 'stored-text' &&
         artifact.contentSource.key === `artifact-text:${artifact.id}`
@@ -144,6 +184,7 @@ export class ArtifactContents {
           .prepare('DELETE FROM metadata WHERE key = ?')
           .run(artifact.contentSource.key);
       this.opened.delete(artifact.id);
+      return true;
     });
   }
 

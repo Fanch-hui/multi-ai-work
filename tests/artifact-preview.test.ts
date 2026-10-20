@@ -82,14 +82,15 @@ describe.skipIf(!existsSync(path.join(workspaceRuntimeRoot(), 'runtime.json')))(
       expect(output).toContain('"totalPages":2');
     });
 
-    it('removes only the selected artifact preview cache and retains its document', async () => {
+    it('releases the artifact preview mapping and retains the reusable cache and document', async () => {
       const artifactId = await pdf(1);
       await previews.describe(artifactId);
       const key = metadata.get(`artifact-preview:${artifactId}`) as string;
-      const directory = path.join(root, 'app-data', 'artifact-previews', key);
+      const directory = path.join(root, 'app-data', 'derived-cache', key);
       expect(existsSync(directory)).toBe(true);
       await previews.remove(artifactId);
-      expect(existsSync(directory)).toBe(false);
+      expect(metadata.get(`artifact-preview:${artifactId}`)).toBeNull();
+      expect(existsSync(directory)).toBe(true);
       expect(existsSync(path.join(root, artifactId))).toBe(true);
     }, 30000);
 
@@ -152,14 +153,14 @@ w=Workbook(); w.active.title='计划'; w.active.append(['中文任务', '分钟'
     it('renders beyond forty pages and closes pending conversion work', async () => {
       const id = await pdf(41);
       expect((await previews.describe(id)).pages).toHaveLength(41);
-      await rm(path.join(root, 'app-data', 'artifact-previews'), { recursive: true, force: true });
+      await rm(path.join(root, 'app-data', 'derived-cache'), { recursive: true, force: true });
       const pending = previews.describe(id).then(
         () => 'finished',
         () => 'cancelled',
       );
       let started = false;
       for (let attempt = 0; attempt < 200 && !started; attempt++) {
-        const directory = path.join(root, 'app-data', 'artifact-previews');
+        const directory = path.join(root, 'app-data', 'derived-cache');
         const caches = await readdir(directory).catch(() => []);
         started = caches.some((cache) => existsSync(path.join(directory, cache, '.temporary')));
         if (!started) await new Promise((resolve) => setTimeout(resolve, 20));

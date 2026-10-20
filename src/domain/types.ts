@@ -268,6 +268,7 @@ export interface ImageMetadata {
   path: string;
 }
 export interface Artifact {
+  objectHash?: string;
   contentSource?: import('./artifact-content.js').ArtifactContentSource;
   id: string;
   name: string;

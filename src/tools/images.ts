@@ -1,7 +1,9 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import sharp from 'sharp';
 import type { Artifact, ImageMetadata } from '../domain/types.js';
+import { withDerivedCache } from './derived-cache.js';
 
 export const attachmentSizeLimit = 25 * 1024 * 1024;
 export const imageMimeTypes = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
@@ -22,7 +24,12 @@ export async function normalizeImageBytes(
   bytes: Buffer,
   directory: string,
   expectedMimeType?: string,
+  dataDirectory?: string,
 ): Promise<ImageMetadata> {
+  if (dataDirectory) {
+    const entry = imageCacheDirectory(bytes, expectedMimeType, dataDirectory);
+    return withDerivedCache(entry, () => cachedImage(bytes, entry, expectedMimeType));
+  }
   if (!bytes.length || bytes.length > attachmentSizeLimit)
     throw new Error('图片需为不超过 25 MiB 的普通文件');
   const mimeType = detectImageMimeType(bytes);
@@ -54,27 +61,73 @@ export async function normalizeImageBytes(
   }
 }
 
-export async function normalizeArtifactImage(artifact: Artifact): Promise<ImageMetadata> {
+function imageCacheDirectory(bytes: Buffer, mimeType: string | undefined, dataDirectory: string) {
+  const key = createHash('sha256')
+    .update(JSON.stringify(['image-preview', 1, sharp.versions, mimeType, 2048, 90]))
+    .update(bytes)
+    .digest('hex');
+  return join(dataDirectory, 'derived-cache', key);
+}
+
+async function cachedImage(bytes: Buffer, entry: string, expectedMimeType?: string) {
+  const metadataPath = join(entry, 'image.json');
+  try {
+    const image = JSON.parse(await readFile(metadataPath, 'utf8')) as ImageMetadata;
+    const imagePath = join(entry, '.image', `model.${image.mimeType.slice(6)}`);
+    if (!(await stat(imagePath)).isFile()) throw new Error('缓存图片无效');
+    return { ...image, path: imagePath };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+  const image = await normalizeImageBytes(bytes, entry, expectedMimeType);
+  await writeFile(metadataPath, JSON.stringify(image), { mode: 0o600 });
+  return image;
+}
+
+async function sourceImageBytes(artifact: Artifact) {
   if (!imageMimeTypes.has(artifact.mimeType)) throw new Error('成果不是支持的图片');
-  if (!artifact.image)
+  const source = await stat(artifact.path);
+  if (!source.isFile() || source.size > attachmentSizeLimit)
+    throw new Error('图片需为不超过 25 MiB 的普通文件');
+  return readFile(artifact.path);
+}
+
+export async function normalizeArtifactImage(
+  artifact: Artifact,
+  dataDirectory?: string,
+): Promise<ImageMetadata> {
+  const bytes = await sourceImageBytes(artifact);
+  if (dataDirectory || !artifact.image)
     artifact.image = await normalizeImageBytes(
-      await readFile(artifact.path),
+      bytes,
       join(dirname(artifact.path), `${artifact.id}-preview`),
       artifact.mimeType,
+      dataDirectory,
     );
-  return artifact.image;
+  return artifact.image!;
 }
 
 export async function readArtifactImagePreview(
   artifact: Artifact,
+  dataDirectory?: string,
 ): Promise<{ mimeType: string; bytes: Buffer }> {
+  if (dataDirectory) {
+    const bytes = await sourceImageBytes(artifact);
+    const entry = imageCacheDirectory(bytes, artifact.mimeType, dataDirectory);
+    return withDerivedCache(entry, async () => {
+      const image = await cachedImage(bytes, entry, artifact.mimeType);
+      artifact.image = image;
+      return { mimeType: image.mimeType, bytes: await readFile(image.path) };
+    });
+  }
   const image = await normalizeArtifactImage(artifact);
   return { mimeType: image.mimeType, bytes: await readFile(image.path) };
 }
 
 export async function resolveArtifactImage(
   artifact: Artifact,
+  dataDirectory?: string,
 ): Promise<{ mimeType: string; data: string }> {
-  const { mimeType, bytes } = await readArtifactImagePreview(artifact);
+  const { mimeType, bytes } = await readArtifactImagePreview(artifact, dataDirectory);
   return { mimeType, data: bytes.toString('base64') };
 }

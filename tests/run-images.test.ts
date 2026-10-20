@@ -74,7 +74,7 @@ describe('run image resolver', () => {
     expect((await resolve(image)).data).toBe(encoded);
     expect(reads(join(directory, 'image.png'))).toBe(1);
     await imageResolver(state, context)(image);
-    expect(reads(join(directory, 'image.png'))).toBe(1);
+    expect(reads(join(directory, 'image.png'))).toBe(2);
   });
 
   it('normalizes a lazy artifact once and persists its real preview metadata', async () => {

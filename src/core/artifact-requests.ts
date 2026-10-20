@@ -8,6 +8,7 @@ import { importAttachment, importAttachmentBytes } from './attachments.js';
 import { accessibleArtifacts } from './tool-access.js';
 import { deleteArtifact } from './artifact-delete.js';
 import { publicError, required } from './errors.js';
+import type { ArtifactStorage } from './artifact-storage.js';
 
 export type HostRequest = (
   method: 'chooseDirectory' | 'chooseFile' | 'chooseAvatar' | 'openPath',
@@ -18,6 +19,7 @@ export class ArtifactRequests {
   constructor(
     private state: State,
     private previews: ArtifactPreviews,
+    private files: ArtifactStorage,
     private host?: HostRequest,
   ) {}
 
@@ -25,6 +27,29 @@ export class ArtifactRequests {
     const s = this.state.storage;
     const objectId = () => z.string().parse(params.id);
     switch (method) {
+      case 'artifacts.storage':
+        return this.files.usage();
+      case 'artifacts.configureStorage':
+        return this.files.configure(
+          z
+            .object({
+              cacheMiB: z.number().int().min(64).max(4096),
+              cacheIdleDays: z.number().int().min(1).max(30),
+            })
+            .parse(params.input),
+        );
+      case 'artifacts.cleanStorage':
+        z.literal(true).parse(params.clearCache);
+        return this.files.clean();
+      case 'artifacts.retainDrafts':
+        return this.files.drafts.retain(
+          z
+            .array(
+              z.object({ conversationId: z.string(), artifactIds: z.array(z.string()).max(20) }),
+            )
+            .max(1000)
+            .parse(params.drafts),
+        );
       case 'conversations.attach': {
         const conversationId = z.string().parse(params.conversationId);
         const attachmentCount = z
@@ -108,9 +133,12 @@ export class ArtifactRequests {
           if (!visible.some((item) => item.id === artifact.id))
             throw new Error('图片不在当前会话授权范围');
         }
-        const image = await resolveArtifactImage(artifact);
-        s.put('artifacts', artifact);
-        return image;
+        return this.state.artifactContents.withPinned(artifact, async () => {
+          const current = required(s.get<Artifact>('artifacts', artifact.id), '成果不存在');
+          const image = await resolveArtifactImage(current, this.state.dataDirectory);
+          s.put('artifacts', current);
+          return image;
+        });
       }
       default:
         throw new Error('不支持的应用操作');

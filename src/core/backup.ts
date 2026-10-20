@@ -247,6 +247,7 @@ export class BackupService {
       if (!path) throw new Error('备份缺少成果文件');
       artifact.path = path;
       artifact.workingPath = undefined;
+      delete artifact.objectHash;
       delete artifact.contentSource;
     }
     if (table === 'connections') {
