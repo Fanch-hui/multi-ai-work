@@ -22,7 +22,9 @@ export function MessageArtifacts({
   const files = ids
     .map((id) => artifacts.get(id))
     .filter(
-      (artifact): artifact is Artifact => !!artifact && (user || isDeliverableArtifact(artifact)),
+      (artifact): artifact is Artifact =>
+        !!artifact &&
+        (user || artifact.source === 'user-attachment' || isDeliverableArtifact(artifact)),
     );
   if (!files.length) return null;
   if (!user && conversation.kind === 'group') {

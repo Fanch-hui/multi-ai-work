@@ -373,35 +373,39 @@ describe('conversation message feed', () => {
     expect(render(data, { ...room, kind: 'private', purpose: 'chief' })).not.toContain('个文件');
   });
 
-  it('shows a source conversation upload forwarded by the chief as a group file', () => {
-    const file: Artifact = {
-      id: 'shared-input',
-      name: '需求资料.txt',
-      path: '/files/brief.txt',
-      mimeType: 'text/plain',
-      sha256: 'digest',
-      size: 10,
-      conversationId: 'source',
-      source: 'user-attachment',
-      createdAt: time,
-    };
-    const html = render(
-      snapshot({
-        artifacts: [file],
-        messages: [
-          message('shared', {
-            authorBotId: 'chief',
-            content: '',
-            status: 'committed',
-            artifactIds: [file.id],
-          }),
-        ],
-      }),
-    );
-    expect(html).toContain('1 个文件');
-    expect(html).toContain('需求资料.txt');
-    expect(html).toContain('aria-label="预览需求资料.txt"');
-  });
+  it.each([undefined, 'intermediate'] as const)(
+    'shows a source conversation upload with purpose %s forwarded by the chief as a group file',
+    (purpose) => {
+      const file: Artifact = {
+        id: 'shared-input',
+        name: '需求资料.txt',
+        path: '/files/brief.txt',
+        mimeType: 'text/plain',
+        sha256: 'digest',
+        size: 10,
+        conversationId: 'source',
+        source: 'user-attachment',
+        purpose,
+        createdAt: time,
+      };
+      const html = render(
+        snapshot({
+          artifacts: [file],
+          messages: [
+            message('shared', {
+              authorBotId: 'chief',
+              content: '',
+              status: 'committed',
+              artifactIds: [file.id],
+            }),
+          ],
+        }),
+      );
+      expect(html).toContain('1 个文件');
+      expect(html).toContain('需求资料.txt');
+      expect(html).toContain('aria-label="预览需求资料.txt"');
+    },
+  );
 
   it('keeps actual replies and attachments in publication order while dropping empty drafts and system dispatches', () => {
     const data = snapshot({
