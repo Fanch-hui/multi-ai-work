@@ -24,11 +24,21 @@ export function latestCompactionTask(
       (task) => task.conversationId === conversationId && task.kind === 'context-compaction',
     ),
   );
-  return candidates
+  const latest = candidates
     .sort(
       (a, b) => a.createdAt.localeCompare(b.createdAt) || a.updatedAt.localeCompare(b.updatedAt),
     )
     .at(-1);
+  if (
+    latest &&
+    terminal(latest.status) &&
+    tasks.some(
+      (task) =>
+        task.conversationId === conversationId && !task.kind && task.createdAt > latest.createdAt,
+    )
+  )
+    return undefined;
+  return latest;
 }
 
 export function compactionFeedback(

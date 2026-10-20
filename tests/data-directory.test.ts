@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, parse } from 'node:path';
 import { tmpdir } from 'node:os';
 import { Storage } from '../src/core/storage.js';
 import { migrateDataDirectory } from '../src/core/data-directory.js';
@@ -118,6 +118,15 @@ async function fixture() {
 }
 
 describe('数据目录迁移', () => {
+  it.skipIf(process.platform !== 'win32')('迁移至磁盘根目录下的空文件夹', async () => {
+    const { source, message } = await fixture();
+    const target = await mkdtemp(join(parse(source).root, 'maw-data-migration-test-'));
+    temporary.push(target);
+    expect(await migrateDataDirectory(source, target)).toBe(target);
+    expect(open(target).getMessage('message')).toEqual(message);
+    expect(open(source).getMessage('message')).toEqual(message);
+  });
+
   it.each([false, true])(
     '迁移至新目录或空目录（已存在：%s）并保留实际数据与关联',
     async (existing) => {

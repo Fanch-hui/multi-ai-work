@@ -29,8 +29,10 @@ const pathFields = {
 
 export async function migrateDataDirectory(source: string, input: string): Promise<string> {
   const { target, roots } = await validateDataDirectory(source, input);
-  await mkdir(dirname(target), { recursive: true });
-  const staging = await mkdtemp(join(dirname(target), '.multi-ai-work-data-'));
+  const parent = dirname(target);
+  // Windows rejects recursive mkdir on an existing drive root with EPERM.
+  if (parent !== dirname(parent)) await mkdir(parent, { recursive: true });
+  const staging = await mkdtemp(join(parent, '.multi-ai-work-data-'));
   try {
     for (const name of dataEntries) {
       const path = join(source, name);

@@ -150,4 +150,38 @@ describe('manual context compaction feedback', () => {
     expect(latestCompactionTask([old], 'empty', other)).toBeUndefined();
     expect(latestCompactionTask([{ ...latest, kind: undefined }], 'main')).toBeUndefined();
   });
+
+  it('ends terminal feedback after another foreground task while preserving active compaction and background isolation', () => {
+    const next = task('queued', {
+      id: 'next',
+      kind: undefined,
+      createdAt: '2026-10-18T16:01:00.000Z',
+    });
+    const background = (['memory-review', 'question-decision'] as const).map((kind) => ({
+      ...next,
+      id: kind,
+      kind,
+    }));
+    for (const status of ['completed', 'failed', 'cancelled', 'interrupted'] as const) {
+      const compact = task(status);
+      expect(latestCompactionTask([compact, next], 'main')).toBeUndefined();
+      expect(compactionFeedback(latestCompactionTask([compact, next], 'main'))).toBeUndefined();
+      expect(latestCompactionTask([compact, ...background], 'main')).toBe(compact);
+      expect(latestCompactionTask([compact, { ...next, conversationId: 'other' }], 'main')).toBe(
+        compact,
+      );
+      const newer = { ...compact, id: 'newer', createdAt: '2026-10-18T16:02:00.000Z' };
+      expect(latestCompactionTask([compact, next], 'main', newer)).toBe(newer);
+    }
+    for (const status of ['queued', 'running'] as const) {
+      const compact = task(status);
+      expect(latestCompactionTask([compact, next], 'main')).toBe(compact);
+      expect(
+        compactionFeedback(latestCompactionTask([compact, next], 'main'), 'cancel'),
+      ).toMatchObject({
+        label: '正在取消压缩…',
+        busy: true,
+      });
+    }
+  });
 });
