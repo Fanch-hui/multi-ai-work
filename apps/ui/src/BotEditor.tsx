@@ -67,11 +67,13 @@ export function BotEditor({
   const selectedModel = connection?.models.find((item) => item.id === model);
   const reasoningOptions = reasoningConfiguration(connection?.provider, selectedModel);
   const showReasoningHelp = reasoningOptions.fallback || reasoningOptions.options.length > 0;
-  const selectedReasoning = isReasoningSupported(connection?.provider, selectedModel, reasoning)
-    ? reasoning
-    : '';
+  const reasoningSupported = isReasoningSupported(connection?.provider, selectedModel, reasoning);
   async function save(event: FormEvent) {
     event.preventDefault();
+    if (!reasoningSupported) {
+      setError('当前推理强度不受所选模型支持。请选择默认或有效档位后保存。');
+      return;
+    }
     setBusy(true);
     setError('');
     try {
@@ -86,7 +88,7 @@ export function BotEditor({
           }),
           connectionId,
           model,
-          reasoning: selectedReasoning || undefined,
+          reasoning: reasoning || undefined,
           contextWindow: !native && contextWindow ? Number(contextWindow) : undefined,
           compactionThreshold: !native ? Number(compactionThreshold) : undefined,
           avatar,

@@ -39,9 +39,7 @@ export function ChiefConversationEditor({
   const [loadingCatalog, setLoadingCatalog] = useState(!!conversation);
   const [error, setError] = useState('');
   const modelInfo = connection?.models.find((item) => item.id === model);
-  const selectedReasoning = isReasoningSupported(connection?.provider, modelInfo, reasoning)
-    ? reasoning
-    : '';
+  const reasoningSupported = isReasoningSupported(connection?.provider, modelInfo, reasoning);
   const ready =
     !!chief &&
     (!!conversation || !!chief.model?.trim()) &&
@@ -99,6 +97,10 @@ export function ChiefConversationEditor({
   }
   async function save(event: FormEvent) {
     event.preventDefault();
+    if (conversation && !reasoningSupported) {
+      setError('当前推理强度不受所选模型支持。请选择默认或有效档位后保存。');
+      return;
+    }
     setBusy(true);
     setError('');
     try {
@@ -106,7 +108,7 @@ export function ChiefConversationEditor({
         conversation ? 'chief.conversations.update' : 'chief.conversations.create',
         {
           ...(conversation
-            ? { id: conversation.id, model, reasoning: selectedReasoning }
+            ? { id: conversation.id, model, reasoning }
             : { name: name.trim() || '新对话', workspaceId }),
         },
       );

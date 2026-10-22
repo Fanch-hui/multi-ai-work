@@ -34,9 +34,7 @@ export function OnboardingProfile({
   const [choosing, setChoosing] = useState(false);
   const [error, setError] = useState('');
   const modelInfo = connection.models.find((item) => item.id === model);
-  const selectedReasoning = isReasoningSupported(connection.provider, modelInfo, reasoning)
-    ? reasoning
-    : '';
+  const reasoningSupported = isReasoningSupported(connection.provider, modelInfo, reasoning);
   async function addDirectory() {
     setChoosing(true);
     setError('');
@@ -57,11 +55,15 @@ export function OnboardingProfile({
   }
   function submit(event: FormEvent) {
     event.preventDefault();
+    if (!reasoningSupported) {
+      setError('当前推理强度不受所选模型支持。请选择默认或有效档位后继续。');
+      return;
+    }
     void onSubmit({
       name,
       connectionId: connection.id,
       model,
-      reasoning: selectedReasoning,
+      reasoning,
       workspaceId,
       contextWindow: contextWindow ? Number(contextWindow) : undefined,
       compactionThreshold: Number(compactionThreshold),

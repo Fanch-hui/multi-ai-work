@@ -41,4 +41,24 @@ describe('reasoning configuration field', () => {
     expect(render({ id: 'gpt-5', name: 'Service model', reasoning: [] })).toBe('');
     expect(render(undefined, '', 'chatgpt')).toBe('');
   });
+
+  it('keeps an unsupported saved level visible and offers an explicit default choice', () => {
+    const html = render(
+      { id: 'gpt-5', name: 'Service model', reasoning: ['high'] },
+      'max',
+      'chatgpt',
+    );
+
+    expect(html).toContain('当前保存值“max”不在此模型目录的支持档位中');
+    expect(html).toContain('max（目录不支持）');
+    expect(html).toContain('disabled');
+    expect(html).toContain('<option value="">默认</option>');
+  });
+
+  it('shows the field for an unsupported saved level even when the catalog has no options', () => {
+    const html = render({ id: 'gpt-5', name: 'Service model', reasoning: [] }, 'medium', 'chatgpt');
+
+    expect(html).toContain('medium（目录不支持）');
+    expect(html).toContain('<option value="">默认</option>');
+  });
 });

@@ -21,23 +21,22 @@ export function ReasoningField({
 }) {
   const listId = useId();
   const { options, fallback } = reasoningConfiguration(provider, model);
-  if (!fallback && !options.length) return null;
-  const selected = isReasoningSupported(provider, model, value) ? value : '';
+  const supported = isReasoningSupported(provider, model, value);
+  let hint: string | undefined;
+  if (!supported) {
+    hint = `当前保存值“${value}”不在此模型目录的支持档位中。请选择默认或有效档位后保存。`;
+  } else if (fallback) {
+    hint = '服务商未提供档位，使用通用备选或填写服务商支持的值。留空使用默认值。';
+  }
+  if (!fallback && !options.length && !value) return null;
   return (
-    <Field
-      label="推理强度"
-      hint={
-        fallback
-          ? '服务商未提供档位，使用通用备选或填写服务商支持的值。留空使用默认值。'
-          : undefined
-      }
-    >
+    <Field label="推理强度" hint={hint}>
       {fallback ? (
         <>
           <input
             className={inputClass}
             list={listId}
-            value={selected}
+            value={value}
             disabled={disabled}
             maxLength={80}
             placeholder="默认"
@@ -52,7 +51,7 @@ export function ReasoningField({
       ) : (
         <select
           className={inputClass}
-          value={selected}
+          value={value}
           disabled={disabled}
           title={
             model?.reasoningSource === 'official-catalog'
@@ -61,6 +60,11 @@ export function ReasoningField({
           }
           onChange={(event) => onChange(event.target.value)}
         >
+          {!supported && (
+            <option value={value} disabled>
+              {value}（目录不支持）
+            </option>
+          )}
           <option value="">默认</option>
           {options.map((option) => (
             <option key={option} value={option}>
