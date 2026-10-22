@@ -19,7 +19,7 @@ import { receivingTasks } from './task-input-records.js';
 import { latestProgressRun } from './managed-progress.js';
 import { requireAttachmentCapacity } from '../domain/attachment-policy.js';
 
-import { terminal } from '../domain/task-status.js';
+import { childTaskRetryBlocker, terminal } from '../domain/task-status.js';
 export { terminal } from '../domain/task-status.js';
 export class TaskService {
   private blockedConversations = new Set<string>();
@@ -309,8 +309,7 @@ export class TaskService {
       throw new Error('智能体不是当前会话的有效成员');
     if (old.status === 'waiting_input' && old.coordinationPaused) {
       const children = this.state.storage.byField<Task>('tasks', 'parentId', old.id);
-      if (children.some((child) => !terminal(child.status) || child.reconciliationRequired))
-        throw new Error('请先核查并等待成员任务停止');
+      if (childTaskRetryBlocker(children)) throw new Error('请先核查并等待成员任务停止');
       this.state.storage.setMetadata(
         `results:${old.id}`,
         children.map((child) => ({
@@ -337,9 +336,9 @@ export class TaskService {
       throw new Error('只有已停止的任务可以重试');
     if (old.reconciliationRequired) throw new Error('执行结果尚未确认，请先核查外部操作');
     const children = this.state.storage.byField<Task>('tasks', 'parentId', old.id);
-    if (children.some((child) => child.reconciliationRequired))
-      throw new Error('请先核查成员任务的外部操作');
-    if (children.some((child) => !terminal(child.status))) throw new Error('请等待成员任务停止');
+    const blocker = childTaskRetryBlocker(children);
+    if (blocker?.reason === 'reconciliation') throw new Error('请先核查成员任务的外部操作');
+    if (blocker) throw new Error('请等待成员任务停止');
     if (children.length)
       this.state.storage.setMetadata(
         `results:${old.id}`,

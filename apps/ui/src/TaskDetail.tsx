@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import type { Approval, Snapshot, Task } from '../../../src/domain/types.js';
 import { isDeliverableArtifact } from '../../../src/domain/artifact-purpose.js';
+import { childTaskRetryBlocker } from '../../../src/domain/task-status.js';
 import type { Mutate } from './store.js';
 import { errorMessage } from './api.js';
 import { Badge, Button, Confirm, ErrorNote, activeTask, timeLabel } from './components.js';
@@ -90,6 +91,10 @@ export function TaskDetail({
   const [busy, setBusy] = useState(false);
   const bot = data.bots.find((item) => item.id === task.botId);
   const children = data.tasks.filter((item) => item.parentId === task.id);
+  const retryBlocker = childTaskRetryBlocker(children);
+  const canContinue =
+    (task.status === 'waiting_input' && task.coordinationPaused) ||
+    (!task.reconciliationRequired && ['failed', 'interrupted', 'cancelled'].includes(task.status));
   const artifacts = data.artifacts.filter(
     (item) => task.artifactIds.includes(item.id) && isDeliverableArtifact(item),
   );
@@ -102,6 +107,7 @@ export function TaskDetail({
   const stopping = stoppingTask(task, latestRun);
   const processes = (data.processes ?? []).filter((item) => item.taskId === task.id);
   async function retry() {
+    if (retryBlocker) return;
     setBusy(true);
     setError('');
     try {
@@ -178,7 +184,7 @@ export function TaskDetail({
       )}
       <div className="flex gap-2">
         {task.status === 'waiting_input' && task.coordinationPaused && (
-          <Button disabled={busy} onClick={() => void retry()}>
+          <Button disabled={busy || !!retryBlocker} onClick={() => void retry()}>
             <RotateCcw size={14} />
             {busy ? '继续中…' : '继续处理'}
           </Button>
@@ -204,12 +210,38 @@ export function TaskDetail({
         )}
         {!task.reconciliationRequired &&
           ['failed', 'interrupted', 'cancelled'].includes(task.status) && (
-            <Button disabled={busy} onClick={() => void retry()}>
+            <Button disabled={busy || !!retryBlocker} onClick={() => void retry()}>
               <RotateCcw size={14} />
               {busy ? '恢复中…' : '继续原任务'}
             </Button>
           )}
       </div>
+      {canContinue && retryBlocker && (
+        <div className="rounded-lg bg-amber-50 p-3 text-xs leading-5 text-amber-800">
+          <p>
+            {retryBlocker.reason === 'reconciliation'
+              ? '请先核查以下成员任务的外部操作结果，再继续。'
+              : '请等待以下成员任务结束，再继续。'}
+          </p>
+          <ul className="mt-2 grid gap-1">
+            {retryBlocker.tasks.map((child) => (
+              <li key={child.id} className="[overflow-wrap:anywhere]">
+                {onSelect ? (
+                  <button className="text-left underline" onClick={() => onSelect(child.id)}>
+                    {data.bots.find((item) => item.id === child.botId)?.name ?? '成员'}：
+                    {recordTaskTitle(child)}
+                  </button>
+                ) : (
+                  <span>
+                    {data.bots.find((item) => item.id === child.botId)?.name ?? '成员'}：
+                    {recordTaskTitle(child)}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <ErrorNote error={error} />
       {approvals.map((item) => (
         <ApprovalCard key={item.id} approval={item} data={data} mutate={mutate} />
