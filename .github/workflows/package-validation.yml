@@ -194,6 +194,10 @@ jobs:
           github-token: ${{ github.token }}
       - name: Verify package bytes and generate update metadata
         run: node scripts/ci/release-metadata.mjs
+      - name: Require successful source validation on both platforms
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ci/source-validation.mjs
       - name: Upload to matching Release draft
         env:
           GH_TOKEN: ${{ github.token }}
