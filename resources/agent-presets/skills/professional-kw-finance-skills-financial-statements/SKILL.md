@@ -18,7 +18,7 @@ description: "依据试算平衡表或财务明细编制财务报表，比较历
 2. 收款按应收客户、合同付款计划和回款概率拆分。按用户确认基准、延迟及压力情景分别建表；未知到账时间列入缺口，不加进任何一周基准收款。
 3. 付款分工资、供应商、税费、租金、投资与还本付息；已在付款计划里的项目不得再从利润或应付余额重复扣除。
 4. 每周期末 = 期初 + 经营/投资/筹资实际预计收款 - 对应付款；下一周期初 = 上周期末。对现金流量表用间接法时，营运资本变化、非现金调整与直接法收付表分别展示并勾稽。
-5. 给出每周期末、期间最低余额、首次低于阈值时点和资金缺口。余额为正也可存在压力情景风险；收入或付款未知时不要给假精确的runway。
+5. 给出每周期末和期间最低余额。阈值已确认时，按时间顺序逐周比较余额，报告第一次低于阈值的周次及该周缺口；最低余额周单独列示。阈值未知时将首次跌破和相对缺口标待确认；假设情景须明确假设值并逐周复算。余额为正也可存在压力情景风险；收入或付款未知时不要给假精确的runway。
 6. 校验：期初10000，第一周收3000付5000得8000；第二周收2000付8000得2000；第三周收6000付2000得6000。未收账面收入4000不额外加入。
 
 
@@ -125,20 +125,9 @@ For each line item, calculate:
 
 #### Materiality Thresholds
 
-Define what constitutes a "material" variance requiring investigation. Common approaches:
+Apply the organization's user-confirmed materiality policy, recording its source, period, benchmark and trigger rule. The policy may use an amount, a percentage, a combination, or different limits by line item.
 
-- **Fixed dollar threshold:** Variances exceeding a set dollar amount (e.g., $50K, $100K)
-- **Percentage threshold:** Variances exceeding a set percentage (e.g., 10%, 15%)
-- **Combined:** Either the dollar OR percentage threshold is exceeded
-- **Scaled:** Different thresholds for different line items based on their size and volatility
-
-*Example thresholds (adjust for your organization):*
-
-| Line Item Size | Dollar Threshold | Percentage Threshold |
-|---------------|-----------------|---------------------|
-| > $10M        | $500K           | 5%                  |
-| $1M - $10M    | $100K           | 10%                 |
-| < $1M         | $50K            | 15%                 |
+When the policy is absent, mark materiality and mandatory investigation triggers as pending confirmation. Calculate all relevant variances and explain their drivers; recommend follow-up based on size, unusual movement and evidence gaps without assigning an unconfirmed numerical cutoff. A proposed threshold must be labeled for approval and kept separate from current findings.
 
 #### Variance Decomposition
 

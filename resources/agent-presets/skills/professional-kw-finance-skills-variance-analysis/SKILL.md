@@ -108,23 +108,20 @@ Decompose by:
 
 ### Setting Thresholds
 
-Materiality thresholds determine which variances require investigation and narrative explanation. Set thresholds based on:
+Use thresholds explicitly supplied or confirmed by the user for this organization, period and comparison. Record the source, amount or percentage, comparison basis, and whether either or both limits must be exceeded. Apply only those confirmed rules when labeling a variance material or mandatory to investigate.
 
-1. **Financial statement materiality:** Typically 1-5% of a key benchmark (revenue, total assets, net income)
-2. **Line item size:** Larger line items warrant lower percentage thresholds
-3. **Volatility:** More volatile line items may need higher thresholds to avoid noise
-4. **Management attention:** What level of variance would change a decision?
+If no threshold is supplied, mark materiality as pending confirmation. Still calculate and explain the amount, percentage and business drivers; rank suggested follow-up by absolute impact, unusual direction and evidence gaps. Suggested priorities are analyst recommendations, not an established policy trigger.
 
-### Recommended Threshold Framework
+### Threshold Record
 
-| Comparison Type | Dollar Threshold | Percentage Threshold | Trigger |
-|----------------|-----------------|---------------------|---------|
-| Actual vs Budget | Organization-specific | 10% | Either exceeded |
-| Actual vs Prior Period | Organization-specific | 15% | Either exceeded |
-| Actual vs Forecast | Organization-specific | 5% | Either exceeded |
-| Sequential (MoM) | Organization-specific | 20% | Either exceeded |
+| Comparison Type | Amount Threshold | Percentage Threshold | Trigger Rule | Source / Status |
+|----------------|------------------|----------------------|--------------|-----------------|
+| Actual vs Budget | User-confirmed | User-confirmed | User-confirmed | Pending if absent |
+| Actual vs Prior Period | User-confirmed | User-confirmed | User-confirmed | Pending if absent |
+| Actual vs Forecast | User-confirmed | User-confirmed | User-confirmed | Pending if absent |
+| Sequential (MoM) | User-confirmed | User-confirmed | User-confirmed | Pending if absent |
 
-*Set dollar thresholds based on your organization's size. Common practice: 0.5%-1% of revenue for income statement items.*
+When asked to propose a threshold, label it as a candidate for approval and explain its benchmark and rationale. Keep proposed rules separate from the current variance conclusions until confirmed.
 
 ### Investigation Priority
 

@@ -101,7 +101,7 @@
       ],
       "group": "案件材料",
       "rank": 2,
-      "instructions": "先按岗位选择并读取配套技能，再基于实际输入开展工作。使用中文，区分事实、推断与未知。遵守 App 已授予的工具、文件和外部连接权限。只处理当前任务资料，所有成果可追溯。默认交付 Markdown/CSV；要件仅按律师提供的清单建立，不自行推定中国法律要件或证据效力。\n\n技能分工：先读 chronology 按事实命题建立来源时间线；需要逐件提取字段时读 tabular-review，交付案件现状摘要时再读 matter-briefing。优先呈现同一事实的支持材料、冲突与证据缺口。",
+      "instructions": "先按岗位选择并读取配套技能，再基于实际输入开展工作。使用中文，区分事实、推断与未知。遵守 App 已授予的工具、文件和外部连接权限。只处理当前任务资料，所有成果可追溯。默认交付 Markdown/CSV；要件仅按律师提供的清单建立，不自行推定中国法律要件或证据效力。\n\n技能分工：先读 chronology 按事实命题建立来源时间线；需要逐件提取字段时读 tabular-review，交付案件现状摘要时再读 matter-briefing。优先呈现同一事实的支持材料、冲突与证据缺口。\n\n矛盾清单只收录同一对象、事件、时间与口径下相互排斥的陈述；约定、发送和收到分别建事件，初稿与源文件分别建交付对象。付款陈述缺凭证记证据缺口，交付范围不明记待确认事项，各类问题分别计数。",
       "examples": [
         "请结合我提供的资料，按逐条出处建立事实时间线和材料字段表，保留矛盾与缺口。"
       ],
@@ -1333,7 +1333,7 @@
           "name": "variance-analysis",
           "description": "预算与实际量价组合差异的顺序替换桥接，严格对账",
           "directory": "skills/professional-kw-finance-skills-variance-analysis",
-          "digest": "a3cecd79433c067a0fc068f88ea104a578a65ad8cb52aa3337ce45caf3ae8f60",
+          "digest": "1725795ba7b0aab7f54b7bb26ffbaff396562cb0abceb4d6f4e4c98b58111d83",
           "source": {
             "repository": "https://github.com/anthropics/knowledge-work-plugins",
             "commit": "02ffa99ff00ce4d3046ccebabb8357cb39f3ab06",
@@ -1348,7 +1348,7 @@
           "name": "财务报表与现金预测",
           "description": "依据试算平衡表或财务明细编制财务报表，比较历史及预算差异，并制作13周滚动现金收付预测；用于月季年报告和资金计划。",
           "directory": "skills/professional-kw-finance-skills-financial-statements",
-          "digest": "d77ce692acfca103e83fed4ff89eb804df2d7d0a335b15d0ae5a1d8c1679a513",
+          "digest": "d85e419902e84f842f2f70bb9bcaaf526a627705e18a468747b47e3b8518bf60",
           "source": {
             "repository": "https://github.com/anthropics/knowledge-work-plugins",
             "commit": "02ffa99ff00ce4d3046ccebabb8357cb39f3ab06",
@@ -1509,7 +1509,7 @@
           "name": "财务报表与现金预测",
           "description": "依据试算平衡表或财务明细编制财务报表，比较历史及预算差异，并制作13周滚动现金收付预测；用于月季年报告和资金计划。",
           "directory": "skills/professional-kw-finance-skills-financial-statements",
-          "digest": "d77ce692acfca103e83fed4ff89eb804df2d7d0a335b15d0ae5a1d8c1679a513",
+          "digest": "d85e419902e84f842f2f70bb9bcaaf526a627705e18a468747b47e3b8518bf60",
           "source": {
             "repository": "https://github.com/anthropics/knowledge-work-plugins",
             "commit": "02ffa99ff00ce4d3046ccebabb8357cb39f3ab06",
@@ -1624,7 +1624,7 @@
           "name": "财务报表与现金预测",
           "description": "依据试算平衡表或财务明细编制财务报表，比较历史及预算差异，并制作13周滚动现金收付预测；用于月季年报告和资金计划。",
           "directory": "skills/professional-kw-finance-skills-financial-statements",
-          "digest": "d77ce692acfca103e83fed4ff89eb804df2d7d0a335b15d0ae5a1d8c1679a513",
+          "digest": "d85e419902e84f842f2f70bb9bcaaf526a627705e18a468747b47e3b8518bf60",
           "source": {
             "repository": "https://github.com/anthropics/knowledge-work-plugins",
             "commit": "02ffa99ff00ce4d3046ccebabb8357cb39f3ab06",
@@ -1715,7 +1715,7 @@
           "name": "财务报表与现金预测",
           "description": "依据试算平衡表或财务明细编制财务报表，比较历史及预算差异，并制作13周滚动现金收付预测；用于月季年报告和资金计划。",
           "directory": "skills/professional-kw-finance-skills-financial-statements",
-          "digest": "d77ce692acfca103e83fed4ff89eb804df2d7d0a335b15d0ae5a1d8c1679a513",
+          "digest": "d85e419902e84f842f2f70bb9bcaaf526a627705e18a468747b47e3b8518bf60",
           "source": {
             "repository": "https://github.com/anthropics/knowledge-work-plugins",
             "commit": "02ffa99ff00ce4d3046ccebabb8357cb39f3ab06",
@@ -1730,7 +1730,7 @@
           "name": "variance-analysis",
           "description": "预算与实际量价组合差异的顺序替换桥接，严格对账",
           "directory": "skills/professional-kw-finance-skills-variance-analysis",
-          "digest": "a3cecd79433c067a0fc068f88ea104a578a65ad8cb52aa3337ce45caf3ae8f60",
+          "digest": "1725795ba7b0aab7f54b7bb26ffbaff396562cb0abceb4d6f4e4c98b58111d83",
           "source": {
             "repository": "https://github.com/anthropics/knowledge-work-plugins",
             "commit": "02ffa99ff00ce4d3046ccebabb8357cb39f3ab06",
@@ -4682,7 +4682,7 @@
       ],
       "group": "销售／商务／外贸",
       "rank": 3,
-      "instructions": "先读取与任务核心职责相匹配的配套技能及需要的引用资源，再开展工作。澄清现状、集成点、权限和性能要求；逐需求标已支持、需验证、未支持；按场景设计演示和POC步骤；定义验收阈值、数据、责任人与回滚；交付技术方案和风险。 默认使用中文，遵守 App 当前授予的工具和连接权限；基于实际资料逐项保留来源，事实、推断与未知分开。成果另存并登记，发送、发布、审批或账务操作须有实际授权和已知结果。",
+      "instructions": "先读取与任务核心职责相匹配的配套技能及需要的引用资源，再开展工作。澄清现状、集成点、权限和性能要求；逐需求标已支持、需验证、未支持；按场景设计演示和POC步骤；定义验收阈值、数据、责任人与回滚；交付技术方案和风险。 默认使用中文，遵守 App 当前授予的工具和连接权限；基于实际资料逐项保留来源，事实、推断与未知分开。成果另存并登记，发送、发布、审批或账务操作须有实际授权和已知结果。\n\n按需求中的规模、频率、权限和集成条件逐项核对证据，任何必要条件待验证时，该需求整体保持需验证；演示话术、覆盖评分和POC矩阵使用同一状态，完成POC后再按实际结果更新。",
       "examples": [
         "请结合提供资料，准备技术发现、产品演示和POC计划，建立需求覆盖与验收矩阵。"
       ],
@@ -4776,7 +4776,7 @@
       ],
       "group": "销售／商务／外贸",
       "rank": 4,
-      "instructions": "先读取与任务核心职责相匹配的配套技能及需要的引用资源，再开展工作。确认币种、含税口径、有效期和交付范围；逐项计算原价、折扣、净价、税费、运费与合计；按实际成本算毛利；核对企业审批阈值；提交报价草稿和待确认商业条件。 默认使用中文，遵守 App 当前授予的工具和连接权限；基于实际资料逐项保留来源，事实、推断与未知分开。成果另存并登记，发送、发布、审批或账务操作须有实际授权和已知结果。 逐商品报价的数量、币种、税/运费按企业配置逐项核算；审批路由推荐不能等同已批准。",
+      "instructions": "先读取与任务核心职责相匹配的配套技能及需要的引用资源，再开展工作。确认币种、含税口径、有效期和交付范围；逐项计算原价、折扣、净价、税费、运费与合计；按实际成本算毛利；核对企业审批阈值；提交报价草稿和待确认商业条件。 默认使用中文，遵守 App 当前授予的工具和连接权限；基于实际资料逐项保留来源，事实、推断与未知分开。成果另存并登记，发送、发布、审批或账务操作须有实际授权和已知结果。 逐商品报价的数量、币种、税/运费按企业配置逐项核算；审批路由推荐不能等同已批准。\n\n主报价和每个备选折扣方案共用同一计算口径，保留净价、税额、含税总额和毛利的可复算公式；逐项复算后再写入正文、审批建议及摘要，所有位置保持一致。 已授权命令计算时，用脚本读取原始报价资料，计算主方案及备选方案的明细与汇总并保存机器结果；报告和摘要从同一结果填入。工具不可用时明确给出逐项公式及待复核状态。",
       "examples": [
         "请结合提供资料，按企业给定价目、数量、折扣和税费形成逐项报价、毛利测算与审批建议。"
       ],
@@ -4870,7 +4870,7 @@
       ],
       "group": "销售／商务／外贸",
       "rank": 5,
-      "instructions": "先读取与任务核心职责相匹配的配套技能及需要的引用资源，再开展工作。提取RFP条款编号、强制/评分要求和提交日期；逐项标满足、部分满足、缺证、未满足；引用现有能力或证据，设计POC验证；汇总缺口责任人和澄清问题；按用户模板形成响应草稿。 默认使用中文，遵守 App 当前授予的工具和连接权限；基于实际资料逐项保留来源，事实、推断与未知分开。成果另存并登记，发送、发布、审批或账务操作须有实际授权和已知结果。 本岗位覆盖RFP需求响应；中国法定资格、采购格式、签章与废标条款必须用用户提供的对应规范逐项复核。",
+      "instructions": "先读取与任务核心职责相匹配的配套技能及需要的引用资源，再开展工作。提取RFP条款编号、强制/评分要求和提交日期；逐项标满足、部分满足、缺证、未满足；引用现有能力或证据，设计POC验证；汇总缺口责任人和澄清问题；按用户模板形成响应草稿。 默认使用中文，遵守 App 当前授予的工具和连接权限；基于实际资料逐项保留来源，事实、推断与未知分开。成果另存并登记，发送、发布、审批或账务操作须有实际授权和已知结果。 本岗位覆盖RFP需求响应；中国法定资格、采购格式、签章与废标条款必须用用户提供的对应规范逐项复核。\n\n响应结论覆盖条款的完整条件；通用功能证据只支持其明确范围，频率、容量、交付数量或认证尚未核实则标部分满足或缺证。评分与响应表保持同一证据状态，补证计划单独列示。",
       "examples": [
         "请结合提供资料，将RFP要求逐条拆成可追溯响应矩阵、证明材料和商务条件清单。"
       ],

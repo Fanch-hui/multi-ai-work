@@ -4,3 +4,4 @@ Path: finance/skills/variance-analysis/SKILL.md
 License: Apache-2.0
 Modified by multi-AI work: Chinese App execution contract, self-contained resources, tool and permission mapping.
 Modified variance decomposition to sequential volume/mix/price bridge with exact reconciliation; corrected headcount/rate interaction.
+Adapted materiality assessment to organization-confirmed thresholds and explicit pending status.

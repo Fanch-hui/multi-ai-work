@@ -4,3 +4,4 @@ Path: finance/skills/financial-statements/SKILL.md
 License: Apache-2.0
 Modified by multi-AI work: Chinese App execution contract, self-contained resources, tool and permission mapping.
 Added 13-week cash receipt/disbursement forecasting method and numerical reconciliation example.
+Adapted materiality to confirmed organizational policy and cash threshold checks to chronological weekly balances.

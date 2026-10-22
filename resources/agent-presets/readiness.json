@@ -19,13 +19,20 @@
   },
   "legal-evidence": {
     "version": "1.0.1",
-    "contentReview": "pending_review",
-    "runtimeAcceptance": "pending_review",
-    "presetDigest": "e2384a9cbb80160ba4dc68c6af46bcc79a1a4eca9e52666cf29c728e23f5a3c7",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "e93481ebcd694f42a8004bc9b16a9fa8da6c42532219fa0b513120dc85d5f582",
     "skillDigests": {
       "chronology": "376cc044ccba713d8ab17ff7263a5201c552fdf4d018a3e9eb2952c58ed8f219",
       "tabular-review": "3e5b5b1704374f153522e80ebcdc4183b5552d3354324f45166dbad6bbd88185",
       "matter-briefing": "755e20933430237abd7a481dd2a26f433bc6fa0c3c175097813e378591de1fe9"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "模拟证据材料矛盾；完整修订复验"
     }
   },
   "student-course-tutor": {
@@ -210,34 +217,55 @@
   },
   "finance-data-assistant": {
     "version": "1.0.1",
-    "contentReview": "pending_review",
-    "runtimeAcceptance": "pending_review",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
     "presetDigest": "66e233e1be8c8be458494ab1d41accb304ed56d81105f915d98455ce9393b156",
     "skillDigests": {
       "professional-fs-clean-data-xls": "5cbfe09d76757ad8e8e8d5573fe2dc83a9ab35438412f603b6d263e47b3ea338",
       "professional-fs-audit-xls": "6b9919c260cf355a13b3e4b45fa47888b05679965958f96f84a8784da176ac8a"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "财务资料助理代表性模拟资料任务"
     }
   },
   "finance-reconciliation": {
     "version": "1.0.1",
-    "contentReview": "pending_review",
-    "runtimeAcceptance": "pending_review",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
     "presetDigest": "457180c6dc45f45dd76346db4f4627a7622f827faa5d6ffc72c78500f4f00821",
     "skillDigests": {
       "professional-kw-finance-skills-reconciliation": "f2ce52df4df1c619f8d9e661ec9cf815b993fb69c710f79c816daad0acb90079",
       "professional-fs-audit-xls": "6b9919c260cf355a13b3e4b45fa47888b05679965958f96f84a8784da176ac8a",
       "professional-fs-clean-data-xls": "5cbfe09d76757ad8e8e8d5573fe2dc83a9ab35438412f603b6d263e47b3ea338"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "对账助理代表性模拟资料任务"
     }
   },
   "finance-budget-analyst": {
     "version": "1.0.1",
-    "contentReview": "pending_review",
-    "runtimeAcceptance": "pending_review",
-    "presetDigest": "9b6c1acb2b09e9627729da7e5d3f0e932039bd1b32bad394168473aaaa27ec88",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "b20de9bd62b52d9e4fcc7ffc045a328e5add63c5351f564e711ababb833e1dc4",
     "skillDigests": {
-      "professional-kw-finance-skills-variance-analysis": "a3cecd79433c067a0fc068f88ea104a578a65ad8cb52aa3337ce45caf3ae8f60",
-      "professional-kw-finance-skills-financial-statements": "d77ce692acfca103e83fed4ff89eb804df2d7d0a335b15d0ae5a1d8c1679a513",
+      "professional-kw-finance-skills-variance-analysis": "1725795ba7b0aab7f54b7bb26ffbaff396562cb0abceb4d6f4e4c98b58111d83",
+      "professional-kw-finance-skills-financial-statements": "d85e419902e84f842f2f70bb9bcaaf526a627705e18a468747b47e3b8518bf60",
       "professional-fs-audit-xls": "6b9919c260cf355a13b3e4b45fa47888b05679965958f96f84a8784da176ac8a"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "预算分析师代表性模拟资料任务；完整修订复验"
     }
   },
   "finance-cost-analyst": {
@@ -258,35 +286,56 @@
   },
   "finance-cashflow-analyst": {
     "version": "1.0.1",
-    "contentReview": "pending_review",
-    "runtimeAcceptance": "pending_review",
-    "presetDigest": "cef70099d274fc3b5cb5518e1518a5a20a52968094a1e43da7554c2a3570711d",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "5eb00d9038b10d4e2d0f4ccd7152e1e3b763527d23ea4441844a262af0ea994c",
     "skillDigests": {
-      "professional-kw-finance-skills-financial-statements": "d77ce692acfca103e83fed4ff89eb804df2d7d0a335b15d0ae5a1d8c1679a513",
+      "professional-kw-finance-skills-financial-statements": "d85e419902e84f842f2f70bb9bcaaf526a627705e18a468747b47e3b8518bf60",
       "professional-kw-finance-skills-reconciliation": "f2ce52df4df1c619f8d9e661ec9cf815b993fb69c710f79c816daad0acb90079",
       "professional-fs-audit-xls": "6b9919c260cf355a13b3e4b45fa47888b05679965958f96f84a8784da176ac8a"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "现金流分析师代表性模拟资料任务；完整修订复验"
     }
   },
   "finance-business-analyst": {
     "version": "1.0.1",
-    "contentReview": "pending_review",
-    "runtimeAcceptance": "pending_review",
-    "presetDigest": "671fa3c1f58ac6839fed5505541ca45ebdcc76add73319c5ba6913c1a0333c29",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "f65aba4ce4b0b5d486ae7c9486b56066eeddcc406384a30da306dadd69c3fc29",
     "skillDigests": {
       "professional-fs-unit-economics": "5907e1a80c8a19ae204d9e9ae8ff86d09aca4a1d6680b88c32cfc8ec83d26431",
-      "professional-kw-finance-skills-financial-statements": "d77ce692acfca103e83fed4ff89eb804df2d7d0a335b15d0ae5a1d8c1679a513",
+      "professional-kw-finance-skills-financial-statements": "d85e419902e84f842f2f70bb9bcaaf526a627705e18a468747b47e3b8518bf60",
       "professional-fs-audit-xls": "6b9919c260cf355a13b3e4b45fa47888b05679965958f96f84a8784da176ac8a"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "经营分析师代表性模拟资料任务；完整修订复验"
     }
   },
   "finance-reporting": {
     "version": "1.0.1",
-    "contentReview": "pending_review",
-    "runtimeAcceptance": "pending_review",
-    "presetDigest": "eff01bc1589ea9f5659c36dfb5d8ebc6d6d8b38ebd73a31d5b288366282990c1",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "c3274726e263b25931e047e76fba97c7ebe3ed33e63ff44ecf3430319d8bf2d7",
     "skillDigests": {
-      "professional-kw-finance-skills-financial-statements": "d77ce692acfca103e83fed4ff89eb804df2d7d0a335b15d0ae5a1d8c1679a513",
-      "professional-kw-finance-skills-variance-analysis": "a3cecd79433c067a0fc068f88ea104a578a65ad8cb52aa3337ce45caf3ae8f60",
+      "professional-kw-finance-skills-financial-statements": "d85e419902e84f842f2f70bb9bcaaf526a627705e18a468747b47e3b8518bf60",
+      "professional-kw-finance-skills-variance-analysis": "1725795ba7b0aab7f54b7bb26ffbaff396562cb0abceb4d6f4e4c98b58111d83",
       "professional-fs-audit-xls": "6b9919c260cf355a13b3e4b45fa47888b05679965958f96f84a8784da176ac8a"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "财务报告专员代表性模拟资料任务；完整修订复验"
     }
   },
   "marketing-market-researcher": {
@@ -687,22 +736,36 @@
   },
   "design-creative-planner": {
     "version": "1.0.1",
-    "contentReview": "pending_review",
-    "runtimeAcceptance": "pending_review",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
     "presetDigest": "8847980d20f821c1330afabceb9f7b0a8e9fc18bf5131b2f69dae37ac6643caa",
     "skillDigests": {
       "business-banner-design": "eab864436b7e4c177a3476cd1c1f2cc85d6cfc743957e342a231c4d7ce097fef",
       "business-brand": "a717103b994fa034dab783b3de014cbe0a7af6af6264fdb2080b7b46eb31ea89"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "品牌Banner方向；完整修订复验"
     }
   },
   "design-brand-designer": {
     "version": "1.0.1",
-    "contentReview": "pending_review",
-    "runtimeAcceptance": "pending_review",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
     "presetDigest": "b4ed6ec07e7690218459e5de773e8aeb4115746ce61b9f48eb9a43d397fea424",
     "skillDigests": {
       "business-brand": "a717103b994fa034dab783b3de014cbe0a7af6af6264fdb2080b7b46eb31ea89",
       "business-design-system": "f154078837dd1f565a34837ede9fe66e96ab2bd1fcfb6d9746d135a942868316"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "品牌视觉与令牌；完整修订复验"
     }
   },
   "design-interaction-designer": {
@@ -778,78 +841,127 @@
   },
   "sales-account-research": {
     "version": "1.0.1",
-    "contentReview": "pending_review",
-    "runtimeAcceptance": "pending_review",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
     "presetDigest": "68c813985ac78b45b913bb3e764f8774e6ff6d4301940ccd396c5a6db1ea40ce",
     "skillDigests": {
       "professional-kw-sales-skills-account-research": "e1d995c0a04d7e3c1ffda21c572e4070579e83343449244a1d7baeda15c7f963",
       "professional-kw-sales-skills-call-prep": "f2a3118de1a0a031190274c0ad196ca461d07f8eb3a58b0cb9ba59e490d4ca67",
       "professional-mk-customer-research": "0a32a27416a2d2720567251b50a1b4636d08d4c989786cc1c31a8c680fe7db33"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "客户研究专员代表性模拟资料任务"
     }
   },
   "sales-solution-proposal": {
     "version": "1.0.1",
-    "contentReview": "pending_review",
-    "runtimeAcceptance": "pending_review",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
     "presetDigest": "6855b0bd6187e057e33bb0b4c3d8054099342bdd73217d00093347f1d2b841a7",
     "skillDigests": {
       "professional-mk-sales-enablement": "30498e92c23aea860cb799f6ae03a46bda15b0de284903f9d9a51f58c80ba3a6",
       "professional-kw-sales-skills-create-an-asset": "9bb0096bed51fa0766daa0737f9f44f2c73f5075c0d9727cc2aed1e103018d81",
       "professional-cz-sales-engineer": "8b411f5793c54a298a96256e873e6e9d761483604191c2927ca561d90670f7cb"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "销售方案顾问代表性模拟资料任务；完整修订复验"
     }
   },
   "sales-presales-support": {
     "version": "1.0.1",
-    "contentReview": "pending_review",
-    "runtimeAcceptance": "pending_review",
-    "presetDigest": "6e9aa2fde7e43d403768fcc0c9b41e88a9fa5e864786b51954425e1dbdfd734a",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "a3958bb833539014098103d8cac1e5cacd71bdf0a7d8ae45d019b7c23ae93705",
     "skillDigests": {
       "professional-cz-sales-engineer": "8b411f5793c54a298a96256e873e6e9d761483604191c2927ca561d90670f7cb",
       "professional-mk-sales-enablement": "30498e92c23aea860cb799f6ae03a46bda15b0de284903f9d9a51f58c80ba3a6",
       "professional-kw-sales-skills-call-prep": "f2a3118de1a0a031190274c0ad196ca461d07f8eb3a58b0cb9ba59e490d4ca67"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "售前支持专员代表性模拟资料任务；完整修订复验"
     }
   },
   "sales-commercial-quote": {
     "version": "1.0.1",
-    "contentReview": "pending_review",
-    "runtimeAcceptance": "pending_review",
-    "presetDigest": "428cf6cde3a8a388b3f6d8e8e3b31f259894869d10dc0e5038b6e60629745673",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "df0d69a5258ef595d235a4418d54decb09103593d718016324e68b796e74e3b6",
     "skillDigests": {
       "professional-cz-deal-desk": "7d92e0653da31fc160a7ec06035e44ef646b613aad2989d8c99c23b5c01f2fe5",
       "professional-cz-pricing-strategist": "ae7a56604b3e379ea884452ff164e81f255022bec6e83ec4a9a2ec46630eaf8f",
       "professional-mk-sales-enablement": "30498e92c23aea860cb799f6ae03a46bda15b0de284903f9d9a51f58c80ba3a6"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "商务报价专员代表性模拟资料任务；完整修订复验"
     }
   },
   "sales-rfp-assistant": {
     "version": "1.0.1",
-    "contentReview": "pending_review",
-    "runtimeAcceptance": "pending_review",
-    "presetDigest": "df7ad7fa274df8ca0ec111783bc45fcad373e7fe9b3859a3149a2c3369c1928b",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
+    "presetDigest": "26936d800361f3094f6bafa8a5941e4a0b83f87183d6c75e7b9f9cd0900e6496",
     "skillDigests": {
       "professional-cz-sales-engineer": "8b411f5793c54a298a96256e873e6e9d761483604191c2927ca561d90670f7cb",
       "professional-mk-sales-enablement": "30498e92c23aea860cb799f6ae03a46bda15b0de284903f9d9a51f58c80ba3a6",
       "professional-cz-deal-desk": "7d92e0653da31fc160a7ec06035e44ef646b613aad2989d8c99c23b5c01f2fe5"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "招投标助理代表性模拟资料任务；完整修订复验"
     }
   },
   "sales-followup": {
     "version": "1.0.1",
-    "contentReview": "pending_review",
-    "runtimeAcceptance": "pending_review",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
     "presetDigest": "da4230fb488ef33c116a449ef05e1241eb2785006f9cb0b96498fd15155ad20b",
     "skillDigests": {
       "professional-kw-sales-skills-call-summary": "9a2b323102c08dde722f460754f3454b75fdbd19955141e8a8d370e5c02ae24f",
       "professional-kw-sales-skills-draft-outreach": "d71636f604fc80426ce7d12a65479f8d44e12d939535b17e25de5a2024c80916",
       "professional-mk-cold-email": "d901d675b45ee635a4c23b1e1ff0ff4ed52a176068a571e6570fdfbf6f9f9567"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "销售跟进助理代表性模拟资料任务；完整修订复验"
     }
   },
   "sales-export-assistant": {
     "version": "1.0.1",
-    "contentReview": "pending_review",
-    "runtimeAcceptance": "pending_review",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
     "presetDigest": "00e3ed5872f4d33a8ab4484d7bd212b7c7876465086126ade27ae66f06de2f7e",
     "skillDigests": {
       "professional-mk-cold-email": "d901d675b45ee635a4c23b1e1ff0ff4ed52a176068a571e6570fdfbf6f9f9567",
       "professional-kw-sales-skills-draft-outreach": "d71636f604fc80426ce7d12a65479f8d44e12d939535b17e25de5a2024c80916"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "外贸业务助理代表性模拟资料任务；完整修订复验"
     }
   },
   "research-literature-search": {
@@ -944,24 +1056,38 @@
   },
   "research-writing-editor": {
     "version": "1.0.1",
-    "contentReview": "pending_review",
-    "runtimeAcceptance": "pending_review",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
     "presetDigest": "548969c272dd2a436f2fa3e7b8cb603e9a7cabd93b1f2d1981d07f215b9a0cf1",
     "skillDigests": {
       "professional-sc-scientific-writing": "e6bf0c47da08e77081d1a79b9ca7fc2d76a49fdf4cff5b21981f0d9fc853e716",
       "professional-sc-citation-management": "7e31e1a2d67638d690ebd2ceb210b27fbf8f19157d04c6a7122d6ad77a0f2273",
       "professional-sc-peer-review": "d31fb1d08047741fa64e0327bb5fcf1875276070b558f8de6312d8579c765f9e"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "学术写作编辑代表性模拟资料任务；完整修订复验"
     }
   },
   "research-submission": {
     "version": "1.0.1",
-    "contentReview": "pending_review",
-    "runtimeAcceptance": "pending_review",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
     "presetDigest": "f27d725ed34d4bda83ac2b8ddd57fac4edd81e1abae00c671608c0fa05c861f2",
     "skillDigests": {
       "professional-sc-venue-templates": "4bc3e879da2a3f5943b57b3be801f3054bcbcd9a8dcf1d470456e16ee610d62c",
       "professional-sc-scientific-writing": "e6bf0c47da08e77081d1a79b9ca7fc2d76a49fdf4cff5b21981f0d9fc853e716",
       "professional-sc-peer-review": "d31fb1d08047741fa64e0327bb5fcf1875276070b558f8de6312d8579c765f9e"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "投稿材料助理代表性模拟资料任务；完整修订复验"
     }
   },
   "hr-job-analyst": {
@@ -1090,33 +1216,47 @@
   },
   "content-topics": {
     "version": "1.0.1",
-    "contentReview": "pending_review",
-    "runtimeAcceptance": "pending_review",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
     "presetDigest": "53f053d9d2151207c059628c0f09968ca40c3b2233c1e567315e6b907cba750f",
     "skillDigests": {
       "professional-mk-content-strategy": "53e59ba6dd90df9c58fc3ed961a2f748086c1047fc0f23938040d57b28c94b79",
       "professional-mk-customer-research": "0a32a27416a2d2720567251b50a1b4636d08d4c989786cc1c31a8c680fe7db33",
       "professional-mk-social": "4ce2d501dbbc8db32205e709b64d70835c71e3a35ab9baff38c00db573748b47"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "内容选题策划代表性模拟资料任务"
     }
   },
   "content-video-director": {
     "version": "1.0.1",
-    "contentReview": "pending_review",
-    "runtimeAcceptance": "pending_review",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
     "presetDigest": "1426518f69c56f82d9ef5395b62b97a229b7690a8a33bdacc64bcc3f39f98bca",
     "skillDigests": {
       "professional-mk-social": "4ce2d501dbbc8db32205e709b64d70835c71e3a35ab9baff38c00db573748b47",
       "professional-mk-video": "a71cc21cb5226bd1d9da036990e1a59279673080d81e8a761b432b209a9210c1",
       "professional-mk-ad-creative": "a1d7b08caf47afda76e6cb1e79cee186e76c48f5d763d7ba8aee752a4641e4fb"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "短视频编导代表性模拟资料任务；完整修订复验"
     }
   },
   "content-spoken-copy": {
     "version": "1.0.1",
     "contentReview": "passed",
     "runtimeAcceptance": "passed",
-    "presetDigest": "4c9a0686c72519fdfcf20fcf854eefcba3c5d201f745023d02af278476bd48c0",
+    "presetDigest": "5925f4b99a0d601e14c7df39f3edbe60cb23f24f83f8088f06e849decdd5beb6",
     "skillDigests": {
-      "professional-spoken-script": "992271cce8da99640e05479852d8b5290e06e228f1a07a32569e9fdee0ef7cef",
+      "professional-spoken-script": "fcb0c4af3427911bd3f18982980b6037031911d3ac1a50c5b8fcf4114c197ef8",
       "professional-mk-copy-editing": "44678b6a4b7ffb1d9abeda42ed2f3d251280f2620d71c889acbaff58244e27c4"
     },
     "scope": {
@@ -1129,56 +1269,91 @@
   },
   "content-article-editor": {
     "version": "1.0.1",
-    "contentReview": "pending_review",
-    "runtimeAcceptance": "pending_review",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
     "presetDigest": "e56079f51c0a9e6ef5eba053aa3c8e02a3ab81cf00a302b5365f0610b7b5f8dc",
     "skillDigests": {
       "professional-kw-marketing-skills-content-creation": "ccd07f6c4bab963bcc2220d50a58364fbe05f6684e19fdc23279b71d653d7d2d",
       "professional-mk-copy-editing": "44678b6a4b7ffb1d9abeda42ed2f3d251280f2620d71c889acbaff58244e27c4",
       "professional-kw-marketing-skills-brand-review": "b97c86868fad782f628a3afbca7bdfc23f1ffdb1338bd019f7d425252c6981a6"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "图文内容编辑代表性模拟资料任务"
     }
   },
   "content-proofreader": {
     "version": "1.0.1",
-    "contentReview": "pending_review",
-    "runtimeAcceptance": "pending_review",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
     "presetDigest": "61e6e81cbdca301754f0372892ded96f477d2d85f81cde44ebe30cd86bb77fb5",
     "skillDigests": {
       "professional-mk-copy-editing": "44678b6a4b7ffb1d9abeda42ed2f3d251280f2620d71c889acbaff58244e27c4",
       "professional-kw-marketing-skills-brand-review": "b97c86868fad782f628a3afbca7bdfc23f1ffdb1338bd019f7d425252c6981a6",
       "professional-mk-seo-audit": "4fe529e0135fc2b63ba8ec4f9a59d95ae5bb55b56824da6751d6ca0b6e15becb"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "内容审校代表性模拟资料任务；完整修订复验"
     }
   },
   "content-account-analyst": {
     "version": "1.0.1",
-    "contentReview": "pending_review",
-    "runtimeAcceptance": "pending_review",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
     "presetDigest": "7bee1d4798aaf73e2caa02caf6b992ed1b13074f8aab239f1084b4bccc292dec",
     "skillDigests": {
       "professional-kw-marketing-skills-performance-report": "0b19eebe5e7226611ad74fe1428a5cabd83bb412eb6932fef654ebc9cdbc048a",
       "professional-mk-social": "4ce2d501dbbc8db32205e709b64d70835c71e3a35ab9baff38c00db573748b47",
       "professional-mk-ab-testing": "ea8951f4cdb2b7c5142d1d3fd0a572f7605bdc68b58deeff793721130a51b592"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "账号运营分析师代表性模拟资料任务"
     }
   },
   "content-distribution": {
     "version": "1.0.1",
-    "contentReview": "pending_review",
-    "runtimeAcceptance": "pending_review",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
     "presetDigest": "b4e19b36e87856926df3afc8e14d9ec3c631b328e4a6a63657ffa74049aa5f66",
     "skillDigests": {
       "professional-mk-social": "4ce2d501dbbc8db32205e709b64d70835c71e3a35ab9baff38c00db573748b47",
       "professional-mk-content-strategy": "53e59ba6dd90df9c58fc3ed961a2f748086c1047fc0f23938040d57b28c94b79",
       "professional-mk-emails": "ce45ec2ec7a60c2f996fd00d220b7b3e0056b20f96e4e6ac84ef9203dc95764d"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "内容分发编辑代表性模拟资料任务；完整修订复验"
     }
   },
   "legal-materials": {
     "version": "1.0.1",
-    "contentReview": "pending_review",
-    "runtimeAcceptance": "pending_review",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
     "presetDigest": "5691ece8223ef109c53658d122f0da542904292f9478d588cbcd10a54791ac58",
     "skillDigests": {
       "tabular-review": "3e5b5b1704374f153522e80ebcdc4183b5552d3354324f45166dbad6bbd88185",
       "chronology": "376cc044ccba713d8ab17ff7263a5201c552fdf4d018a3e9eb2952c58ed8f219"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "版本与重复材料编目；完整修订复验"
     }
   },
   "legal-research": {
@@ -1777,13 +1952,20 @@
   },
   "manufacturing-corrective-action-coordinator": {
     "version": "1.0.1",
-    "contentReview": "pending_review",
-    "runtimeAcceptance": "pending_review",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
     "presetDigest": "b2cc5caaecd9376b59bec2f61fa77e39f7c11735d145e679ca5a04b280da8637",
     "skillDigests": {
       "wave2-eng-capa": "e857fabbd10f4784cf6bf05847e048e5247316e07ef2b93f7e0ec345bc0c996d",
       "wave2-eng-qualitymetrics": "3cb5cf306c832add53fa6b89a5e70c7e5fb817008edd7c950094928fd4cc1ea5",
       "wave2-eng-doccontrol": "9fc910196470e881f23136a3905757f9750f06956a9681a7ecdf6bb8e7bb809a"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "整改实施与有效性样本不足"
     }
   },
   "manufacturing-quality-document-controller": {
@@ -1946,24 +2128,38 @@
   },
   "translation-business": {
     "version": "1.0.1",
-    "contentReview": "pending_review",
-    "runtimeAcceptance": "pending_review",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
     "presetDigest": "43d1f67bf461998126f1fc50224b7d3ecd934b9fd56b76feffa2faef2d5fb083",
     "skillDigests": {
       "wave2-lit-paragraph-translation": "68f55652087325eecf65833e90003f1a2b34b60476cd9df71f5de4d9e50f6266",
       "wave2-lit-glossary": "3be5788bc9c6e5d8136cf2f5a0a1cc3c5e05a8fe1dc9609764fc1760e485eb1d",
       "wave2-lit-bilingual-qa": "e3b86d7739b92d252921a7ec24d2d9dc3a5de3d2beb4d4f26c68e2d747833bc8"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "条件与承诺程度的商务翻译"
     }
   },
   "translation-technical": {
     "version": "1.0.1",
-    "contentReview": "pending_review",
-    "runtimeAcceptance": "pending_review",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
     "presetDigest": "f91f9c3854516845b669011d0c69c81673bbbbd14917cf35fc0f0b8c35320cd9",
     "skillDigests": {
       "wave2-lit-paragraph-translation": "68f55652087325eecf65833e90003f1a2b34b60476cd9df71f5de4d9e50f6266",
       "wave2-lit-glossary": "3be5788bc9c6e5d8136cf2f5a0a1cc3c5e05a8fe1dc9609764fc1760e485eb1d",
       "wave2-lit-bilingual-qa": "e3b86d7739b92d252921a7ec24d2d9dc3a5de3d2beb4d4f26c68e2d747833bc8"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "保留代码公式的技术说明翻译"
     }
   },
   "translation-literary": {
@@ -2020,12 +2216,19 @@
   },
   "translation-bilingual-reviewer": {
     "version": "1.0.1",
-    "contentReview": "pending_review",
-    "runtimeAcceptance": "pending_review",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
     "presetDigest": "23f952f6a1ab823174aa047273f87a78ae5d7865e6f8abdcde4e4898cadca7b3",
     "skillDigests": {
       "wave2-lit-bilingual-qa": "e3b86d7739b92d252921a7ec24d2d9dc3a5de3d2beb4d4f26c68e2d747833bc8",
       "wave2-lit-glossary": "3be5788bc9c6e5d8136cf2f5a0a1cc3c5e05a8fe1dc9609764fc1760e485eb1d"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "明确误译与漏译的双语审校"
     }
   },
   "translation-subtitle-translator": {
@@ -2552,34 +2755,55 @@
   },
   "project-management-planner": {
     "version": "1.0.1",
-    "contentReview": "pending_review",
-    "runtimeAcceptance": "pending_review",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
     "presetDigest": "0083a7eb6dcf2bcb5cec20916c090a5790cdc21232df19ca03921df4a3f6f5ed",
     "skillDigests": {
       "wave2-service-planning": "4dd0e43fdab9579c336de9421e09121b33aec94d8daf36c3f14d7c7a4df02441",
       "wave2-service-capacity": "b965654d9473354f24cdfca5f2831831a8f647cba567a1e257f0c5e24b785dfd",
       "wave2-service-risk": "029767263e8b9cdfa3c247024b8849672fea3235884a5d469af4cd954d45d729"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "范围、依赖及逐人容量计划；完整修订复验"
     }
   },
   "project-management-progress": {
     "version": "1.0.1",
-    "contentReview": "pending_review",
-    "runtimeAcceptance": "pending_review",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
     "presetDigest": "07afe5e514b4cc657b0a56cb0333ab1e43c3fc95984fba1fe4104dedc6e8f2a8",
     "skillDigests": {
       "wave2-service-progress": "0406e173b9c70a33e3f19a00106da85233432cc33b50933265adfe41a3b233cc",
       "wave2-service-capacity": "b965654d9473354f24cdfca5f2831831a8f647cba567a1e257f0c5e24b785dfd",
       "wave2-service-risk": "029767263e8b9cdfa3c247024b8849672fea3235884a5d469af4cd954d45d729"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "阻塞传播与统一进度分母"
     }
   },
   "project-management-resource": {
     "version": "1.0.1",
-    "contentReview": "pending_review",
-    "runtimeAcceptance": "pending_review",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
     "presetDigest": "fe3abe54148c123a3c6bdb64cdf4eae90fdf99ceccc494d64f9dc6792724751d",
     "skillDigests": {
       "wave2-service-capacity": "b965654d9473354f24cdfca5f2831831a8f647cba567a1e257f0c5e24b785dfd",
       "wave2-service-risk": "029767263e8b9cdfa3c247024b8849672fea3235884a5d469af4cd954d45d729"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "逐人超载与可行重排"
     }
   },
   "project-management-risk": {
@@ -2620,13 +2844,20 @@
   },
   "project-management-reporting": {
     "version": "1.0.1",
-    "contentReview": "pending_review",
-    "runtimeAcceptance": "pending_review",
+    "contentReview": "passed",
+    "runtimeAcceptance": "passed",
     "presetDigest": "b177f19f12be460493ad955fb6ad3cfa1c88cbb0867c5da501ccbb68d3b78746",
     "skillDigests": {
       "wave2-service-reporting": "f248cb13f38f850f0ff64dde78aa5a56d5d90234e9b2c0221434779bca05e0b1",
       "wave2-service-progress": "0406e173b9c70a33e3f19a00106da85233432cc33b50933265adfe41a3b233cc",
       "wave2-service-risk": "029767263e8b9cdfa3c247024b8849672fea3235884a5d469af4cd954d45d729"
+    },
+    "scope": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "provider": "qoder",
+      "model": "qfmodel",
+      "scenario": "状态报告与客户版本信息隔离；完整修订复验"
     }
   },
   "project-management-acceptance": {
