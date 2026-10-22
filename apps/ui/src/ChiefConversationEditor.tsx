@@ -56,6 +56,9 @@ export function ChiefConversationEditor({
         activeTask(task.status),
     );
   const editing = !!conversation;
+  const managed = connection?.provider === 'chatgpt' || connection?.provider === 'custom';
+  const canSaveReasoningDuringRun =
+    running && managed && model === (conversation?.model ?? chief?.model);
   useEffect(() => {
     if (!editing) return;
     let active = true;
@@ -152,6 +155,7 @@ export function ChiefConversationEditor({
                       required
                       className={inputClass}
                       value={model}
+                      disabled={running}
                       onChange={(event) => {
                         setModel(event.target.value);
                         setReasoning('');
@@ -169,6 +173,7 @@ export function ChiefConversationEditor({
                       required
                       className={inputClass}
                       value={model}
+                      disabled={running}
                       onChange={(event) => {
                         setModel(event.target.value);
                         setReasoning('');
@@ -224,7 +229,13 @@ export function ChiefConversationEditor({
                 )}
               </>
             )}
-            {running && <p className="text-sm text-slate-500">先停止当前工作，再修改对话设置。</p>}
+            {running && (
+              <p className="text-sm text-slate-500">
+                {canSaveReasoningDuringRun
+                  ? '推理强度将在下一次模型请求时生效，当前回复和工具操作继续完成。'
+                  : '先停止当前工作，再修改对话设置。'}
+              </p>
+            )}
           </>
         ) : (
           <div className="rounded-xl bg-slate-50 p-4">
@@ -250,7 +261,7 @@ export function ChiefConversationEditor({
             disabled={
               busy ||
               loadingCatalog ||
-              running ||
+              (running && !canSaveReasoningDuringRun) ||
               !ready ||
               !(conversation ? model : chief?.model)?.trim() ||
               (!conversation && !workspaceId)

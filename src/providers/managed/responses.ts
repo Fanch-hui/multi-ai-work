@@ -238,6 +238,7 @@ export async function responsesTurn(
   requestId = context.runId,
   onItem?: (index: number, item: ResponseOutputItem) => Promise<void>,
   transport?: ReturnType<typeof createResponsesTransport>,
+  includeReasoningUpdates = false,
 ): Promise<Turn> {
   const request = new ModelRequest(context, requestId);
   let partialOutput = false;
@@ -247,7 +248,7 @@ export async function responsesTurn(
     const body: ResponseCreateParamsStreaming = {
       model: context.bot.model,
       instructions: context.instructions,
-      input: responsesInput(messages, images),
+      input: responsesInput(messages, images, includeReasoningUpdates),
       store: false,
       stream: true,
       include: ['reasoning.encrypted_content'],

@@ -52,7 +52,7 @@ interface Operation {
 }
 
 describe('persistent managed recovery', () => {
-  it.each(['progress-saved', 'operation-saved'] as const)(
+  it.each(['progress-saved', 'operation-saved', 'effort-changed'] as const)(
     'continues a tool batch after interruption at %s without recreating the first artifact',
     async (checkpoint) => {
       const model = await fixture((index) => [
@@ -77,7 +77,7 @@ describe('persistent managed recovery', () => {
               await context.saveProgress!(progress, change);
               saved = structuredClone(progress);
               if (
-                checkpoint === 'progress-saved' &&
+                checkpoint !== 'operation-saved' &&
                 !interrupted &&
                 progress.messages.some(
                   (message) => message.role === 'tool' && message.callId === 'first-write',
@@ -112,7 +112,7 @@ describe('persistent managed recovery', () => {
         saved?.messages
           .filter((message) => message.role === 'tool')
           .map((message) => message.callId),
-      ).toEqual(checkpoint === 'progress-saved' ? ['first-write'] : []);
+      ).toEqual(checkpoint !== 'operation-saved' ? ['first-write'] : []);
       const oldTask = core.state.storage.get<Task>('tasks', taskId)!;
       const first = core.state.storage
         .all<Artifact>('artifacts')
@@ -123,6 +123,7 @@ describe('persistent managed recovery', () => {
       expect(oldOperations).toEqual([
         expect.objectContaining({ id: `${oldTask.runIds[0]}:first-write`, status: 'succeeded' }),
       ]);
+      if (checkpoint === 'effort-changed') core.entities.saveBot({ ...member, reasoning: 'high' });
       await core.request('tasks.retry', { id: taskId });
       await eventually(() => core.state.storage.get<Task>('tasks', taskId)?.status === 'completed');
       const task = core.state.storage.get<Task>('tasks', taskId)!;

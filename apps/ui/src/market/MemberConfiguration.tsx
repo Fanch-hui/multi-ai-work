@@ -10,6 +10,7 @@ import { ContextBudgetFields } from '../ContextBudgetFields.js';
 import { ReasoningField } from '../ReasoningField.js';
 import { MemoryModeField, MemberColorField, MemberSkillsField } from '../BotSettingsFields.js';
 import type { PresetMemberDraft } from './memberSettings.js';
+import { reasoningConfiguration } from '../../../../src/domain/model-reasoning.js';
 
 export function MemberConfiguration({
   data,
@@ -31,6 +32,8 @@ export function MemberConfiguration({
   const connections = data.connections.filter((item) => item.status === 'ready');
   const connection = connections.find((item) => item.id === value.connectionId);
   const model = connection?.models.find((item) => item.id === value.model);
+  const reasoningOptions = reasoningConfiguration(connection?.provider, model);
+  const showReasoningHelp = reasoningOptions.fallback || reasoningOptions.options.length > 0;
   const native = connection?.provider === 'qoder' || connection?.provider === 'antigravity';
   const update = change;
   return (
@@ -131,6 +134,11 @@ export function MemberConfiguration({
           value={value.reasoning || ''}
           onChange={(reasoning) => update({ reasoning: reasoning || undefined })}
         />
+        {showReasoningHelp && (
+          <p className="-mt-3 text-xs text-slate-500">
+            {native ? '推理强度将在下次任务或运行时生效。' : '推理强度将在下一次模型请求时生效。'}
+          </p>
+        )}
         <MemoryModeField
           value={value.memoryMode ?? 'propose'}
           change={(memoryMode) => update({ memoryMode })}

@@ -49,7 +49,9 @@ export function sessionBinding(
     previous.workspaceId === room.workspaceId &&
     previous.accountScope === connection.accountScope &&
     previous.model === bot.model &&
-    previous.reasoning === bot.reasoning
+    (previous.reasoning === bot.reasoning ||
+      connection.provider === 'chatgpt' ||
+      connection.provider === 'custom')
   ) {
     const updated = {
       ...previous,

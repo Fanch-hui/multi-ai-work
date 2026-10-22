@@ -26,6 +26,7 @@ import { modelImage, imageResolver } from './run-images.js';
 import type { TaskInputService } from './task-inputs.js';
 import { saveManagedProgress, type ManagedCheckpoint } from './managed-progress.js';
 import type { RunReplyWriter } from './run-reply.js';
+import { runReasoningEffort } from './run-reasoning.js';
 
 export interface RunPreparationInput {
   run: Run;
@@ -187,6 +188,9 @@ export class RunPreparation {
       instructions,
       contextInstructions,
       runtimeContext,
+      ...(managed && !task.kind
+        ? { getReasoningEffort: () => runReasoningEffort(this.state, bot, scope.room, connection) }
+        : {}),
       tools: this.tools.definitions(catalogContext, bot).sort((a, b) => {
         if (!managed || a.name === b.name) return 0;
         if (a.name < b.name) return -1;

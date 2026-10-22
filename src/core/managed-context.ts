@@ -271,6 +271,7 @@ function summaryRunner(input: RunContext, adapter: ProviderAdapter) {
       progress: undefined,
       saveProgress: undefined,
       runtimeContext: undefined,
+      getReasoningEffort: undefined,
       prepareToolResults: undefined,
       prepareImageInputs: undefined,
       deferRecovery: false,

@@ -51,6 +51,18 @@ function reasoningOptions(model: CatalogRecord): string[] | undefined {
   return [...new Set(values)];
 }
 
+function defaultReasoningEffort(model: CatalogRecord): string | undefined {
+  const value = model.default_reasoning_level ?? model.defaultReasoningEffort;
+  return typeof value === 'string' && value.length > 0 && value === value.trim()
+    ? value
+    : undefined;
+}
+
+function supportsReasoningEffortUpdates(model: CatalogRecord): boolean | undefined {
+  const value = model.supports_reasoning_effort_updates ?? model.supportsReasoningEffortUpdates;
+  return typeof value === 'boolean' ? value : undefined;
+}
+
 function imageCapability(model: CatalogRecord): ModelInfo['imageInput'] {
   const modalities =
     model.input_modalities ?? model.inputModalities ?? record(model.modalities)?.input;
@@ -67,6 +79,8 @@ function modelInfo(model: CatalogRecord, id: string): ModelInfo {
   const window = model.context_window ?? model.contextWindow;
   const maximum = model.max_context_window ?? model.maxContextWindow;
   const reasoning = reasoningOptions(model);
+  const defaultEffort = defaultReasoningEffort(model);
+  const effortUpdates = supportsReasoningEffortUpdates(model);
   const imageInput = imageCapability(model);
   return {
     id,
@@ -78,6 +92,8 @@ function modelInfo(model: CatalogRecord, id: string): ModelInfo {
       ? { maxContextWindow: maximum, maxContextWindowSource: 'provider' as const }
       : {}),
     ...(reasoning ? { reasoning, reasoningSource: 'provider' as const } : {}),
+    ...(defaultEffort ? { defaultReasoningEffort: defaultEffort } : {}),
+    ...(effortUpdates !== undefined ? { supportsReasoningEffortUpdates: effortUpdates } : {}),
     ...(imageInput ? { imageInput, imageInputSource: 'provider' as const } : {}),
   };
 }
@@ -114,11 +130,20 @@ export async function loadOfficialModelCatalog(
         context_window: model.context_window,
         max_context_window: model.max_context_window,
         supported_reasoning_levels: model.supported_reasoning_levels,
+        default_reasoning_level: model.default_reasoning_level,
+        supports_reasoning_effort_updates: model.supports_reasoning_effort_updates,
         input_modalities: model.input_modalities,
       },
       model.slug,
     );
-    if (!info.reasoning && !info.maxContextWindow && !info.imageInput) return [];
+    if (
+      !info.reasoning &&
+      !info.defaultReasoningEffort &&
+      info.supportsReasoningEffortUpdates === undefined &&
+      !info.maxContextWindow &&
+      !info.imageInput
+    )
+      return [];
     return [info];
   });
 }
@@ -160,7 +185,10 @@ export async function supplementChatGptCatalog(
       (model) =>
         model.reasoning !== undefined &&
         model.maxContextWindow !== undefined &&
-        model.imageInput !== undefined,
+        model.imageInput !== undefined &&
+        (model.reasoning.length === 0 ||
+          (model.defaultReasoningEffort !== undefined &&
+            model.supportsReasoningEffortUpdates !== undefined)),
     )
   )
     return models;
@@ -171,6 +199,19 @@ export async function supplementChatGptCatalog(
       const reasoning =
         model.reasoning === undefined && official?.reasoning?.length
           ? { reasoning: official.reasoning, reasoningSource: 'official-catalog' as const }
+          : {};
+      const defaultEffort =
+        model.reasoning?.length !== 0 &&
+        model.defaultReasoningEffort === undefined &&
+        official?.defaultReasoningEffort &&
+        (model.reasoning === undefined || model.reasoning.includes(official.defaultReasoningEffort))
+          ? { defaultReasoningEffort: official.defaultReasoningEffort }
+          : {};
+      const effortUpdates =
+        model.reasoning?.length !== 0 &&
+        model.supportsReasoningEffortUpdates === undefined &&
+        official?.supportsReasoningEffortUpdates !== undefined
+          ? { supportsReasoningEffortUpdates: official.supportsReasoningEffortUpdates }
           : {};
       const maximum =
         model.maxContextWindow === undefined && official?.maxContextWindow
@@ -185,9 +226,11 @@ export async function supplementChatGptCatalog(
           ? { imageInput: official.imageInput, imageInputSource: 'official-catalog' as const }
           : {};
       return Object.keys(reasoning).length ||
+        Object.keys(defaultEffort).length ||
+        Object.keys(effortUpdates).length ||
         Object.keys(maximum).length ||
         Object.keys(image).length
-        ? { ...model, ...reasoning, ...maximum, ...image }
+        ? { ...model, ...reasoning, ...defaultEffort, ...effortUpdates, ...maximum, ...image }
         : model;
     });
   } catch {

@@ -1,12 +1,16 @@
 import { createServer } from 'node:http';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProbeContext } from '../src/domain/provider.js';
 import {
   decodeModelCatalog,
   loadOfficialModelCatalog,
+  resetOfficialCatalogCache,
   supplementChatGptCatalog,
 } from '../src/providers/managed/catalog.js';
 import { modelCatalog } from '../src/providers/managed/client.js';
+
+beforeEach(() => resetOfficialCatalogCache());
+afterEach(() => resetOfficialCatalogCache());
 
 // Field structure from openai/codex, codex-rs/models-manager/models.json.
 const chatGptModel = {
@@ -122,7 +126,18 @@ describe('advertised model reasoning capabilities', () => {
   it('projects advertised efforts through the HTTP probe without losing them', async () => {
     const server = createServer((_req, res) => {
       res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({ models: [{ ...chatGptModel, supports_images: true }] }));
+      res.end(
+        JSON.stringify({
+          models: [
+            {
+              ...chatGptModel,
+              supports_images: true,
+              default_reasoning_level: 'high',
+              supports_reasoning_effort_updates: false,
+            },
+          ],
+        }),
+      );
     });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     try {
@@ -269,6 +284,8 @@ describe('official ChatGPT catalog supplement', () => {
         reasoning: ['high'],
         maxContextWindow: 96000,
         imageInput: 'supported' as const,
+        defaultReasoningEffort: 'high',
+        supportsReasoningEffortUpdates: false,
       },
     ];
     expect(await supplementChatGptCatalog(models, load)).toBe(models);

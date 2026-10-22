@@ -87,19 +87,15 @@ export class TeamService {
     )
       throw new Error('只能修改主管主对话的模型设置');
     if (room.archived) throw new Error('对话已归档');
-    if (
-      s
-        .all<Task>('tasks')
-        .some(
-          (task) =>
-            task.conversationId === room.id &&
-            task.kind !== 'memory-review' &&
-            !terminal(task.status),
-        )
-    )
-      throw new Error('请先停止当前工作，再修改对话设置');
     const chief = required(s.get<Bot>('bots', room.chiefId!), '主智能体不存在');
     const settings = this.conversationModel(chief, options, room.model ? room : chief);
+    if (
+      settings.model !== (room.model ?? chief.model) &&
+      s
+        .byField<Task>('tasks', 'conversationId', room.id)
+        .some((task) => task.kind !== 'memory-review' && !terminal(task.status))
+    )
+      throw new Error('请先停止当前工作，再修改对话设置');
     const updated = { ...room, ...settings };
     s.put('conversations', updated);
     this.state.changed();

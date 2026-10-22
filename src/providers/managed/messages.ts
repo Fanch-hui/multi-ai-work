@@ -17,9 +17,21 @@ function serializeToolArguments(raw: unknown): string {
 export function responsesInput(
   messages: ModelMessage[],
   images = new Map<string, string>(),
+  includeReasoningUpdates = false,
 ): ResponseInput {
   return messages.flatMap((message) => {
-    if (message.providerItems?.length) return message.providerItems;
+    if (message.reasoningUpdate) {
+      return includeReasoningUpdates
+        ? [{ type: 'configuration_update', reasoning: { effort: message.reasoningUpdate.effort } }]
+        : [];
+    }
+    if (message.providerItems?.length)
+      return message.providerItems.filter(
+        (item) =>
+          !item ||
+          typeof item !== 'object' ||
+          (item as { type?: unknown }).type !== 'configuration_update',
+      );
     const text = modelMessageContent(message);
     const content = message.images?.length
       ? [
@@ -68,6 +80,7 @@ export function chatInput(
     toolImages = [];
   };
   for (const message of messages) {
+    if (message.reasoningUpdate) continue;
     const text = modelMessageContent(message);
     if (message.role !== 'tool') flushImages();
     if (message.role === 'tool') {

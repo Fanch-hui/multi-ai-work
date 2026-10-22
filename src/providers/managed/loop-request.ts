@@ -12,6 +12,13 @@ import { SupplementalInputError } from './request.js';
 import type { createResponsesTransport } from './responses-transport.js';
 import type { ResponsesCacheDiagnostics } from './cache-diagnostics.js';
 import type { ChatReplayCompatibility } from './chat-replay-compatibility.js';
+import {
+  appendReasoningUpdate,
+  knownReasoningEffort,
+  officialResponsesEndpoint,
+  reasoningBaseline,
+  selectedReasoningEffort,
+} from './reasoning-effort.js';
 
 interface ManagedRequestOptions {
   retryDelays?: readonly number[];
@@ -82,23 +89,26 @@ async function requestTurnAttempt(
 ): Promise<Turn> {
   state.takeUserInput();
   let early: EarlyResponseTools | undefined;
+  let requestContext = context;
+  let reasoningUpdates = false;
   try {
     const turn = await requestWithRetry(
       context,
       async (_, requestId) => {
         if (protocol !== 'responses') {
-          return chatTurn(client, context, state.messages, requestId, options.chatReplay);
+          return chatTurn(client, requestContext, state.messages, requestId, options.chatReplay);
         }
         early = new EarlyResponseTools(context, state);
         try {
           return await responsesTurn(
             client,
-            context,
+            requestContext,
             state.messages,
             options.cacheDiagnostics,
             requestId,
             (index, item) => early!.accept(index, item),
             options.transport,
+            reasoningUpdates,
           );
         } catch (error) {
           early.stop();
@@ -115,7 +125,11 @@ async function requestTurnAttempt(
         await state.save('ready', recovery);
       },
       state.attempt,
-      (attempt) => prepareRequest(context, state, protocol, attempt),
+      async (attempt) => {
+        const prepared = await prepareRequest(client, context, state, protocol, attempt);
+        requestContext = prepared.context;
+        reasoningUpdates = prepared.reasoningUpdates;
+      },
     );
     state.resetEarlyFailures();
     turn.persisted = await early?.finish(turn.message);
@@ -135,11 +149,12 @@ async function requestTurnAttempt(
 }
 
 async function prepareRequest(
+  client: OpenAI,
   context: RunContext,
   state: ManagedRunState,
   protocol: Protocol,
   attempt: number,
-) {
+): Promise<{ context: RunContext; reasoningUpdates: boolean }> {
   state.setAttempt(attempt);
   const images = await context.prepareImageInputs?.(state.messages, {
     currentStart: state.currentStart,
@@ -147,10 +162,34 @@ async function prepareRequest(
   context.signal.throwIfAborted();
   if (images) await state.applyProjection(images, state.currentStart);
   await compactRunContext(context, state, protocol, false);
+  const bot = { ...context.bot };
+  let reasoningUpdates = false;
+  if (protocol === 'responses') {
+    const model = context.connection.models?.find((item) => item.id === context.bot.model);
+    const supportsUpdates =
+      model?.supportsReasoningEffortUpdates === true &&
+      model.reasoning?.length !== 0 &&
+      officialResponsesEndpoint(client.baseURL);
+    const selected = selectedReasoningEffort(context);
+    const knownSelected = knownReasoningEffort(selected);
+    const defaultEffort = knownReasoningEffort(model?.defaultReasoningEffort);
+    if (supportsUpdates && (knownSelected || (selected === undefined && defaultEffort))) {
+      const effort = knownSelected ?? defaultEffort!;
+      const baseline = reasoningBaseline(state.messages) ?? knownSelected ?? defaultEffort!;
+      appendReasoningUpdate(state.messages, baseline, effort);
+      bot.reasoning = baseline;
+      reasoningUpdates = true;
+    } else {
+      bot.reasoning = selected;
+    }
+  } else {
+    bot.reasoning = selectedReasoningEffort(context);
+  }
   await state.save('request');
   context.signal.throwIfAborted();
   if (context.userInput?.hasPending() && !state.waitingForInput())
     throw new SupplementalInputError();
+  return { context: { ...context, bot }, reasoningUpdates };
 }
 
 async function compactRunContext(

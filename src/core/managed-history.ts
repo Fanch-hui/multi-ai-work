@@ -142,6 +142,8 @@ export function workingHistory(
       if (match >= 0) return previous[match];
       return { messageId: source.id, sequence: source.sequence, message };
     }
+    if (message.reasoningUpdate)
+      return { messageId: currentSource.id, sequence: currentSource.sequence, message };
     if (message.appContext || index === initialUser)
       return { messageId: source.id, sequence: source.sequence, message };
     const nextUser =

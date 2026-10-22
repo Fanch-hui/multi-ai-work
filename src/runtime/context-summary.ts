@@ -223,7 +223,7 @@ export async function summarizeUnits(
 ): Promise<string> {
   const budget = Math.floor(window * 0.75) - 256;
   const outputBudget = Math.floor(window * 0.25);
-  const units = balancedHistoryUnits(history);
+  const units = balancedHistoryUnits(history.filter((entry) => !entry.message.reasoningUpdate));
   if (units.some((unit) => !toolsPaired(unit))) throw new Error('历史工具调用与结果未配对');
   const projectedUnits = units.map((unit) => projectUnitForSummary(unit, budget));
   const records = projectedUnits.map((unit) =>

@@ -82,6 +82,38 @@ function runtimeMemories(input: Input) {
 }
 
 describe('会话续接与当前记忆', () => {
+  it.each(['chatgpt', 'custom'] as const)(
+    '%s 切换推理强度保留绑定与完整协议历史，切换模型仍建立新绑定',
+    async (provider) => {
+      const inputs: RunContext[] = [];
+      const protocolItem = { type: 'reasoning', id: 'reasoning-1', encrypted_content: 'fixture' };
+      const { core, bot, turn } = await setupSession(provider, async (context) => {
+        inputs.push(context);
+        return {
+          text: '完成',
+          messages: [
+            ...context.messages,
+            { role: 'user', content: context.prompt },
+            { role: 'assistant', content: '完成', providerItems: [protocolItem] },
+          ],
+        };
+      });
+      await turn('初始配置');
+      for (const reasoning of ['high', 'low', undefined]) {
+        core.entities.saveBot({ ...bot, reasoning });
+        await turn(`使用 ${reasoning ?? '默认'} 强度继续`);
+        expect(inputs.at(-1)!.binding.id).toBe(inputs[0].binding.id);
+        expect(inputs.at(-1)!.bot.reasoning).toBe(reasoning);
+        expect(inputs.at(-1)!.messages.some((message) => message.providerItems?.length)).toBe(true);
+      }
+      expect(core.state.snapshot().bindings).toHaveLength(1);
+      core.entities.saveBot({ ...bot, model: 'other' });
+      await turn('切换模型');
+      expect(inputs.at(-1)!.binding.generation).toBe(2);
+      expect(inputs.at(-1)!.binding.id).not.toBe(inputs[0].binding.id);
+    },
+  );
+
   it.each(['antigravity', 'qoder', 'chatgpt', 'custom'] as const)(
     '%s 保存、修订、撤销记忆及外观修改保持会话',
     async (provider) => {

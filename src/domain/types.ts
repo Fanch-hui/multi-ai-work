@@ -48,6 +48,8 @@ export interface ModelInfo {
   maxContextWindowSource?: 'provider' | 'official-catalog';
   reasoning?: string[];
   reasoningSource?: 'provider' | 'official-catalog';
+  defaultReasoningEffort?: string;
+  supportsReasoningEffortUpdates?: boolean;
   imageInput?: CapabilityState;
   imageInputSource?: 'provider' | 'official-catalog';
 }

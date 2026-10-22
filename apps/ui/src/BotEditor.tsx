@@ -13,7 +13,10 @@ import { isChiefProvider } from '../../../src/domain/chief-provider.js';
 import { DEFAULT_COMPACTION_THRESHOLD } from '../../../src/domain/context-settings.js';
 import { ContextBudgetFields } from './ContextBudgetFields.js';
 import { ReasoningField } from './ReasoningField.js';
-import { isReasoningSupported } from '../../../src/domain/model-reasoning.js';
+import {
+  isReasoningSupported,
+  reasoningConfiguration,
+} from '../../../src/domain/model-reasoning.js';
 import { MemoryModeField, MemberColorField, MemberSkillsField } from './BotSettingsFields.js';
 export function BotEditor({
   bot,
@@ -62,6 +65,8 @@ export function BotEditor({
   const connection = readyConnections.find((item) => item.id === connectionId);
   const native = connection?.provider === 'antigravity' || connection?.provider === 'qoder';
   const selectedModel = connection?.models.find((item) => item.id === model);
+  const reasoningOptions = reasoningConfiguration(connection?.provider, selectedModel);
+  const showReasoningHelp = reasoningOptions.fallback || reasoningOptions.options.length > 0;
   const selectedReasoning = isReasoningSupported(connection?.provider, selectedModel, reasoning)
     ? reasoning
     : '';
@@ -247,6 +252,11 @@ export function BotEditor({
             value={reasoning}
             onChange={setReasoning}
           />
+          {showReasoningHelp && (
+            <p className="-mt-3 text-xs text-slate-500">
+              {native ? '推理强度将在下次任务或运行时生效。' : '推理强度将在下一次模型请求时生效。'}
+            </p>
+          )}
           <MemoryModeField value={memoryMode} change={setMemory} />
           {!native && (
             <ContextBudgetFields

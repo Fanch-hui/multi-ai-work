@@ -74,6 +74,35 @@ afterEach(async () => {
 });
 
 describe('Responses sessions through the managed Adapter', () => {
+  it('keeps the same socket and response prefix when effort changes between runs', async () => {
+    const firstContext = context('first', []);
+    firstContext.bot.reasoning = 'low';
+    firstContext.connection.models = [
+      { id: 'fixture', name: 'Fixture', supportsReasoningEffortUpdates: true },
+    ];
+    firstContext.messages = [{ role: 'user', content: 'reusable history '.repeat(2000) }];
+    const first = await adapter.run(firstContext);
+    const second = await adapter.run({
+      ...firstContext,
+      runId: 'second',
+      bot: { ...firstContext.bot, reasoning: 'high' },
+      messages: first.contextMessages!,
+      prompt: 'continue',
+    });
+    expect(connections).toBe(1);
+    expect(requests[0].reasoning).toEqual({ effort: 'low' });
+    expect(requests[1]).toMatchObject({
+      reasoning: { effort: 'low' },
+      previous_response_id: 'response-1',
+      input: [
+        { role: 'user', content: 'continue' },
+        { type: 'configuration_update', reasoning: { effort: 'high' } },
+      ],
+    });
+    expect(second.contextMessages!.filter((message) => message.reasoningUpdate)).toHaveLength(2);
+    expect(http).not.toHaveBeenCalled();
+  });
+
   it('reuses a saved long-history response across runs with fresh cancellation and events', async () => {
     const firstEvents: ProviderEvent[] = [],
       secondEvents: ProviderEvent[] = [];
@@ -130,12 +159,17 @@ function context(runId: string, events: ProviderEvent[]): RunContext {
     bot: { model: 'fixture' } as RunContext['bot'],
     connection: {
       id: 'connection',
+      name: 'Fixture',
+      concurrency: 1,
+      status: 'ready',
+      createdAt: '',
       revision: 1,
       provider: 'custom',
       protocol: 'responses',
       authMode: 'none',
       baseUrl: 'https://api.openai.com/v1',
-    } as RunContext['connection'],
+      models: [],
+    },
     binding: { id: 'binding', generation: 1 } as RunContext['binding'],
     workspacePath: '/workspace',
     prompt: 'start',

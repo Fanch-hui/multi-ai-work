@@ -144,8 +144,14 @@ describe('主管会话模型与推理设置', () => {
       botId: room.chiefId!,
       goal: '进行中的工作',
     });
+    const activeSetting = (await core.request('chief.conversations.update', {
+      id: room.id,
+      model: 'test',
+      reasoning: 'high',
+    })) as Conversation;
+    expect(activeSetting.reasoning).toBe('high');
     await expect(
-      core.request('chief.conversations.update', { id: room.id, model: 'test' }),
+      core.request('chief.conversations.update', { id: room.id, model: 'another-model' }),
     ).rejects.toThrow('先停止');
     core.tasks.update(task, { status: 'cancelled' });
     core.state.storage.put('conversations', { ...room, archived: true });

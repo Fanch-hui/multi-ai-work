@@ -46,6 +46,7 @@ export interface ModelMessage {
   providerItems?: unknown[];
   imageReferences?: ModelImage[];
   chatReplay?: ChatReplay;
+  reasoningUpdate?: { baseline: string; effort: string };
   sourceMessageId?: string;
   sourceSequence?: number;
   contextSummary?: boolean;
@@ -114,6 +115,7 @@ export interface RunContext {
   tools: ToolDefinition[];
   images?: ModelImage[];
   runtimeContext?: ModelMessage;
+  getReasoningEffort?(): string | undefined;
   resolveImage?(image: ModelImage): Promise<{ mimeType: string; data: string }>;
   signal: AbortSignal;
   nativeMcp: NativeMcp;

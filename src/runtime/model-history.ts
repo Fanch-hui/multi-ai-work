@@ -51,6 +51,10 @@ function isModelMessage(value: unknown): value is ModelMessage {
 }
 
 function messageProjection(message: ModelMessage, protocol: Protocol): unknown {
+  if (message.reasoningUpdate)
+    return protocol === 'responses'
+      ? { type: 'configuration_update', reasoning: { effort: message.reasoningUpdate.effort } }
+      : '';
   if (protocol === 'responses' && message.providerItems?.length) return message.providerItems;
   const replay =
     protocol === 'chat-completions' &&
