@@ -9,6 +9,8 @@ import { ModalPresence } from './ModalPresence.js';
 import { BotEditor } from './BotEditor.js';
 import { useMarket } from './market/useMarket.js';
 import { usePresetHiring } from './market/usePresetHiring.js';
+import { HiringPreparation } from './market/HiringPreparation.js';
+import { CatalogLoadState } from './market/CatalogLoadState.js';
 import { CareerPicker } from './market/CareerPicker.js';
 import { PresetCard } from './market/PresetCard.js';
 import { PresetDetails } from './market/PresetDetails.js';
@@ -32,7 +34,7 @@ export function Market({
   careerTrigger?: boolean;
   careerHandled?: () => void;
 }) {
-  const { state, error, refresh, run } = useMarket();
+  const { state, status, catalogError, operationError, refresh, retry, run } = useMarket();
   const [downloaded, setDownloaded] = useState(false);
   const [profession, setProfession] = useState('');
   const [query, setQuery] = useState('');
@@ -68,7 +70,8 @@ export function Market({
     downloaded,
   );
   const selected = visible.filter((row) => selection.includes(row.key));
-  const { hire, hiring } = usePresetHiring(installations, run, setConfigure);
+  const preparation = usePresetHiring(installations, run, setConfigure);
+  const { hire, hiring } = preparation;
   async function action(method: string, params?: Record<string, unknown>) {
     try {
       return await run(method, params);
@@ -162,11 +165,12 @@ export function Market({
   function renderCatalog() {
     if (!state)
       return (
-        <div aria-busy="true" className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {[1, 2, 3].map((id) => (
-            <div key={id} className="h-56 rounded-2xl bg-slate-50" />
-          ))}
-        </div>
+        <CatalogLoadState
+          loading={status === 'loading'}
+          error={catalogError}
+          retry={() => void retry()}
+          importPreset={importPreset}
+        />
       );
     if (!visible.length)
       return (
@@ -241,7 +245,22 @@ export function Market({
       }
     >
       <div className="mx-auto max-w-6xl">
-        <ErrorNote error={error} />
+        <ErrorNote error={operationError} />
+        {state && catalogError && (
+          <div className="mb-4">
+            <ErrorNote error={catalogError} />
+            <Button disabled={status === 'loading'} onClick={() => void retry()}>
+              重新读取目录
+            </Button>
+          </div>
+        )}
+        <HiringPreparation
+          results={preparation.results}
+          busy={hiring}
+          retry={() => void preparation.retry()}
+          configure={preparation.configureReady}
+          dismiss={preparation.dismiss}
+        />
         {downloaded && (
           <div className="mb-4">
             <Button variant="ghost" className="px-0" onClick={showAllPresets}>
