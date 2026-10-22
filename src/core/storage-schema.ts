@@ -59,6 +59,7 @@ export function migrateStorage(
         CREATE INDEX IF NOT EXISTS tasks_by_parent ON tasks(json_extract(payload, '$.parentId'));
         CREATE INDEX IF NOT EXISTS tasks_by_request ON tasks(json_extract(payload, '$.requestId'));
         CREATE INDEX IF NOT EXISTS tasks_by_conversation ON tasks(json_extract(payload, '$.conversationId'));
+        CREATE INDEX IF NOT EXISTS deliveries_by_task ON deliveries(json_extract(payload, '$.taskId'));
         CREATE INDEX IF NOT EXISTS runs_by_task ON runs(json_extract(payload, '$.taskId'));
         CREATE INDEX IF NOT EXISTS bindings_by_owner_generation ON session_bindings(
           json_extract(payload, '$.botId'), json_extract(payload, '$.conversationId'),

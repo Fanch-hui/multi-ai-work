@@ -15,7 +15,7 @@ import { isChiefProvider } from '../domain/chief-provider.js';
 import { validateBotSkills } from './market/bot-policy.js';
 import { TaskPlanService } from './task-plans.js';
 import { TaskInputService } from './task-inputs.js';
-import { receivingTask } from './task-input-records.js';
+import { receivingTasks } from './task-input-records.js';
 import { latestProgressRun } from './managed-progress.js';
 import { requireAttachmentCapacity } from '../domain/attachment-policy.js';
 
@@ -249,8 +249,9 @@ export class TaskService {
         targetBotIds: targets,
         ...(mentionedBotIds.length ? { mentionedBotIds } : {}),
       });
+      const recipients = receivingTasks(s, room.id);
       const tasks = targets.map((botId) => {
-        const current = receivingTask(s, room.id, botId);
+        const current = recipients.get(botId);
         if (!current)
           return this.create({
             conversationId: room.id,

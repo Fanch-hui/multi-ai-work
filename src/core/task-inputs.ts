@@ -24,7 +24,7 @@ export class TaskInputService {
     this.state.storage.put('deliveries', input);
   }
   hasPending(taskId: string) {
-    return taskInputs(this.state.storage).some(
+    return taskInputs(this.state.storage, taskId).some(
       (input) => input.taskId === taskId && input.status === 'pending',
     );
   }
@@ -69,7 +69,7 @@ export class TaskInputService {
       hasPending: () => this.hasPending(run.taskId),
       acknowledge: (messageIds) => {
         const ids = new Set(messageIds);
-        const delivered = taskInputs(s).filter(
+        const delivered = taskInputs(s, run.taskId).filter(
           (input) =>
             input.runId === run.id && input.status === 'claimed' && ids.has(input.messageId),
         );
@@ -95,7 +95,7 @@ export class TaskInputService {
   private claim(run: Run, matches: (input: TaskInput) => boolean) {
     const s = this.state.storage;
     return s.transaction(() =>
-      taskInputs(s)
+      taskInputs(s, run.taskId)
         .filter(
           (input) => input.taskId === run.taskId && input.status === 'pending' && matches(input),
         )
