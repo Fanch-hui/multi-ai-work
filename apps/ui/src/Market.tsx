@@ -46,7 +46,8 @@ export function Market({
   const [busy, setBusy] = useState(false);
   const installations = state?.installations || [];
   const search = query.trim().toLocaleLowerCase();
-  const visible = marketRows(state, downloaded)
+  const rows = marketRows(state, downloaded);
+  const visible = rows
     .filter(({ preset }) => {
       if (profession && !preset.professions.includes(profession)) return false;
       return (
@@ -163,7 +164,7 @@ export function Market({
     return '通过内容验收的岗位会在这里上架，也可以导入本地预设包。';
   }
   function renderCatalog() {
-    if (!state)
+    if (!state || (!downloaded && status === 'loading' && !state.refreshedAt && !rows.length))
       return (
         <CatalogLoadState
           loading={status === 'loading'}
