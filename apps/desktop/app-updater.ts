@@ -1,4 +1,4 @@
-import { lstat, mkdir, mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
   APP_UPDATE_FEED,
@@ -9,9 +9,17 @@ import { selectUpdate } from '../../src/updates/manifest.js';
 import {
   downloadUpdate,
   readUpdateManifest,
-  verifyUpdateFile,
   type UpdateFetch,
 } from '../../src/updates/download.js';
+
+import {
+  cachedUpdateMatches,
+  clearCachedUpdate,
+  restoreCachedUpdate,
+  saveCachedUpdate,
+  verifyCachedUpdate,
+  type CachedUpdate,
+} from './update-cache.js';
 
 type PreparedInstaller = { launch(): Promise<void>; cleanup(): Promise<void> };
 interface Options {
@@ -35,6 +43,7 @@ export class AppUpdater {
   private operation?: Promise<AppUpdateState>;
   private directory?: string;
   private packagePath?: string;
+  private cached?: CachedUpdate;
   private started = false;
   private closed = false;
   constructor(private options: Options) {
@@ -58,25 +67,21 @@ export class AppUpdater {
     await this.operation;
   }
   private async initialize(): Promise<AppUpdateState> {
-    await mkdir(this.options.cacheDirectory, { recursive: true, mode: 0o700 });
-    for (const name of await readdir(this.options.cacheDirectory)) {
-      if (name.startsWith('download-'))
-        await rm(join(this.options.cacheDirectory, name), { recursive: true, force: true }).catch(
-          () => {},
-        );
-    }
+    this.cached = await restoreCachedUpdate(this.options.cacheDirectory, this.options);
+    this.directory = this.cached?.directory;
+    this.packagePath = this.cached?.packagePath;
     const receipt = join(this.options.cacheDirectory, 'install-result.json');
+    let installationFailed = false;
     try {
       const result = JSON.parse(await readFile(receipt, 'utf8')) as { status?: string };
       await rm(receipt, { force: true });
-      if (result.status === 'failed') {
-        this.change({ phase: 'error', error: '上次更新未完成，请重新检查更新后重试' });
-        return this.snapshot();
-      }
+      installationFailed = result.status === 'failed';
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') await rm(receipt, { force: true });
     }
-    return this.check(true);
+    await this.check(true);
+    if (installationFailed) this.change({ error: '上次更新未完成，请重新检查更新后重试' });
+    return this.snapshot();
   }
   request(method: string): Promise<AppUpdateState> {
     if (method === 'app.update.state') return Promise.resolve(this.snapshot());
@@ -106,7 +111,8 @@ export class AppUpdater {
     return this.operation;
   }
   private async clearDownload() {
-    if (this.directory) await rm(this.directory, { recursive: true, force: true });
+    await clearCachedUpdate(this.options.cacheDirectory, this.directory);
+    this.cached = undefined;
     this.directory = undefined;
     this.packagePath = undefined;
   }
@@ -132,11 +138,14 @@ export class AppUpdater {
       } catch {
         throw new Error('更新清单无效或缺少当前平台安装包');
       }
-      const same =
-        selected &&
-        this.selected?.asset.sha256 === selected.asset.sha256 &&
-        this.selected.version === selected.version;
-      if (!same) await this.clearDownload();
+      if (!selected || !cachedUpdateMatches(this.cached, selected)) await this.clearDownload();
+      else {
+        try {
+          await verifyCachedUpdate(this.cached!, selected.asset);
+        } catch {
+          await this.clearDownload();
+        }
+      }
       this.selected = selected;
       const resolvePhase = () => {
         if (selected) {
@@ -190,6 +199,7 @@ export class AppUpdater {
         this.change({ received });
       });
       signal.throwIfAborted();
+      this.cached = await saveCachedUpdate(this.options.cacheDirectory, this.selected, path);
       this.packagePath = path;
       this.change({ phase: 'ready', received: this.selected.asset.size, error: undefined });
     } catch (error) {
@@ -212,7 +222,7 @@ export class AppUpdater {
       verified = false;
     this.change({ phase: 'installing', error: undefined });
     try {
-      await verifyUpdateFile(this.packagePath, this.selected.asset);
+      await verifyCachedUpdate(this.cached!, this.selected.asset);
       verified = true;
       await this.options.acquire();
       acquired = true;
@@ -243,7 +253,8 @@ export class AppUpdater {
     this.closed = true;
     if (this.state.phase !== 'installing') this.controller?.abort();
     await this.operation;
-    if (this.state.phase !== 'installing') await this.clearDownload();
+    if (this.state.phase !== 'installing' && !this.cached && this.directory)
+      await this.clearDownload();
   }
   private message(error: unknown) {
     return error instanceof Error && error.name !== 'AbortError'

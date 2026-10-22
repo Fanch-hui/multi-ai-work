@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { access, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { access, rename, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 
 export function createHelperLaunch(input: {
   executable: string;
@@ -36,6 +36,11 @@ export function createHelperLaunch(input: {
           }
         });
       });
+      if (child.pid) {
+        const pidPath = join(dirname(input.readyPath), 'process.json');
+        await writeFile(pidPath + '.tmp', JSON.stringify({ pid: child.pid }), { mode: 0o600 });
+        await rename(pidPath + '.tmp', pidPath);
+      }
       const deadline = Date.now() + 15_000;
       while (Date.now() < deadline) {
         if (failure) throw new Error('无法启动更新安装进程');

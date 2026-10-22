@@ -1,5 +1,5 @@
 import { execFile, spawn } from 'node:child_process';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve, win32 } from 'node:path';
 import { promisify } from 'node:util';
@@ -118,6 +118,10 @@ setInterval(() => { if (fs.existsSync(process.argv[3])) process.exit(0); }, 50);
     try {
       await helper.launch();
       expect(await readFile(readyPath, 'utf8')).toBe('{}');
+      const record = JSON.parse(await readFile(join(directory, 'process.json'), 'utf8'));
+      expect(record.pid).toBeGreaterThan(0);
+      expect(processIsRunning(record.pid)).toBe(true);
+      expect(await readdir(directory)).not.toContain('process.json.tmp');
     } finally {
       await helper.cancel();
     }
