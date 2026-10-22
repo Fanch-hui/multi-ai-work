@@ -6667,7 +6667,7 @@
           "name": "口播脚本编辑",
           "description": "编写和修改可直接朗读的口播、解说与讲解稿，按听众、信息目的和目标时长调整口语表达、读音提示与段落节奏。",
           "directory": "skills/professional-spoken-script",
-          "digest": "992271cce8da99640e05479852d8b5290e06e228f1a07a32569e9fdee0ef7cef",
+          "digest": "fcb0c4af3427911bd3f18982980b6037031911d3ac1a50c5b8fcf4114c197ef8",
           "source": {
             "repository": "https://github.com/coreyhaines31/marketingskills",
             "commit": "3b84db2e3dc5a91563cc0c5ab359c5b3f7d3c9cd",

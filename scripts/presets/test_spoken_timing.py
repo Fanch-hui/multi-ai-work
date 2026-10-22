@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -26,6 +27,7 @@ class SpokenTimingTests(unittest.TestCase):
             [sys.executable, str(SCRIPT), str(text), *args],
             capture_output=True,
             text=True,
+            env={**os.environ, 'PYTHONIOENCODING': 'ascii'},
             check=False,
         )
 
@@ -36,6 +38,7 @@ class SpokenTimingTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         data = json.loads(result.stdout)
+        self.assertEqual(data['text_summary'], '你好，世界！ 今天出发。')
         self.assertEqual([row['count'] for row in data['paragraphs']], [4, 4])
         self.assertEqual(data['total_count'], 8)
         self.assertEqual(sum(row['count'] for row in data['paragraphs']), data['total_count'])

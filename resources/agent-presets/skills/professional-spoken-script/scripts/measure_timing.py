@@ -103,7 +103,7 @@ def main(argv=None):
             if comparison_key(marked, args.mode) != comparison_key(text, args.mode):
                 raise ValueError('marked version spoken text differs from the final plain text')
         result = estimate(text, args.mode, rate, pauses, target)
-        rendered = json.dumps(result, ensure_ascii=False, indent=2) + '\n'
+        rendered = json.dumps(result, ensure_ascii=not args.output, indent=2) + '\n'
         if args.output:
             Path(args.output).write_text(rendered, encoding='utf-8')
         else:
