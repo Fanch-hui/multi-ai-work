@@ -88,7 +88,7 @@ export function BotEditor({
           }),
           connectionId,
           model,
-          reasoning: reasoning || undefined,
+          reasoning: main ? reasoning : reasoning || undefined,
           contextWindow: !native && contextWindow ? Number(contextWindow) : undefined,
           compactionThreshold: !native ? Number(compactionThreshold) : undefined,
           avatar,

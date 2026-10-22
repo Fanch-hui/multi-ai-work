@@ -49,7 +49,7 @@ const connection: Connection = {
   models: [{ id: 'model', name: 'Model', reasoning: ['high'] }],
 };
 
-function fixture() {
+function fixture(main = false) {
   const bot: Bot = {
     id: 'member',
     name: 'Old name',
@@ -69,7 +69,7 @@ function fixture() {
     connections: [connection],
     bots: [bot],
     tasks: [],
-    settings: { mainBotId: 'chief' },
+    settings: { mainBotId: main ? bot.id : 'chief' },
   } as unknown as Snapshot;
   const mutate = vi.fn(async (..._args: unknown[]) => undefined as never);
   const close = vi.fn();
@@ -185,5 +185,17 @@ describe('reasoning value save behavior', () => {
     await submit(editor.render());
 
     expect(editor.mutate).not.toHaveBeenCalled();
+  });
+
+  it('sends an explicit default for Chief that survives JSON transport', async () => {
+    const editor = fixture(true);
+    const reasoning = element(editor.render(), ReasoningField);
+    (reasoning.props.onChange as (value: string) => void)('');
+    await submit(editor.render());
+    expect(editor.mutate).toHaveBeenCalledOnce();
+    const [method, params] = JSON.parse(JSON.stringify(editor.mutate.mock.calls[0]));
+    expect(method).toBe('chief.configure');
+    expect(params.input.reasoning).toBe('');
+    expect(editor.close).toHaveBeenCalledOnce();
   });
 });

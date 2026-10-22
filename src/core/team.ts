@@ -207,6 +207,7 @@ export class TeamService {
     );
     if (workspaceId) required(this.state.storage.get('workspaces', workspaceId), '工作目录不存在');
     const fields = z.record(z.string(), z.unknown()).parse(input);
+    if (fields.reasoning === '') fields.reasoning = undefined;
     const bot = this.entities.saveBot({ ...current, ...fields, id: current.id });
     if (workspaceId) {
       const room = required(

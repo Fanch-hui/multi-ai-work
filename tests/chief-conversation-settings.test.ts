@@ -6,6 +6,40 @@ import { eventually, setup } from './core-harness.js';
 afterEach(() => configureProviderFetch((input, init) => fetch(input, init)));
 
 describe('主管会话模型与推理设置', () => {
+  it('JSON 请求区分省略管家档位与显式默认，并让新对话继承保存结果', async () => {
+    const { core, connection } = await setup(async () => ({ text: '完成' }));
+    core.scheduler.pause();
+    core.state.storage.put('connections', {
+      ...connection,
+      status: 'ready',
+      models: [{ id: 'test', name: '测试', reasoning: ['high'] }],
+    });
+    const configure = (input: Record<string, unknown>) =>
+      core.request('chief.configure', JSON.parse(JSON.stringify({ input }))) as Promise<Bot>;
+    const initial = await configure({
+      connectionId: connection.id,
+      model: 'test',
+      reasoning: 'high',
+    });
+    const existing = (await core.request('chief.conversations.create', {
+      name: '原对话',
+    })) as Conversation;
+    expect((await configure({ name: '新名字' })).reasoning).toBe('high');
+    const saved = await configure({ reasoning: '' });
+    expect(saved.reasoning).toBeUndefined();
+    expect(core.state.storage.get<Bot>('bots', initial.id)?.reasoning).toBeUndefined();
+    const next = (await core.request('chief.conversations.create', {
+      name: '新对话',
+    })) as Conversation;
+    expect(next.reasoning).toBeUndefined();
+    expect(core.state.storage.get<Conversation>('conversations', existing.id)?.reasoning).toBe(
+      'high',
+    );
+    expect((await configure({ reasoning: 'high' })).reasoning).toBe('high');
+    await expect(configure({ reasoning: 'low' })).rejects.toThrow('不支持');
+    expect(core.state.storage.get<Bot>('bots', initial.id)?.reasoning).toBe('high');
+  });
+
   it.each(['custom', 'chatgpt'] as const)(
     '%s 主对话按连接能力继承推理设置，显式默认覆盖 Chief 档位',
     async (provider) => {
