@@ -17,7 +17,8 @@ import { Badge, Button, Confirm, ErrorNote, activeTask, timeLabel } from './comp
 import { Avatar } from './Avatar.js';
 import { recordTaskTitle, taskRecordStatus } from './conversation-records.js';
 import { CommandRecords } from './CommandRecords.js';
-import { ArtifactItem, Markdown } from './Artifacts.js';
+import { ArtifactItem } from './Artifacts.js';
+import { Markdown } from './Markdown.js';
 import { UserQuestionCard } from './UserQuestionCard.js';
 import { RunRecords } from './RunRecords.js';
 import { TaskActivityDetails } from './TaskActivityDetails.js';

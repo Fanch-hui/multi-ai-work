@@ -410,7 +410,7 @@ describe('conversation message feed', () => {
   it('keeps actual replies and attachments in publication order while dropping empty drafts and system dispatches', () => {
     const data = snapshot({
       messages: [
-        message('second', { content: '第二条', status: 'committed', sequence: 4 }),
+        message('first', { content: '第一条', status: 'committed', sequence: 1 }),
         message('empty-failure', { status: 'interrupted' }),
         message('empty-draft'),
         message('system', {
@@ -425,7 +425,7 @@ describe('conversation message feed', () => {
           status: 'committed',
           sequence: 3,
         }),
-        message('first', { content: '第一条', status: 'committed', sequence: 1 }),
+        message('second', { content: '第二条', status: 'committed', sequence: 4 }),
         message('partial', { content: '已生成的部分内容', status: 'interrupted', sequence: 5 }),
       ],
     });
@@ -435,7 +435,7 @@ describe('conversation message feed', () => {
       'second',
       'partial',
     ]);
-    expect(data.messages[0].id).toBe('second');
+    expect(data.messages[0].id).toBe('first');
   });
 
   it('shows working members by name and hides queued, waiting, failed and background task placeholders', () => {

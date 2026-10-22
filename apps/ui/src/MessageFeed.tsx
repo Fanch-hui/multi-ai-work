@@ -1,11 +1,11 @@
-import { useLayoutEffect, useRef } from 'react';
+import { useLayoutEffect, useMemo, useRef } from 'react';
 import { ArrowUpRight } from 'lucide-react';
 import type { Conversation, Snapshot, Task } from '../../../src/domain/types.js';
 import type { ConversationHistory, Mutate } from './store.js';
 import { Badge, cn, timeLabel } from './components.js';
 import Avatar, { UserAvatar } from './Avatar.js';
 import { ConversationAvatar } from './ConversationAvatar.js';
-import { Markdown } from './Artifacts.js';
+import { Markdown } from './Markdown.js';
 import { AgentActivity, agentActivity } from './AgentActivity.js';
 import { ApprovalCard } from './TaskDetail.js';
 import { UserQuestionCard } from './UserQuestionCard.js';
@@ -28,7 +28,10 @@ export function MessageFeed({
   onSelectConversation: (id: string) => void;
 }) {
   const { scrollRef, contentRef, pauseFollow } = useScrollFollow(conversation.id);
-  const messages = conversationMessages(data, conversation);
+  const messages = useMemo(
+    () => conversationMessages(data, conversation),
+    [data.messages, conversation.id, conversation.kind],
+  );
   const anchor = useRef<{ messageId: string; offset: number; first?: string } | undefined>(
     undefined,
   );
@@ -62,41 +65,66 @@ export function MessageFeed({
       : undefined;
     await history.loadMore();
   }
-  const bots = new Map(data.bots.map((bot) => [bot.id, bot]));
-  const runs = new Map(data.runs.map((run) => [run.id, run]));
-  const tasksByRun = new Map<string, Task>();
-  for (const task of data.tasks)
-    for (const runId of task.runIds) if (!tasksByRun.has(runId)) tasksByRun.set(runId, task);
-  const feedback = messageInputFeedbackIndex(data, conversation.id);
+  const bots = useMemo(() => new Map(data.bots.map((bot) => [bot.id, bot])), [data.bots]);
+  const runs = useMemo(() => new Map(data.runs.map((run) => [run.id, run])), [data.runs]);
+  const tasksByRun = useMemo(() => {
+    const index = new Map<string, Task>();
+    for (const task of data.tasks)
+      for (const runId of task.runIds) if (!index.has(runId)) index.set(runId, task);
+    return index;
+  }, [data.tasks]);
+  const feedback = useMemo(
+    () => messageInputFeedbackIndex(data, conversation.id),
+    [data.bots, data.tasks, data.taskInputs, data.messages, conversation.id],
+  );
   const main = conversation.purpose === 'chief';
-  const groups = main
-    ? data.conversations.filter(
-        (item) =>
-          item.purpose === 'task' &&
-          !item.archived &&
-          item.sourceConversationId === conversation.id,
-      )
-    : [];
-  const taskIds = new Set(
-    data.tasks
-      .filter(
-        (item) =>
-          item.kind !== 'memory-review' &&
-          item.kind !== 'context-compaction' &&
-          item.conversationId === conversation.id,
-      )
-      .map((item) => item.id),
+  const groups = useMemo(
+    () =>
+      main
+        ? data.conversations.filter(
+            (item) =>
+              item.purpose === 'task' &&
+              !item.archived &&
+              item.sourceConversationId === conversation.id,
+          )
+        : [],
+    [data.conversations, main, conversation.id],
   );
-  const recovery = recoveringTasks(data, conversation, messages);
-  const working = [
-    ...workingMembers(data, conversation, messages),
-    ...recovery.map((task) => ({ task, run: undefined })),
-  ];
-  const approvals = data.approvals.filter(
-    (item) => taskIds.has(item.taskId) && item.status === 'pending',
+  const taskIds = useMemo(
+    () =>
+      new Set(
+        data.tasks
+          .filter(
+            (item) =>
+              item.kind !== 'memory-review' &&
+              item.kind !== 'context-compaction' &&
+              item.conversationId === conversation.id,
+          )
+          .map((item) => item.id),
+      ),
+    [data.tasks, conversation.id],
   );
-  const questions = (data.questions ?? []).filter(
-    (item) => item.conversationId === conversation.id && item.status === 'pending',
+  const recovery = useMemo(
+    () => recoveringTasks(data, conversation, messages),
+    [data.tasks, messages, conversation.id, conversation.kind],
+  );
+  const working = useMemo(
+    () => [
+      ...workingMembers(data, conversation, messages),
+      ...recovery.map((task) => ({ task, run: undefined })),
+    ],
+    [data.tasks, data.runs, messages, conversation.id, recovery],
+  );
+  const approvals = useMemo(
+    () => data.approvals.filter((item) => taskIds.has(item.taskId) && item.status === 'pending'),
+    [data.approvals, taskIds],
+  );
+  const questions = useMemo(
+    () =>
+      (data.questions ?? []).filter(
+        (item) => item.conversationId === conversation.id && item.status === 'pending',
+      ),
+    [data.questions, conversation.id],
   );
   const getEmptyTitle = () => {
     if (main) {

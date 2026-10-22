@@ -6,15 +6,16 @@ export interface WorkingMember {
   run: Run;
 }
 
-export function conversationMessages(data: FeedData, conversation: Conversation): Message[] {
-  return data.messages
-    .filter(
-      (message) =>
-        message.conversationId === conversation.id &&
-        (conversation.kind !== 'group' || message.authorType !== 'system') &&
-        (message.content.trim().length > 0 || message.artifactIds.length > 0),
-    )
-    .sort((a, b) => a.sequence - b.sequence || a.createdAt.localeCompare(b.createdAt));
+export function conversationMessages(
+  data: Pick<Snapshot, 'messages'>,
+  conversation: Conversation,
+): Message[] {
+  return data.messages.filter(
+    (message) =>
+      message.conversationId === conversation.id &&
+      (conversation.kind !== 'group' || message.authorType !== 'system') &&
+      (message.content.trim().length > 0 || message.artifactIds.length > 0),
+  );
 }
 
 export function workingMembers(

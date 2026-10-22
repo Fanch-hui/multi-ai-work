@@ -1,6 +1,4 @@
 import { useState, type ReactNode } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import {
   FileText,
   FileImage,
@@ -23,6 +21,7 @@ import { DocumentPreview, isDocumentPreview } from './DocumentPreview.js';
 import { ArtifactRequirement } from './RequirementDetails.js';
 import DeleteArtifactButton from './DeleteArtifactButton.js';
 import { useArtifactSelection } from './ArtifactSelection.js';
+import { Markdown } from './Markdown.js';
 
 export function ArtifactGroups({
   groups,
@@ -113,24 +112,6 @@ export function ArtifactGroups({
   );
 }
 
-export function Markdown({ children }: { children: string }) {
-  return (
-    <div className="markdown text-pretty">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          a: ({ children: text, href }) => (
-            <a href={href} target="_blank" rel="noreferrer">
-              {text}
-            </a>
-          ),
-        }}
-      >
-        {children}
-      </ReactMarkdown>
-    </div>
-  );
-}
 export function ArtifactItem({
   artifact,
   mutate,

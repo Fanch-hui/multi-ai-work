@@ -43,14 +43,77 @@ const delta = (messages: Message[] = [], version = 2): SnapshotDelta => ({
 });
 function fixture(handler: (method: string, params?: Record<string, unknown>) => Promise<unknown>) {
   const request = vi.fn(handler);
+  const publish = vi.fn();
   const store = new TeamSnapshotStore(
     request as <T>(method: string, params?: Record<string, unknown>) => Promise<T>,
-    () => {},
+    publish,
   );
-  return { store, request };
+  return { store, request, publish };
 }
 
 describe('UI snapshot synchronization', () => {
+  it('advances an empty delta cursor without publishing or changing loaded references', async () => {
+    let version = 1;
+    const { store, request, publish } = fixture(async (method) =>
+      method === 'state.view' ? view([message('one', 1)]) : delta([], ++version),
+    );
+    await store.refresh(true);
+    const initial = store.current();
+    Object.freeze(initial.data!.messages);
+    await store.refresh();
+    expect(store.current()).toBe(initial);
+    expect(publish).toHaveBeenCalledTimes(1);
+    await store.refresh();
+    expect(request.mock.calls.at(-1)?.[1]?.cursor).toEqual({ epoch: 'epoch', version: 2 });
+    expect(store.current()).toBe(initial);
+  });
+
+  it('clears a synchronization error when the next delta has no visible updates', async () => {
+    let failing = true;
+    const { store, publish } = fixture(async (method) => {
+      if (method === 'state.view') return view([message('one', 1)]);
+      if (failing) throw new Error('temporarily unavailable');
+      return delta();
+    });
+    await store.refresh(true);
+    const initial = store.current().data;
+    await store.refresh();
+    expect(store.current().error).toBe('temporarily unavailable');
+    failing = false;
+    await store.refresh();
+    expect(store.current().error).toBe('');
+    expect(store.current().data).toBe(initial);
+    expect(publish).toHaveBeenCalledTimes(3);
+  });
+
+  it('orders messages at ingestion and preserves untouched objects during streamed edits', async () => {
+    const first = message('first', 1),
+      second = message('second', 2);
+    const received = [second, first];
+    let version = 1;
+    const { store } = fixture(async (method) => {
+      if (method === 'state.view') return view(received);
+      version++;
+      return version === 2
+        ? delta([message('second', 2, 'streaming')])
+        : delta([message('second', 4, 'published'), message('third', 3)], version);
+    });
+    await store.refresh(true);
+    expect(received).toEqual([second, first]);
+    expect(store.current().data?.messages).toEqual([first, second]);
+    await store.refresh();
+    expect(store.current().data?.messages.map((item) => item.id)).toEqual(['first', 'second']);
+    expect(store.current().data?.messages[0]).toBe(first);
+    expect(store.current().data?.messages[1]).not.toBe(second);
+    await store.refresh();
+    expect(store.current().data?.messages.map((item) => item.id)).toEqual([
+      'first',
+      'third',
+      'second',
+    ]);
+    expect(store.current().data?.messages[0]).toBe(first);
+  });
+
   it('publishes completed task and reply updates while the authoritative reload is still pending', async () => {
     const running = { id: 'task', status: 'running' },
       completed = { ...running, status: 'completed' };
