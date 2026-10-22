@@ -111,6 +111,10 @@ SnapshotSync 持有同步 epoch 与版本游标，TeamSnapshotStore 分别管理
 
 ## 验证入口
 
+桌面更新只保存一个校验完成的候选包及原子写入的缓存记录。启动仍读取官方清单，平台、版本、大小与摘要匹配且文件复验通过后恢复安装入口；清单请求失败保留缓存。安装助手在任务目录记录实际进程 ID，回收避开仍在使用的源包，安装前继续复验文件并执行任务准入检查。
+
+Release 草稿上传复用已校验安装包，并查询包源提交 SHA 对应的最新日常 CI。最新运行及 macOS、Windows 检查均成功后才允许上传；查询期间运行或重试轮次变化需要重新校验。
+
 | 变更 | 优先测试 |
 | --- | --- |
 | 调度、启动恢复、补充输入 | [scheduler](../tests/scheduler.test.ts)、[scheduler-recovery](../tests/scheduler-recovery.test.ts)、[task-input-admission](../tests/task-input-admission.test.ts)、[core-user-input](../tests/core-user-input.test.ts) |
