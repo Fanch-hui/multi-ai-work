@@ -1,6 +1,6 @@
 ---
 name: professional-kw-sales-skills-draft-outreach
-description: "需适配"
+description: "结合客户资料、往来历史和具体业务信号起草简洁的个性化联系邮件或多次触达文案；用于首次联系、暖线跟进、转介绍和客户重新激活。"
 ---
 
 ## multi-AI work 执行约定

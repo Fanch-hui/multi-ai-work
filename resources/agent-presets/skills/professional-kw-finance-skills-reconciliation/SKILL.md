@@ -1,6 +1,6 @@
 ---
 name: professional-kw-finance-skills-reconciliation
-description: "需适配"
+description: "核对总账与明细账、银行流水和公司间往来，分类差异、追踪账龄并整理调整与升级事项；用于期末对账和未达项跟进。"
 ---
 
 ## multi-AI work 执行约定

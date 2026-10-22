@@ -1,6 +1,6 @@
 ---
 name: professional-fs-unit-economics
-description: "需适配"
+description: "分析客户获客成本、生命周期价值、回收期、留存和客户批次表现，结合收入桥与贡献利润评估收入质量；用于单位经济分析和经营尽调。"
 ---
 
 ## multi-AI work 执行约定

@@ -1,6 +1,6 @@
 ---
 name: professional-cz-deal-desk
-description: "需适配"
+description: "评估单笔交易的毛利、折扣和商务条款风险，依据既有政策生成审批链与审阅建议；用于销售折扣申请、续约谈判和签约前商务审查。"
 ---
 
 ## multi-AI work 执行约定

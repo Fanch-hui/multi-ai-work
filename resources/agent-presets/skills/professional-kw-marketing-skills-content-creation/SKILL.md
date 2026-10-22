@@ -1,6 +1,6 @@
 ---
 name: professional-kw-marketing-skills-content-creation
-description: "辅助：把口播主题改成配套说明、发布文案及营销素材"
+description: "围绕受众与事实素材撰写文章、图文、案例和发布文案，组织标题、分节、配图说明与行动建议。"
 ---
 
 ## multi-AI work 执行约定

@@ -1,0 +1,7 @@
+Source: https://github.com/anthropics/financial-services
+Commit: 574ed3624aebd0418c7e96cd101262f30210ab26
+Path: plugins/vertical-plugins/private-equity/skills/unit-economics/SKILL.md
+License: Apache-2.0
+Local source: professional-fs-unit-economics/SKILL.md and its LICENSE/NOTICE.
+
+Modified by multi-AI work: Adapted the Margin Waterfall and fully loaded unit economics method into Chinese cost analysis guidance. Added cost-object and period normalization, separate direct-cost and contribution measures, allocation reconciliation, zero-volume treatment, exact cost/profit bridges, and user-specified sensitivity analysis. The added cost workflow and formulas are local adaptations, rather than quotations from the upstream skill.

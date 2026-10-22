@@ -1,6 +1,6 @@
 ---
 name: professional-kw-sales-skills-create-an-asset
-description: "需适配"
+description: "依据已批准的产品资料和客户背景制作针对性销售单页、简报、演示稿或FAQ，核对主张来源和受众权限；用于客户销售材料制作。"
 ---
 
 ## multi-AI work 执行约定

@@ -1,6 +1,6 @@
 ---
 name: professional-kw-sales-skills-call-prep
-description: "需适配"
+description: "汇总客户历史、参会人背景、既有承诺与未解决问题，制定会议目标、提问和异议应对；用于客户拜访或销售通话前准备。"
 ---
 
 ## multi-AI work 执行约定

@@ -1,6 +1,6 @@
 ---
 name: professional-mk-copy-editing
-description: "辅助：逐轮审校清晰度、语气、依据和具体性"
+description: "审校已有文案的清晰度、结构、语气和事实声明，保留原意并给出可定位修改。"
 ---
 
 ## multi-AI work 执行约定

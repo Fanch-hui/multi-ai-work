@@ -1,6 +1,6 @@
 ---
 name: professional-cz-sales-engineer
-description: "需适配"
+description: "把客户技术需求转为解决方案，分析RFP覆盖度与竞品差异，准备演示、POC计划及技术提案；用于技术售前和客户方案评估。"
 ---
 
 ## multi-AI work 执行约定

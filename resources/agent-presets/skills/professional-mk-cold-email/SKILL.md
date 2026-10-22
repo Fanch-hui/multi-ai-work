@@ -1,6 +1,6 @@
 ---
 name: professional-mk-cold-email
-description: "需适配"
+description: "撰写B2B冷启动开发信和跟进序列，围绕客户问题设计个性化切入点、主题与行动邀请，并检查送达和多渠道节奏；用于主动获客文案策划。"
 ---
 
 ## multi-AI work 执行约定

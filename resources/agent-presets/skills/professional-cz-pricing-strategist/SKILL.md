@@ -1,6 +1,6 @@
 ---
 name: professional-cz-pricing-strategist
-description: "需适配"
+description: "比较订阅、用量与价值等定价模式，分析支付意愿调查并设计分层套餐；用于新产品定价、价格体系调整和套餐设计。"
 ---
 
 ## multi-AI work 执行约定

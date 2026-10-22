@@ -1,6 +1,6 @@
 ---
 name: professional-fs-audit-xls
-description: "需适配"
+description: "审查电子表格的公式、引用、单位及数据错误，核对财务模型的资产负债平衡、现金勾稽和滚动明细；用于表格校核与财务模型审计。"
 ---
 
 ## multi-AI work 执行约定

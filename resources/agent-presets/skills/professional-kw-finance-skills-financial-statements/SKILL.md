@@ -1,6 +1,6 @@
 ---
 name: professional-kw-finance-skills-financial-statements
-description: "需适配"
+description: "依据试算平衡表或财务明细编制财务报表，比较历史及预算差异，并制作13周滚动现金收付预测；用于月季年报告和资金计划。"
 ---
 
 ## multi-AI work 执行约定

@@ -1,6 +1,6 @@
 ---
 name: professional-sc-peer-review
-description: "需适配"
+description: "在投稿方与期刊授权范围内，辅助人工审稿人评估论文的论证证据、方法统计、可复现性与报告规范，形成有定位依据的审稿意见草稿；用于学术同行评审。"
 ---
 
 ## multi-AI work 执行约定

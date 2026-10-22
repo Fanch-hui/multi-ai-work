@@ -1,6 +1,6 @@
 ---
 name: professional-kw-sales-skills-account-research
-description: "需适配"
+description: "整合目标企业与联系人的资料、近期业务信号和CRM归属，评估理想客户匹配度并提炼有来源的触达切入点；用于销售账户研究。"
 ---
 
 ## multi-AI work 执行约定

@@ -1,6 +1,6 @@
 ---
 name: professional-mk-social
-description: "辅助：平台选题与内容日历"
+description: "按受众与平台规划社交内容、内容日历及多渠道改编，适用于账号运营与内容分发。"
 ---
 
 ## multi-AI work 执行约定

@@ -1,6 +1,6 @@
 ---
 name: professional-fs-clean-data-xls
-description: "需适配"
+description: "识别并清理电子表格中的空格、格式混杂、文本数字、日期、重复值与缺失值，保留可追溯的转换过程；用于分析前的数据整理。"
 ---
 
 ## multi-AI work 执行约定

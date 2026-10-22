@@ -1,6 +1,6 @@
 ---
 name: professional-kw-sales-skills-call-summary
-description: "需适配"
+description: "从客户通话记录提取决策、双方承诺和未决问题，整理客户跟进邮件、内部摘要与CRM更新建议；用于销售会后复盘和行动跟进。"
 ---
 
 ## multi-AI work 执行约定
