@@ -55,6 +55,21 @@ describe('Antigravity event accounting', () => {
     });
   });
 
+  it('keeps tool lifecycles separate when a continued turn reuses a native step index', () => {
+    const events: ProviderEvent[] = [];
+    const projection = new AntigravityEvents({ emit: (event) => events.push(event) });
+    projection.accept(init());
+    projection.accept(step(0, {}, { state: 'ACTIVE', step_type: 'tool', tool_name: 'read' }));
+    projection.accept(step(0, {}, { state: 'DONE', step_type: 'tool', tool_name: 'read' }));
+    projection.nextTurn();
+    projection.accept(step(0, {}, { state: 'ACTIVE', step_type: 'tool', tool_name: 'read' }));
+    const tools = events.filter((event) => event.type === 'tool');
+    expect(tools.map((event) => event.data.status)).toEqual(['running', 'completed', 'running']);
+    expect(tools[0].data.callId).toBe(tools[1].data.callId);
+    expect(tools[2].data.callId).not.toBe(tools[1].data.callId);
+    expect(events.filter((event) => event.data.phase === 'model-work-started')).toHaveLength(1);
+  });
+
   it('uses streamed text once and does not duplicate the final response', () => {
     const events: ProviderEvent[] = [],
       projection = new AntigravityEvents({ emit: (event) => events.push(event) });

@@ -143,7 +143,7 @@ export class AntigravityEvents {
         data: {
           source: 'native',
           name: step.tool_name,
-          callId: `${this.initialization!.conversationId}:${step.step_index}`,
+          callId: `${this.initialization!.conversationId}:${this.turnSequence}:${step.step_index}`,
           status: toolStatus(),
         },
       });
