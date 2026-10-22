@@ -28,6 +28,7 @@ export class HistoryRequests {
             })
             .parse(params.cursor),
           z.string().optional().parse(params.conversationId),
+          z.boolean().optional().parse(params.businessDeltas),
         );
       case 'conversations.messages': {
         const room = required(s.get<Conversation>('conversations', objectId()), '对话不存在');
@@ -50,7 +51,10 @@ export class HistoryRequests {
           objectId(),
           z.array(z.string()).parse(params.messageIds),
         );
-        if (changed) this.state.changed();
+        if (changed) {
+          s.changes.mark('conversation_reads', objectId());
+          this.state.changed('state', { incremental: true });
+        }
         return { ok: true };
       }
       case 'runs.events': {

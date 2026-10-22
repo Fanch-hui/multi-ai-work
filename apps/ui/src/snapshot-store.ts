@@ -105,6 +105,7 @@ export class TeamSnapshotStore {
       delta = await this.request<SnapshotDelta>('state.changes', {
         cursor: this.cursor,
         conversationId: room,
+        businessDeltas: true,
       });
     }
     if (generation !== this.selectionGeneration) return;
@@ -142,7 +143,12 @@ export class TeamSnapshotStore {
       tasks: upsert(data.tasks, delta.tasks),
       runs: upsert(data.runs, delta.runs),
       processes: upsert(data.processes, delta.processes),
-      conversations: delta.conversations ?? data.conversations,
+      conversations: upsert(
+        delta.conversations ?? data.conversations,
+        delta.conversationUpdates ?? [],
+      ),
+      taskPlans: upsert(data.taskPlans, delta.taskPlans ?? []),
+      taskInputs: upsert(data.taskInputs, delta.taskInputs ?? []),
       events: recentEvents(data.events, delta.events),
     };
     const changed = Object.entries(updates).some(

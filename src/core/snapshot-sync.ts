@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import type { Message, ProcessRecord, Run, Task } from '../domain/types.js';
+import type { Message, ProcessRecord, Run, Task, TaskInput } from '../domain/types.js';
+import type { TaskPlanRecord } from '../domain/task-plan.js';
 import type {
   MessagePage,
   SnapshotCursor,
@@ -10,9 +11,11 @@ import type { State, StateChange } from './state.js';
 import type { StorageChanges } from './storage-changes.js';
 import { taskActivityReader } from './task-activity.js';
 import { unreadConversationCounts } from './conversation-read.js';
+import { taskPlanView } from './task-plan-view.js';
 
 interface Change extends StorageChanges {
   version: number;
+  legacyReset: boolean;
 }
 const supported = new Set([
   'messages',
@@ -23,6 +26,7 @@ const supported = new Set([
   'text_events',
   'provider_archive',
 ]);
+const businessSupported = new Set([...supported, 'deliveries', 'task_plans', 'conversation_reads']);
 export const publicProcess = (item: ProcessRecord): ProcessRecord => ({
   id: item.id,
   runId: item.runId,
@@ -49,14 +53,18 @@ export class SnapshotSync {
   cursor(eventSequence = this.state.storage.latestNonTextEventSequence()): SnapshotCursor {
     return { epoch: this.epoch, version: this.version, eventSequence };
   }
-  changed(kind: StateChange) {
+  changed(kind: StateChange, incremental = false) {
     const changes = this.state.storage.changes.take();
     if (changes.invalidated) this.epoch = randomUUID();
-    const reset =
+    const legacyReset =
       kind === 'state' ||
       changes.reset ||
       [...changes.entities.keys()].some((table) => !supported.has(table));
-    this.log.push({ ...changes, reset, version: ++this.version });
+    const reset =
+      (kind === 'state' && !incremental) ||
+      changes.reset ||
+      [...changes.entities.keys()].some((table) => !businessSupported.has(table));
+    this.log.push({ ...changes, reset, legacyReset, version: ++this.version });
     if (this.log.length > 256) this.log.shift();
   }
   view(conversationId?: string, from?: number): SnapshotView {
@@ -72,7 +80,7 @@ export class SnapshotSync {
       ...(conversationId ? { history: { conversationId, nextBefore: page?.nextBefore } } : {}),
     };
   }
-  delta(cursor: SnapshotCursor, conversationId?: string): SnapshotDelta {
+  delta(cursor: SnapshotCursor, conversationId?: string, businessDeltas = false): SnapshotDelta {
     const changes = this.log.filter((change) => change.version > cursor.version);
     const result: SnapshotDelta = {
       cursor: { epoch: this.epoch, version: this.version, eventSequence: cursor.eventSequence },
@@ -87,7 +95,8 @@ export class SnapshotSync {
       cursor.version < (this.log[0]?.version ?? this.version + 1) - 1
     )
       return { ...result, reset: true };
-    if (changes.some((change) => change.reset)) result.reset = true;
+    if (changes.some((change) => (businessDeltas ? change.reset : change.legacyReset)))
+      result.reset = true;
     const s = this.state.storage;
     if (cursor.eventSequence === undefined) {
       result.events = s.events();
@@ -97,9 +106,10 @@ export class SnapshotSync {
     const ids = (table: string) => [
       ...new Set(changes.flatMap((change) => [...(change.entities.get(table) ?? [])])),
     ];
-    result.messages = ids('messages')
+    const changedMessages = ids('messages')
       .map((id) => s.getMessage(id))
-      .filter((item): item is Message => !!item && item.conversationId === conversationId);
+      .filter((item): item is Message => !!item);
+    result.messages = changedMessages.filter((item) => item.conversationId === conversationId);
     const runs = ids('runs')
       .map((id) => s.get<Run>('runs', id))
       .filter((item): item is Run => !!item);
@@ -107,11 +117,17 @@ export class SnapshotSync {
     const eventRuns = [...eventRunIds]
       .map((id) => s.get<Run>('runs', id))
       .filter((item): item is Run => !!item);
+    const changedTaskIds = new Set(ids('tasks'));
     const taskIds = new Set([
-      ...ids('tasks'),
+      ...changedTaskIds,
       ...runs.map((run) => run.taskId),
       ...eventRuns.map((run) => run.taskId),
     ]);
+    // A dependency or occupied execution slot can change another queued task's wait reason.
+    if (businessDeltas && changedTaskIds.size) {
+      for (const status of ['queued', 'recovering'])
+        for (const task of s.byField<Task>('tasks', 'status', status)) taskIds.add(task.id);
+    }
     const tasks = [...taskIds]
       .map((id) => s.get<Task>('tasks', id))
       .filter((item): item is Task => !!item);
@@ -135,7 +151,44 @@ export class SnapshotSync {
       result.events = next.events;
       result.cursor.eventSequence = next.eventSequence;
     }
-    if (ids('messages').length) result.conversations = unreadConversationCounts(s);
+    if (businessDeltas) {
+      const rooms = [
+        ...new Set([
+          ...ids('conversation_reads'),
+          ...changedMessages.map((message) => message.conversationId),
+        ]),
+      ];
+      if (rooms.length) result.conversationUpdates = unreadConversationCounts(s, rooms);
+      this.businessUpdates(
+        result,
+        tasks.filter((task) => changedTaskIds.has(task.id)),
+        ids,
+      );
+    } else if (ids('messages').length) result.conversations = unreadConversationCounts(s);
     return result;
+  }
+
+  private businessUpdates(result: SnapshotDelta, tasks: Task[], ids: (table: string) => string[]) {
+    const s = this.state.storage;
+    const planIds = new Set([
+      ...ids('task_plans'),
+      ...tasks.flatMap((task) => [task.id, ...(task.planId ? [task.planId] : [])]),
+    ]);
+    const plans = [...planIds].flatMap((id) => {
+      const plan = s.get<TaskPlanRecord>('task_plans', id);
+      if (!plan) return [];
+      const root = s.get<Task>('tasks', plan.taskId);
+      const linked = s
+        .byField<Task>('tasks', 'planId', plan.id)
+        .filter((task) => task.id !== root?.id);
+      return [
+        taskPlanView(plan, root ? [root, ...linked] : linked, this.state.settings().mainBotId!),
+      ];
+    });
+    if (plans.length) result.taskPlans = plans;
+    const inputs = ids('deliveries')
+      .map((id) => s.get<TaskInput>('deliveries', id))
+      .filter((input): input is TaskInput => input?.kind === 'user-input');
+    if (inputs.length) result.taskInputs = inputs;
   }
 }

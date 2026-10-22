@@ -149,8 +149,8 @@ export class State {
       dataDirectory: this.dataDirectory,
     };
   }
-  changed(kind: StateChange = 'state') {
-    this.sync.changed(kind);
+  changed(kind: StateChange = 'state', options: { incremental?: boolean } = {}) {
+    this.sync.changed(kind, options.incremental);
     for (const listener of this.listeners) listener(kind);
   }
   subscribe(listener: (kind: StateChange) => void) {

@@ -283,14 +283,17 @@ export class TaskService {
       patch.coordinationPaused = false;
       if (message.authorType === 'user') patch.error = undefined;
     }
-    return this.update(task, patch);
+    // A new requirement also changes derived artifact and descendant task projections.
+    return this.update(task, patch, { incremental: false });
   }
 
-  update(task: Task, patch: Partial<Task>) {
+  update(task: Task, patch: Partial<Task>, options = { incremental: true }) {
     const current = required(this.state.storage.get<Task>('tasks', task.id), '任务不存在');
     const updated = { ...current, ...patch, updatedAt: now() };
+    if (current.planId && current.planId !== updated.planId)
+      this.state.storage.changes.mark('task_plans', current.planId);
     this.state.storage.put('tasks', updated);
-    this.state.changed();
+    this.state.changed('state', options);
     return updated;
   }
 

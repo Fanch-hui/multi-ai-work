@@ -6,7 +6,9 @@ import type {
   RunEvent,
   Snapshot,
   Task,
+  TaskInput,
 } from './types.js';
+import type { TaskPlan } from './task-plan.js';
 
 export interface SnapshotCursor {
   epoch: string;
@@ -30,5 +32,8 @@ export interface SnapshotDelta {
   runs: Run[];
   processes: ProcessRecord[];
   conversations?: Conversation[];
+  conversationUpdates?: Conversation[];
+  taskPlans?: TaskPlan[];
+  taskInputs?: TaskInput[];
   events?: RunEvent[];
 }

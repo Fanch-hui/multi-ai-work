@@ -30,6 +30,7 @@ const indexedFields = {
   requestId: '$.requestId',
   taskId: '$.taskId',
   conversationId: '$.conversationId',
+  planId: '$.planId',
 } as const;
 
 export class Storage {

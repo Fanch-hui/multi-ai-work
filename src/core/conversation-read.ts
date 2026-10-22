@@ -84,8 +84,14 @@ export function readConversation(
   return true;
 }
 
-export function unreadConversationCounts(storage: Storage): Conversation[] {
-  return storage.all<Conversation>('conversations').map((room) => {
+export function unreadConversationCounts(storage: Storage, ids?: string[]): Conversation[] {
+  const rooms =
+    ids === undefined
+      ? storage.all<Conversation>('conversations')
+      : ids
+          .map((id) => storage.get<Conversation>('conversations', id))
+          .filter((room): room is Conversation => !!room);
+  return rooms.map((room) => {
     const read = position(storage, room.id);
     const filter = `conversation_id = ? AND json_extract(payload, '$.authorType') = 'bot'
       AND (sequence > ? OR id IN (SELECT value FROM json_each(?)))`;
