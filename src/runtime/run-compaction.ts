@@ -1,6 +1,11 @@
 import type { ModelMessage } from '../domain/provider.js';
 import type { Protocol } from '../domain/types.js';
-import { balancedHistoryUnits, estimateModelMessagesTokens, toolsPaired } from './model-history.js';
+import {
+  balancedHistoryUnits,
+  estimateModelMessageTokens,
+  estimateModelMessagesTokens,
+  toolsPaired,
+} from './model-history.js';
 import { summarizeUnits } from './context-summary.js';
 
 interface RunCompactionOptions {
@@ -28,11 +33,12 @@ export async function compactRunMessages(original: ModelMessage[], options: RunC
   const originalSize = estimate(original);
   if (!options.force && originalSize <= options.trigger) return undefined;
   let messages = original;
+  let currentSize = originalSize;
   let currentStart = options.currentStart;
   for (let attempt = 0; attempt < 3; attempt++) {
     options.signal.throwIfAborted();
     const range = removableRange(messages, currentStart);
-    if (!range) return compactLatestResult(messages, currentStart, options);
+    if (!range) return compactLatestResult(messages, currentStart, currentSize, options);
     const [start, end] = range;
     const history = messages.slice(start, end).map((message, sequence) => ({
       message: { ...message },
@@ -80,20 +86,23 @@ export async function compactRunMessages(original: ModelMessage[], options: RunC
       content: `已完成工作摘要（历史资料）：\n${content}${references?.text ? `\n${references.text}` : ''}`,
     };
     const next = [...messages.slice(0, start), summary, ...messages.slice(end)];
-    if (estimate(next) >= estimate(messages))
-      return compactLatestResult(messages, currentStart, options);
+    const nextSize = estimate(next);
+    if (nextSize >= currentSize)
+      return compactLatestResult(messages, currentStart, currentSize, options);
     if (start < currentStart)
       currentStart = currentStart - (Math.min(end, currentStart) - start) + 1;
     messages = next;
-    if (estimate(messages) <= options.trigger && estimate(messages) < originalSize)
+    currentSize = nextSize;
+    if (currentSize <= options.trigger && currentSize < originalSize)
       return { messages, currentStart };
   }
-  return compactLatestResult(messages, currentStart, options);
+  return compactLatestResult(messages, currentStart, currentSize, options);
 }
 
 async function compactLatestResult(
   messages: ModelMessage[],
   currentStart: number,
+  currentSize: number,
   options: RunCompactionOptions,
 ) {
   if (!options.preserveToolOutput) return undefined;
@@ -140,17 +149,17 @@ async function compactLatestResult(
       contextArtifactIds: reference.artifactIds,
       content: `工具结果摘要：\n${summary}\n${reference.text}`,
     };
-    if (
-      estimateModelMessagesTokens([replacement], options.protocol) >=
-      estimateModelMessagesTokens([tool], options.protocol)
-    )
-      return undefined;
-    next = next.map((message) => (message === tool ? replacement : message));
-    if (
-      options.fixedTokens + estimateModelMessagesTokens(next, options.protocol) <=
-      options.trigger
-    )
-      return { messages: next, currentStart };
+    const toolSize = estimateModelMessageTokens(tool, options.protocol);
+    const replacementSize = estimateModelMessageTokens(replacement, options.protocol);
+    if (replacementSize >= toolSize) return undefined;
+    let replaced = 0;
+    next = next.map((message) => {
+      if (message !== tool) return message;
+      replaced++;
+      return replacement;
+    });
+    currentSize += (replacementSize - toolSize) * replaced;
+    if (currentSize <= options.trigger) return { messages: next, currentStart };
   }
   return undefined;
 }
