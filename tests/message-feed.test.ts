@@ -461,7 +461,7 @@ describe('conversation message feed', () => {
     ).toEqual(['member']);
     const html = render(data);
     expect(html).toContain('member 成员');
-    expect(html).toContain('正在认真思考');
+    expect(html).toMatch(/正在做准备|正在整理手头资料|准备开工|正在理清任务要求/);
     for (const id of ids.slice(1)) expect(html).not.toContain(`${id} 成员`);
     expect(html).toContain('消息 · 已发布');
     expect(html.match(/class="agent-activity /g)).toHaveLength(1);
@@ -580,7 +580,7 @@ describe('working member activity', () => {
     const diagnostics = event('cache', { type: 'status', data: { phase: 'model-cache-response' } });
     expect(
       agentActivity(owner, current, [event('text', { type: 'text' }), diagnostics], true),
-    ).toBe('正在组织回复');
+    ).toMatch(/正在组织回复|正在把结果整理清楚|正在理顺表达|准备把成果交给你/);
     expect(
       agentActivity(owner, current, [
         event('retry', { type: 'status', data: { phase: 'model-retry' } }),
@@ -604,13 +604,19 @@ describe('working member activity', () => {
       status: 'running',
       createdAt: time,
     };
-    expect(agentActivity(owner, current, [], true, [process])).toBe('正在努力工作');
+    expect(agentActivity(owner, current, [], true, [process])).toMatch(
+      /正在着手处理|正在逐项推进|正忙着把事情做扎实|正在处理手头工作|正在把细节落到实处/,
+    );
     const events = [
       event('start'),
       event('done', { data: { callId: 'call', status: 'completed' } }),
       event('phase', { data: { callId: 'call', phase: 'completed' } }),
     ];
-    expect(agentActivity(owner, current, events)).toBe('正在认真思考');
-    expect(agentActivity(owner, current, [event('start')], true)).toBe('正在努力工作');
+    expect(agentActivity(owner, current, events)).toMatch(
+      /正在梳理思路|正把线索串起来|正在琢磨下一步|换个角度想一想|正在理顺关键细节/,
+    );
+    expect(agentActivity(owner, current, [event('start')], true)).toMatch(
+      /正在着手处理|正在逐项推进|正忙着把事情做扎实|正在处理手头工作|正在把细节落到实处/,
+    );
   });
 });

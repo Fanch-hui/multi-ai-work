@@ -1,6 +1,6 @@
 import type { ProcessRecord, Run, RunEvent, Task } from '../../../src/domain/types.js';
 import { cn } from './classNames.js';
-import { currentActivityLabel, recoveryAttemptTime } from './task-activity.js';
+import { chatActivityLabel } from './chat-status.js';
 
 export function agentActivity(
   task?: Task,
@@ -9,43 +9,7 @@ export function agentActivity(
   streaming = false,
   processes: ProcessRecord[] = [],
 ): string {
-  const status = task?.status ?? run?.status;
-  const activity = currentActivityLabel(task, run);
-  const nextAttempt = recoveryAttemptTime(task);
-  if (activity) return nextAttempt ? `${activity} · 下次尝试 ${nextAttempt}` : activity;
-  if (status === 'queued') return '排队中';
-  if (status === 'waiting_approval' || run?.status === 'waiting_approval') return '等待你的批准';
-  if (status === 'waiting_input' || run?.status === 'waiting_input') return '等待你的回答';
-  if (status === 'waiting_children') return '正在协调团队';
-  if (processes.some((process) => process.runId === run?.id && process.status === 'running'))
-    return '正在努力工作';
-  const recent = events
-    .filter(
-      (event) =>
-        event.runId === run?.id &&
-        !(
-          event.type === 'status' &&
-          ['model-cache-request', 'model-cache-response', 'performance'].includes(
-            String(event.data.phase),
-          )
-        ),
-    )
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-  const tools = new Map<string, string>();
-  for (const event of recent) {
-    if (event.type !== 'tool') continue;
-    const toolStatus = event.data.status ?? event.data.phase;
-    if (toolStatus) tools.set(String(event.data.callId ?? event.data.name), String(toolStatus));
-  }
-  if ([...tools.values()].some((status) => ['started', 'running'].includes(status)))
-    return '正在努力工作';
-  const latest = recent
-    .filter((event) => ['status', 'compaction', 'tool', 'text'].includes(event.type))
-    .at(-1);
-  if (latest?.data.phase === 'model-retry') return '正在恢复连接';
-  if (latest?.type === 'compaction' && latest.data.status === 'started') return '正在整理上下文';
-  if (streaming && (!recent.length || recent.at(-1)?.type === 'text')) return '正在组织回复';
-  return '正在认真思考';
+  return chatActivityLabel(task, run, events, streaming, processes);
 }
 
 export function AgentActivity({

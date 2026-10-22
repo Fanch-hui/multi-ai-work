@@ -75,33 +75,36 @@ export function TaskActivityDetails({
           较长时间未收到活动
         </p>
       )}
-      <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5">
-        {recovery && <ActivityTime label="下次尝试" value={recovery.nextAttemptAt} />}
-        <ActivityTime label="最后模型活动" value={task.activity?.lastModelActivityAt} />
-        <ActivityTime label="最后工具活动" value={task.activity?.lastToolActivityAt} />
-        {task.activity?.toolName && (
-          <>
-            <dt className="text-slate-400">
-              {task.activity.phase === 'tool' ? '当前工具' : '最近工具'}
-            </dt>
-            <dd className="min-w-0 truncate">{task.activity.toolName}</dd>
-          </>
-        )}
-        {task.activity?.waitingFor && (
-          <>
-            <dt className="text-slate-400">等待对象</dt>
-            <dd className="min-w-0 break-words">{task.activity.waitingFor}</dd>
-          </>
-        )}
-        {task.activity?.checkpointId && (
-          <>
-            <dt className="text-slate-400">检查点</dt>
-            <dd className="min-w-0 truncate" title={task.activity.checkpointId}>
-              {task.activity.checkpointId}
-            </dd>
-          </>
-        )}
-      </dl>
+      <details className="mt-3">
+        <summary className="cursor-pointer text-slate-500">技术详情 · 活动与检查点</summary>
+        <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5">
+          {recovery && <ActivityTime label="下次尝试" value={recovery.nextAttemptAt} />}
+          <ActivityTime label="最后模型活动" value={task.activity?.lastModelActivityAt} />
+          <ActivityTime label="最后工具活动" value={task.activity?.lastToolActivityAt} />
+          {task.activity?.toolName && (
+            <>
+              <dt className="text-slate-400">
+                {task.activity.phase === 'tool' ? '当前工具' : '最近工具'}
+              </dt>
+              <dd className="min-w-0 truncate">{task.activity.toolName}</dd>
+            </>
+          )}
+          {task.activity?.waitingFor && (
+            <>
+              <dt className="text-slate-400">等待对象</dt>
+              <dd className="min-w-0 break-words">{task.activity.waitingFor}</dd>
+            </>
+          )}
+          {task.activity?.checkpointId && (
+            <>
+              <dt className="text-slate-400">检查点</dt>
+              <dd className="min-w-0 truncate" title={task.activity.checkpointId}>
+                {task.activity.checkpointId}
+              </dd>
+            </>
+          )}
+        </dl>
+      </details>
       {checked && (
         <p role="status" className="mt-2 text-slate-400">
           状态已刷新

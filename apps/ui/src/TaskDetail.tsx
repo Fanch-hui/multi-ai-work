@@ -22,6 +22,7 @@ import { ArtifactItem } from './Artifacts.js';
 import { Markdown } from './Markdown.js';
 import { UserQuestionCard } from './UserQuestionCard.js';
 import { RunRecords } from './RunRecords.js';
+import { TaskWorkOverview } from './TaskWorkOverview.js';
 import { TaskActivityDetails } from './TaskActivityDetails.js';
 import { RequirementDetails } from './RequirementDetails.js';
 import { currentActivityLabel, stoppingTask } from './task-activity.js';
@@ -102,8 +103,10 @@ export function TaskDetail({
     (item) => item.taskId === task.id && item.status === 'pending',
   );
   const questions = (data.questions ?? []).filter((item) => item.taskId === task.id);
-  const runs = data.runs.filter((item) => item.taskId === task.id);
-  const latestRun = runs.find((run) => run.id === task.runIds.at(-1));
+  const runs = data.runs
+    .filter((item) => item.taskId === task.id)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const latestRun = runs.find((run) => run.id === task.runIds.at(-1)) ?? runs[0];
   const stopping = stoppingTask(task, latestRun);
   const processes = (data.processes ?? []).filter((item) => item.taskId === task.id);
   async function retry() {
@@ -129,7 +132,6 @@ export function TaskDetail({
           {currentActivityLabel(task, latestRun) ?? taskRecordStatus(task, processes)}
         </Badge>
       </div>
-      <TaskActivityDetails key={task.id} task={task} run={latestRun} mutate={mutate} />
       <div>
         <h3 className="line-clamp-2 [overflow-wrap:anywhere] text-pretty text-sm font-semibold leading-6">
           {recordTaskTitle(task)}
@@ -149,6 +151,11 @@ export function TaskDetail({
           </details>
         )}
       </div>
+      <section className="min-w-0 rounded-xl border border-slate-200 bg-white p-4">
+        <h4 className="text-sm font-semibold text-slate-700">工作概览</h4>
+        <TaskWorkOverview task={task} data={data} />
+      </section>
+      <TaskActivityDetails key={task.id} task={task} run={latestRun} mutate={mutate} />
       <RequirementDetails task={task} />
       {task.error && (
         <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">
@@ -299,18 +306,32 @@ export function TaskDetail({
           </div>
         </section>
       )}
-      <CommandRecords processes={processes} />
       {!!runs.length && (
+        <section
+          aria-label="工作过程"
+          className="min-w-0 rounded-xl border border-slate-200 bg-white p-4"
+        >
+          <h4 className="mb-3 text-sm font-medium text-slate-700">工作过程</h4>
+          <div className="grid min-w-0 gap-3">
+            {runs.map((run) => (
+              <RunRecords
+                key={run.id}
+                run={run}
+                task={task}
+                recent={data.events}
+                defaultOpen={run.id === latestRun?.id}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+      {!!processes.length && (
         <details className="min-w-0 rounded-xl border border-slate-200 bg-white p-4">
           <summary className="cursor-pointer text-sm font-medium text-slate-700">
-            工具操作与运行记录 · <span className="tabular-nums">{runs.length}</span> 轮
+            技术详情 · 命令参数与输出
           </summary>
-          <div className="mt-3 grid min-w-0 grid-cols-1 gap-3">
-            {[...runs]
-              .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-              .map((run) => (
-                <RunRecords key={run.id} run={run} task={task} recent={data.events} />
-              ))}
+          <div className="mt-3">
+            <CommandRecords processes={processes} />
           </div>
         </details>
       )}

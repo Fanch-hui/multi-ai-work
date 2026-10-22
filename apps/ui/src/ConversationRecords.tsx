@@ -13,6 +13,7 @@ import {
   taskRecordStatus,
 } from './conversation-records.js';
 import { conversationTaskPlans } from './task-plans.js';
+import { TaskWorkOverview } from './TaskWorkOverview.js';
 import { TaskPlanCard } from './TaskPlanCard.js';
 
 export function ConversationRecords({
@@ -197,6 +198,7 @@ function TaskRecord({
           <p className="line-clamp-2 text-pretty text-sm leading-6 text-slate-700">
             {recordTaskTitle(task)}
           </p>
+          <TaskWorkOverview task={task} data={data} compact />
           {task.error && (
             <p className="mt-2 line-clamp-2 break-words text-pretty text-xs leading-5 text-red-700">
               {task.error}

@@ -55,16 +55,22 @@ describe('task activity diagnostics', () => {
     for (const [kind, label] of Object.entries(labels)) {
       const current: Task = {
         ...task,
-        activity: { phase: 'model', modelActivity: kind as ModelActivityKind },
+        activity: {
+          phase: 'model',
+          modelActivity: kind as ModelActivityKind,
+          firstModelOutputAt: kind === 'waiting' ? undefined : time,
+        },
       };
-      expect(agentActivity(current)).toBe(label);
+      expect(currentActivityLabel(current)).toBe(label);
+      if (kind === 'waiting') expect(agentActivity(current)).toBe('正在等待响应');
+      else expect(agentActivity(current)).not.toBe('正在等待响应');
       expect(agentActivity({ ...current, status: 'completed' })).toBe('已完成');
     }
     expect(
       agentActivity({ ...task, status: 'waiting_approval', activity: { phase: 'approval' } }),
     ).toBe('等待批准');
-    expect(agentActivity({ ...task, activity: { phase: 'tool', toolName: 'read_file' } })).toBe(
-      '正在努力工作',
+    expect(agentActivity({ ...task, activity: { phase: 'tool', toolName: 'read_file' } })).toMatch(
+      /正在着手处理|正在逐项推进|正忙着把事情做扎实|正在处理手头工作|正在把细节落到实处/,
     );
   });
 

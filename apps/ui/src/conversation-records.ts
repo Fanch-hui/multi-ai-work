@@ -1,10 +1,6 @@
-import type {
-  Conversation,
-  ProcessRecord,
-  RunEvent,
-  Snapshot,
-  Task,
-} from '../../../src/domain/types.js';
+import type { Conversation, ProcessRecord, Snapshot, Task } from '../../../src/domain/types.js';
+export { taskRecordActions, toolActionTitle } from './run-work-actions.js';
+export type { RecordedAction } from './run-work-actions.js';
 import { currentActivityLabel, recoveryAttemptTime } from './task-activity.js';
 
 const activeStatuses = new Set([
@@ -34,43 +30,6 @@ const processLabels: Record<string, string> = {
   stopped: '命令已停止',
   timed_out: '命令超时',
   unknown: '命令结果待核查',
-};
-const toolLabels: Record<string, string> = {
-  list_directory: '查看目录',
-  find_files: '查找文件',
-  search_text: '搜索文件内容',
-  read_file: '读取文件',
-  write_file: '写入文件',
-  edit_file: '修改文件',
-  delete_file: '删除文件',
-  read_artifact: '读取成果',
-  write_artifact: '生成成果',
-  list_artifacts: '查找成果',
-  register_artifact: '登记成果',
-  read_messages: '读取消息',
-  search_messages: '搜索消息',
-  run_command: '执行命令',
-  list_processes: '查看命令',
-  read_process: '读取命令输出',
-  stop_process: '停止命令',
-  ask_user: '向你提问',
-  fetch_web: '读取网页',
-  search_web: '搜索网页',
-  post_message: '发表消息',
-  delegate_task: '派发任务',
-  create_task_group: '创建任务群',
-  get_task: '读取任务状态',
-  set_task_plan: '编排任务',
-  get_task_plan: '读取任务安排',
-  update_plan_step: '记录安排进展',
-  list_bots: '查看团队成员',
-  configure_bot: '配置成员',
-  recall_memory: '检索记忆',
-  propose_memory: '保存记忆',
-  manage_memory: '管理记忆',
-  read_skill: '读取技能',
-  list_mcp_tools: '查看外部工具',
-  call_mcp: '调用外部工具',
 };
 
 export function conversationRecordTasks(
@@ -108,11 +67,6 @@ export function conversationRecordTasks(
     );
 }
 
-export interface RecordedAction {
-  event: RunEvent;
-  title: string;
-  status: string;
-}
 export interface MemberRecords {
   botId: string;
   tasks: Task[];
@@ -151,76 +105,6 @@ export const recordTaskTitle = (task: Task): string => {
   }
   return task.goal;
 };
-export function taskRecordActions(
-  data: Pick<Snapshot, 'runs' | 'events'>,
-  task: Task,
-): RecordedAction[] {
-  const runs = new Map(
-    data.runs.filter((run) => run.taskId === task.id).map((run) => [run.id, run]),
-  );
-  const actions = new Map<string, RunEvent>();
-  for (const event of [...data.events].sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
-    if (!runs.has(event.runId) || !['tool', 'compaction'].includes(event.type)) continue;
-    const key =
-      event.type === 'tool' && typeof event.data.callId === 'string'
-        ? `${event.runId}:${event.data.callId}`
-        : event.id;
-    const previous = actions.get(key);
-    actions.set(key, mergeAction(previous, event));
-  }
-  return [...actions.values()]
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .map((event) => {
-      if (event.type === 'compaction') return { event, title: '整理工作上下文', status: '' };
-      const name = typeof event.data.name === 'string' ? event.data.name : '工具操作';
-      const summary = typeof event.data.summary === 'string' ? event.data.summary : '';
-      const status = event.data.status;
-      const commandStatus =
-        typeof event.data.commandStatus === 'string'
-          ? processLabels[event.data.commandStatus]
-          : undefined;
-      const getActionStatusLabel = () => {
-        if (status === 'completed') {
-          return '已完成';
-        }
-        if (status === 'failed') {
-          return '失败';
-        }
-        if (status === 'running' && !runs.get(event.runId)?.endedAt) {
-          return '执行中';
-        }
-        return '结果未报告';
-      };
-      return {
-        event,
-        title: summary || toolLabels[name] || name,
-        status: commandStatus ?? getActionStatusLabel(),
-      };
-    });
-}
-
-function mergeAction(previous: RunEvent | undefined, event: RunEvent): RunEvent {
-  const getPhaseStatus = () => {
-    if (event.data.phase === 'completed') {
-      return 'completed';
-    }
-    if (event.data.phase === 'started') {
-      return 'running';
-    }
-    return undefined;
-  };
-  const status = event.data.status ?? getPhaseStatus();
-  const data = { ...previous?.data, ...event.data, status };
-  if (
-    previous?.data.status &&
-    (status === undefined ||
-      (event.data.source !== 'app' &&
-        previous.data.source === 'app' &&
-        ['completed', 'failed'].includes(String(previous.data.status))))
-  )
-    data.status = previous.data.status;
-  return { ...event, data };
-}
 
 export function taskRecordStatus(task: Task, processes: ProcessRecord[]): string {
   const nextAttempt = recoveryAttemptTime(task);

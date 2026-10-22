@@ -299,8 +299,10 @@ describe('conversation work records', () => {
     expect(detail).toContain('命令进程');
     expect(detail).toContain('命令运行中');
     expect(detail).toContain('任务错误');
-    expect(detail).toContain('工具操作与运行记录');
-    expect(detail.match(/<details[^>]*>/g)?.every((tag) => !tag.includes('open'))).toBe(true);
+    expect(detail).toContain('工作概览');
+    expect(detail).toContain('工作过程');
+    expect(detail).toContain('技术详情');
+    expect(detail.match(/<details[^>]*open=""[^>]*>/g)).toHaveLength(1);
   });
 
   it('merges managed phases with Core events and retains the actual failure and safe target summary', () => {
