@@ -8,6 +8,14 @@ export type ModelActivityKind =
   | 'working'
   | 'finishing';
 
+export interface TaskOperation {
+  runId: string;
+  callId: string;
+  name: string;
+  summary?: string;
+  startedAt: string;
+}
+
 export interface TaskActivity {
   phase:
     | 'preparing'
@@ -22,6 +30,12 @@ export interface TaskActivity {
     | 'input'
     | 'stopping'
     | 'finished';
+  firstModelOutputAt?: string;
+  /** Stable within one model request or operation, independent of streamed fragments. */
+  activityKey?: string;
+  /** At most four current operations; operationCount includes all active calls. */
+  operations?: TaskOperation[];
+  operationCount?: number;
   lastActivityAt?: string;
   lastModelActivityAt?: string;
   lastToolActivityAt?: string;

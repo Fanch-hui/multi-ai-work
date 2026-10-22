@@ -47,6 +47,8 @@ export function migrateStorage(
         CREATE TABLE IF NOT EXISTS run_events (
           id TEXT PRIMARY KEY, run_id TEXT NOT NULL, payload TEXT NOT NULL);
         CREATE INDEX IF NOT EXISTS events_by_run ON run_events(run_id);
+        CREATE INDEX IF NOT EXISTS nontext_events_by_run ON run_events(run_id)
+          WHERE ${visibleEventFilter};
         CREATE INDEX IF NOT EXISTS visible_events_by_sequence ON run_events((json_extract(payload, '$.type') != 'text'))
           WHERE ${visibleEventFilter};
         CREATE INDEX IF NOT EXISTS text_by_message ON run_events(

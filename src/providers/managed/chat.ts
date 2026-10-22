@@ -16,6 +16,7 @@ import {
 } from './request-errors.js';
 import { ChatReplayAccumulator } from './chat-replay.js';
 import type { ChatReplayCompatibility } from './chat-replay-compatibility.js';
+import { hasOutputText, markModelWorkStarted } from '../first-output.js';
 
 export class ChatAccumulator {
   private text = '';
@@ -114,6 +115,28 @@ function chunkActivity(chunk: ChatCompletionChunk): ModelActivityKind | undefine
     return 'working';
   return delta.role ? 'waiting' : undefined;
 }
+
+function chunkHasModelOutput(chunk: ChatCompletionChunk): boolean {
+  const delta = chunk.choices.find((choice) => choice.index === 0)?.delta;
+  if (!delta) return false;
+  if (hasOutputText(delta.content) || hasOutputText(delta.refusal)) return true;
+  const fields = delta as Record<string, unknown>;
+  if (
+    ['reasoning_content', 'reasoning', 'reasoning_text'].some((key) => hasOutputText(fields[key]))
+  )
+    return true;
+  const details = fields.reasoning_details;
+  if (
+    Array.isArray(details) &&
+    details.some((detail) =>
+      ['text', 'summary', 'data'].some((key) => hasOutputText(detail?.[key])),
+    )
+  )
+    return true;
+  return [delta.function_call, ...(delta.tool_calls?.map((call) => call.function) ?? [])].some(
+    (call) => hasOutputText(call?.name) || hasOutputText(call?.arguments),
+  );
+}
 export async function chatTurn(
   client: OpenAI,
   context: RunContext,
@@ -171,6 +194,7 @@ export async function chatTurn(
       )
         partialOutput = true;
       request.activity('chat.chunk', partialOutput, chunkActivity(chunk));
+      if (chunkHasModelOutput(chunk)) markModelWorkStarted(context);
       accumulator.accept(chunk);
       if (accumulator.finished && !accumulator.completed) accumulator.finish();
       if (accumulator.completed) {

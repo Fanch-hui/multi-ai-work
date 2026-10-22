@@ -17,6 +17,7 @@ import { ModelRequest } from './request.js';
 import { InterruptedModelStreamError } from './request-errors.js';
 import type { createResponsesTransport } from './responses-transport.js';
 import type { ResponsesCacheDiagnostics } from './cache-diagnostics.js';
+import { hasOutputText, markModelWorkStarted } from '../first-output.js';
 
 export interface Turn {
   message: ModelMessage;
@@ -40,6 +41,35 @@ function responseActivity(event: ResponseStreamEvent): ModelActivityKind {
     if (event.item.type === 'function_call') return 'tool';
   }
   return 'working';
+}
+
+function itemHasModelOutput(item: ResponseOutputItem): boolean {
+  if (item.type === 'function_call') return hasOutputText(item.name);
+  if (item.type === 'reasoning')
+    return (
+      hasOutputText(item.encrypted_content) || item.summary.some((part) => hasOutputText(part.text))
+    );
+  if (item.type === 'message')
+    return item.content.some((part) =>
+      part.type === 'output_text' ? hasOutputText(part.text) : hasOutputText(part.refusal),
+    );
+  return item.type.endsWith('_call');
+}
+
+function responseHasModelOutput(event: ResponseStreamEvent): boolean {
+  if ('delta' in event && hasOutputText(event.delta))
+    return /^(response\.(output_text|refusal|function_call_arguments|reasoning_.*)\.delta)$/.test(
+      event.type,
+    );
+  if ('text' in event && hasOutputText(event.text)) return true;
+  if ('refusal' in event && hasOutputText(event.refusal)) return true;
+  if ('item' in event && itemHasModelOutput(event.item)) return true;
+  if ('part' in event) {
+    const part = event.part;
+    if ('text' in part && hasOutputText(part.text)) return true;
+    if ('refusal' in part && hasOutputText(part.refusal)) return true;
+  }
+  return 'response' in event && event.response.output.some(itemHasModelOutput);
 }
 export class ResponsesAccumulator {
   private completed?: Response;
@@ -280,6 +310,7 @@ export async function responsesTurn(
       )
         partialOutput = true;
       request.activity(event.type, partialOutput, responseActivity(event));
+      if (responseHasModelOutput(event)) markModelWorkStarted(context);
       accumulator.accept(event);
       if (event.type === 'response.output_item.done') {
         if (event.item.type === 'function_call')

@@ -2,6 +2,7 @@ import type { ModelActivityKind, TaskActivity } from '../domain/task-activity.js
 import type { Run, Task } from '../domain/types.js';
 import type { Storage } from './storage.js';
 import { terminal } from '../domain/task-status.js';
+import { taskWorkActivityReader } from './task-work-activity.js';
 
 interface ActivityEvent {
   at: string;
@@ -25,32 +26,17 @@ const eventFields = (
   json_extract(${prefix}payload, '$.data.maxAttempts') AS maxAttempts,
   json_extract(${prefix}payload, '$.data.nextAttemptAt') AS nextAttemptAt,
   json_extract(${prefix}payload, '$.data.code') AS code`;
-const streamedText = `json_extract(payload, '$.type') = 'text' AND json_type(payload, '$.data.replace') IS NULL`;
+const streamedText = `json_extract(payload, '$.type') = 'text' AND json_type(payload, '$.data.replace') IS NULL AND length(COALESCE(json_extract(payload, '$.data.delta'), '')) > 0`;
 const modelFilter = `(${streamedText}) OR
-  (json_extract(payload, '$.type') = 'status' AND json_extract(payload, '$.data.phase') LIKE 'model-%'
-    AND json_extract(payload, '$.data.phase') NOT IN ('model-retry', 'model-cache-request', 'model-cache-response'))`;
+  (json_extract(payload, '$.type') = 'status' AND COALESCE(json_extract(payload, '$.data.scope'), '') != 'compaction' AND json_extract(payload, '$.data.phase') LIKE 'model-%'
+    AND json_extract(payload, '$.data.phase') NOT IN ('model-retry', 'model-cache-request', 'model-cache-response', 'model-work-started'))`;
 const eventFilter = `(${streamedText}) OR json_extract(payload, '$.type') IN ('tool', 'compaction') OR
-  (json_extract(payload, '$.type') = 'status' AND
-    COALESCE(json_extract(payload, '$.data.phase'), '') NOT IN ('model-cache-request', 'model-cache-response', 'performance'))`;
+  (json_extract(payload, '$.type') = 'status' AND COALESCE(json_extract(payload, '$.data.scope'), '') != 'compaction' AND
+    COALESCE(json_extract(payload, '$.data.phase'), '') NOT IN ('model-cache-request', 'model-cache-response', 'performance', 'model-work-started'))`;
 
 export function taskActivity(storage: Storage, task: Task): TaskActivity {
   const run = task.runIds.at(-1) ? storage.get<Run>('runs', task.runIds.at(-1)!) : undefined;
-  const latest = (filter: string) =>
-    run &&
-    (storage
-      .prepare(`SELECT ${eventFields()} FROM run_events
-    WHERE run_id = ? AND (${filter}) ORDER BY rowid DESC LIMIT 1`)
-      .get(run.id) as ActivityEvent | undefined);
-  const model = latest(modelFilter);
-  const tool = latest(`json_extract(payload, '$.type') = 'tool'`);
-  const event = latest(eventFilter);
-  const checkpoint =
-    run &&
-    (storage
-      .prepare(`SELECT id FROM context_checkpoints
-    WHERE json_extract(payload, '$.bindingId') = ? ORDER BY rowid DESC LIMIT 1`)
-      .get(run.bindingId) as { id: string } | undefined);
-  return describeActivity(task, run, event, model?.at, tool?.at, checkpoint?.id);
+  return taskActivityReader(storage, [task], run ? [run] : [])(task);
 }
 
 export function taskActivityReader(
@@ -61,7 +47,8 @@ export function taskActivityReader(
   const runIds = new Set(tasks.map((task) => task.runIds.at(-1)).filter(Boolean));
   const currentRuns = runs.filter((run) => runIds.has(run.id)),
     runById = new Map(currentRuns.map((run) => [run.id, run]));
-  if (!currentRuns.length) return (task) => describeActivity(task);
+  const workActivity = taskWorkActivityReader(storage, tasks, runs);
+  if (!currentRuns.length) return (task) => workActivity(task, describeActivity(task));
   const rows = storage
     .prepare(`WITH latest AS MATERIALIZED (
     SELECT value AS run_id,
@@ -96,13 +83,16 @@ export function taskActivityReader(
   return (task) => {
     const run = runById.get(task.runIds.at(-1) ?? ''),
       event = run && events.get(run.id);
-    return describeActivity(
+    return workActivity(
       task,
-      run,
-      event,
-      event?.modelAt ?? undefined,
-      event?.toolAt ?? undefined,
-      run && checkpointIds.get(run.bindingId),
+      describeActivity(
+        task,
+        run,
+        event,
+        event?.modelAt ?? undefined,
+        event?.toolAt ?? undefined,
+        run && checkpointIds.get(run.bindingId),
+      ),
     );
   };
 }
@@ -184,5 +174,6 @@ function describeActivity(
         : {}),
     };
   }
+  if (event?.type === 'tool') return { ...activity, phase: 'model', modelActivity: 'working' };
   return { ...activity, phase: 'preparing' };
 }

@@ -249,7 +249,7 @@ describe('批量任务活动快照', () => {
     core.state.queueReasonFor = (task) => (task.status === 'queued' ? 'account_limit' : undefined);
     const queries = vi.spyOn(s, 'prepare');
     const snapshot = core.state.snapshot();
-    expect(queries.mock.calls.filter(([sql]) => sql.includes('FROM run_events'))).toHaveLength(2);
+    expect(queries.mock.calls.filter(([sql]) => sql.includes('FROM run_events'))).toHaveLength(4);
     queries.mockRestore();
     for (let index = 0; index < snapshot.tasks.length; index++) {
       const task = snapshot.tasks[index];

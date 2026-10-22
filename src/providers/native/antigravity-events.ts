@@ -1,6 +1,7 @@
 import type { ProviderEvent } from '../../domain/provider.js';
 import type { Usage } from '../../domain/types.js';
 import { ModelActivity } from '../activity.js';
+import { hasOutputText } from '../first-output.js';
 
 export interface AntigravityUsage {
   input_tokens?: number;
@@ -52,6 +53,7 @@ export class AntigravityEvents {
   private turnSequence = 0;
   private stepUsage = new Map<number, AntigravityUsage>();
   private activity: ModelActivity;
+  private workStarted = false;
   constructor(
     private options: {
       expectedSessionId?: string;
@@ -131,6 +133,7 @@ export class AntigravityEvents {
       if (usage) this.stepUsage.set(step.step_index, usage);
     }
     if (step.step_type === 'tool' && typeof step.tool_name === 'string') {
+      if (hasOutputText(step.tool_name)) this.markWorkStarted();
       const toolStatus = () => {
         if (step.state !== 'DONE') return 'running';
         return object(step.tool_info)?.error ? 'failed' : 'completed';
@@ -198,7 +201,14 @@ export class AntigravityEvents {
   }
 
   private append(delta: string, messageKey = `${this.turnSequence}:result`): void {
+    if (hasOutputText(delta)) this.markWorkStarted();
     this.text += delta;
     this.options.emit?.({ type: 'text', data: { delta, messageKey: `agy:${messageKey}` } });
+  }
+
+  private markWorkStarted(): void {
+    if (this.workStarted) return;
+    this.workStarted = true;
+    this.options.emit?.({ type: 'status', data: { phase: 'model-work-started' } });
   }
 }

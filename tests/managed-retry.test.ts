@@ -69,6 +69,7 @@ describe('managed request recovery', () => {
         (event) =>
           event.type === 'status' &&
           event.data.phase !== 'performance' &&
+          event.data.phase !== 'model-work-started' &&
           !String(event.data.phase).startsWith('model-cache-'),
       )
       .map((event) => event.data);
@@ -99,6 +100,7 @@ describe('managed request recovery', () => {
     expect(elapsed - result.modelDurationMs!).toBeGreaterThanOrEqual(70);
     expect(result.text).toBe('完成');
     expect(server.requests).toHaveLength(2);
+    expect(events.filter((event) => event.data.phase === 'model-work-started')).toHaveLength(1);
   });
 
   it('excludes context compaction and checkpoint preparation from request timing and counting', async () => {

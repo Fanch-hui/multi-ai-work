@@ -3,6 +3,7 @@ import type { Conversation, Run } from '../domain/types.js';
 import type { State } from './state.js';
 import { readConversation } from './conversation-read.js';
 import { required } from './errors.js';
+import { workEvents } from './work-events.js';
 
 export class HistoryRequests {
   constructor(private state: State) {}
@@ -59,11 +60,12 @@ export class HistoryRequests {
       }
       case 'runs.events': {
         const run = required(s.get<Run>('runs', objectId()), '运行记录不存在');
-        return s.runEvents(
-          run.id,
-          z.number().int().positive().optional().parse(params.cursor),
-          z.number().int().min(1).max(200).optional().parse(params.limit),
-        );
+        const cursor = z.number().int().positive().optional().parse(params.cursor);
+        const limit = z.number().int().min(1).max(200).optional().parse(params.limit);
+        const view = z.literal('work').optional().parse(params.view);
+        return view === 'work'
+          ? workEvents(s, run.id, cursor, limit)
+          : s.runEvents(run.id, cursor, limit);
       }
       default:
         throw new Error('不支持的应用操作');
