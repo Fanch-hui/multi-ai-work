@@ -309,7 +309,6 @@ export function Market({
             mutate={mutate}
             close={() => setConfigure(undefined)}
             created={refreshMarket}
-            configureConnection={configureConnection}
           />
         )}
       </ModalPresence>

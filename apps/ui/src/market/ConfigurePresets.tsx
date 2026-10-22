@@ -4,6 +4,7 @@ import type { PresetInstallation, PresetMemberResult } from '../../../../src/dom
 import type { Mutate } from '../store.js';
 import { errorMessage } from '../api.js';
 import { Button, ErrorNote, Modal, cn } from '../components.js';
+import { ConnectionEditor } from '../ConnectionEditor.js';
 import { MemberConfiguration } from './MemberConfiguration.js';
 import {
   initialMemberSettings,
@@ -18,14 +19,12 @@ export function ConfigurePresets({
   mutate,
   close,
   created,
-  configureConnection,
 }: {
   installations: PresetInstallation[];
   data: Snapshot;
   mutate: Mutate;
   close: () => void;
   created: () => void;
-  configureConnection: () => void;
 }) {
   const [ids] = useState(() =>
     Object.fromEntries(installations.map((item) => [item.id, crypto.randomUUID()])),
@@ -37,6 +36,7 @@ export function ConfigurePresets({
   const [results, setResults] = useState<PresetMemberResult[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [step, setStep] = useState<'members' | 'connection'>('members');
   const succeeded = (id: string) => results.find((item) => item.requestId === ids[id])?.botId;
   const remaining = installations.filter((item) => !succeeded(item.id));
   const active = remaining.find((item) => item.id === activeId) || remaining[0];
@@ -90,125 +90,128 @@ export function ConfigurePresets({
     }
     return `雇佣 ${remaining.length} 位成员`;
   };
+  const memberTitle =
+    installations.length === 1
+      ? `雇佣 ${installations[0].preset.name}`
+      : `雇佣 ${installations.length} 位成员`;
   return (
     <Modal
       open
-      onOpenChange={(open) => !open && !busy && close()}
-      title={
-        installations.length === 1
-          ? `雇佣 ${installations[0].preset.name}`
-          : `雇佣 ${installations.length} 位成员`
-      }
+      onOpenChange={(open) => {
+        if (open || busy) return;
+        if (step === 'connection') setStep('members');
+        else close();
+      }}
+      title={step === 'connection' ? '添加模型连接' : memberTitle}
       wide
     >
-      <form noValidate className="grid gap-5" onSubmit={(event) => void submit(event)}>
-        {remaining.length > 1 && (
-          <div className="flex flex-wrap gap-2" aria-label="选择要配置的成员">
-            {remaining.map((item) => (
-              <Button
-                type="button"
-                key={item.id}
-                disabled={busy}
-                aria-pressed={active?.id === item.id}
-                className={cn(active?.id === item.id && 'border-blue-200 bg-blue-50 text-blue-700')}
-                onClick={() => setActiveId(item.id)}
-              >
-                {item.preset.name}
-              </Button>
-            ))}
-          </div>
-        )}
-        {active && (
-          <fieldset disabled={busy} className="grid min-w-0 gap-4">
-            <MemberConfiguration
-              key={active.id}
-              data={data}
-              value={configurations[active.id]}
-              includeName
-              mutate={mutate}
-              preset={active.preset}
-              change={(fields) =>
-                setConfigurations((values) => ({
-                  ...values,
-                  [active.id]: { ...values[active.id], ...fields },
-                }))
-              }
-            />
-            {remaining.length > 1 && (
-              <Button
-                type="button"
-                className="justify-self-start"
-                onClick={() =>
-                  setConfigurations((values) =>
-                    Object.fromEntries(
-                      Object.entries(values).map(([id, value]) => [
-                        id,
-                        remaining.some((item) => item.id === id)
-                          ? shareMemberSettings(value, values[active.id])
-                          : value,
-                      ]),
-                    ),
-                  )
-                }
-              >
-                将当前模型与权限用于其他成员
-              </Button>
-            )}
-            {active.preset.dependencies.some((dependency) => dependency.required) && (
-              <p className="text-xs text-slate-500">
-                必需能力：
-                {active.preset.dependencies
-                  .filter((dependency) => dependency.required)
-                  .map((dependency) => dependency.label)
-                  .join('、')}
-              </p>
-            )}
-          </fieldset>
-        )}
-        {!data.connections.some((item) => item.status === 'ready') && (
-          <div className="flex items-center justify-between rounded-lg bg-slate-50 p-3 text-sm text-slate-500">
-            先添加并检测模型连接。
-            <Button
-              type="button"
-              onClick={() => {
-                close();
-                configureConnection();
-              }}
-            >
-              添加连接
-            </Button>
-          </div>
-        )}
-        {results.length > 0 && (
-          <div className="grid gap-2 text-sm">
-            {installations.map((item) => {
-              const result = results.find((value) => value.requestId === ids[item.id]);
-              return (
-                result && (
-                  <p
-                    key={item.id}
-                    className={result.error ? 'text-red-600' : 'text-blue-700'}
-                    role={result.error ? 'alert' : undefined}
-                  >
-                    {item.preset.name} · {result.error || '已加入团队'}
-                  </p>
-                )
-              );
-            })}
-          </div>
-        )}
-        <ErrorNote error={error} />
-        <div className="flex justify-end gap-2">
-          <Button type="button" disabled={busy} onClick={close}>
-            {remaining.length ? '取消' : '完成'}
-          </Button>
-          {!!remaining.length && (
-            <Button variant="primary" disabled={busy || !valid}>
-              {getHireLabel()}
-            </Button>
+      {step === 'connection' ? (
+        <ConnectionEditor
+          connections={data.connections}
+          mutate={mutate}
+          inline
+          close={() => setStep('members')}
+          connected={() => setStep('members')}
+        />
+      ) : (
+        <form noValidate className="grid gap-5" onSubmit={(event) => void submit(event)}>
+          {remaining.length > 1 && (
+            <div className="flex flex-wrap gap-2" aria-label="选择要配置的成员">
+              {remaining.map((item) => (
+                <Button
+                  type="button"
+                  key={item.id}
+                  disabled={busy}
+                  aria-pressed={active?.id === item.id}
+                  className={cn(
+                    active?.id === item.id && 'border-blue-200 bg-blue-50 text-blue-700',
+                  )}
+                  onClick={() => setActiveId(item.id)}
+                >
+                  {item.preset.name}
+                </Button>
+              ))}
+            </div>
           )}
-        </div>
-      </form>
+          {active && (
+            <fieldset disabled={busy} className="grid min-w-0 gap-4">
+              <MemberConfiguration
+                key={active.id}
+                data={data}
+                value={configurations[active.id]}
+                includeName
+                mutate={mutate}
+                preset={active.preset}
+                configureConnection={() => setStep('connection')}
+                change={(fields) =>
+                  setConfigurations((values) => ({
+                    ...values,
+                    [active.id]: { ...values[active.id], ...fields },
+                  }))
+                }
+              />
+              {remaining.length > 1 && (
+                <Button
+                  type="button"
+                  className="justify-self-start"
+                  onClick={() =>
+                    setConfigurations((values) =>
+                      Object.fromEntries(
+                        Object.entries(values).map(([id, value]) => [
+                          id,
+                          remaining.some((item) => item.id === id)
+                            ? shareMemberSettings(value, values[active.id])
+                            : value,
+                        ]),
+                      ),
+                    )
+                  }
+                >
+                  将当前模型与权限用于其他成员
+                </Button>
+              )}
+              {active.preset.dependencies.some((dependency) => dependency.required) && (
+                <p className="text-xs text-slate-500">
+                  必需能力：
+                  {active.preset.dependencies
+                    .filter((dependency) => dependency.required)
+                    .map((dependency) => dependency.label)
+                    .join('、')}
+                </p>
+              )}
+            </fieldset>
+          )}
+          {results.length > 0 && (
+            <div className="grid gap-2 text-sm">
+              {installations.map((item) => {
+                const result = results.find((value) => value.requestId === ids[item.id]);
+                return (
+                  result && (
+                    <p
+                      key={item.id}
+                      className={result.error ? 'text-red-600' : 'text-blue-700'}
+                      role={result.error ? 'alert' : undefined}
+                    >
+                      {item.preset.name} · {result.error || '已加入团队'}
+                    </p>
+                  )
+                );
+              })}
+            </div>
+          )}
+          <ErrorNote error={error} />
+          <div className="flex justify-end gap-2">
+            <Button type="button" disabled={busy} onClick={close}>
+              {remaining.length ? '取消' : '完成'}
+            </Button>
+            {!!remaining.length && (
+              <Button variant="primary" disabled={busy || !valid}>
+                {getHireLabel()}
+              </Button>
+            )}
+          </div>
+        </form>
+      )}
     </Modal>
   );
 }

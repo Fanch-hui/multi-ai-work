@@ -2,7 +2,7 @@ import type { Snapshot } from '../../../../src/domain/types.js';
 import type { AgentPreset } from '../../../../src/domain/market.js';
 import { DEFAULT_COMPACTION_THRESHOLD } from '../../../../src/domain/context-settings.js';
 import type { Mutate } from '../store.js';
-import { Field, inputClass } from '../components.js';
+import { Button, Field, inputClass } from '../components.js';
 import { BotTools } from '../BotTools.js';
 import { AntigravityPermissionsGuide, NativeContextGuide } from '../NativeContextGuide.js';
 import { AvatarPicker } from '../AvatarPicker.js';
@@ -18,6 +18,7 @@ export function MemberConfiguration({
   includeName = false,
   mutate,
   preset,
+  configureConnection,
 }: {
   data: Snapshot;
   value: PresetMemberDraft;
@@ -25,6 +26,7 @@ export function MemberConfiguration({
   includeName?: boolean;
   mutate: Mutate;
   preset?: AgentPreset;
+  configureConnection?: () => void;
 }) {
   const connections = data.connections.filter((item) => item.status === 'ready');
   const connection = connections.find((item) => item.id === value.connectionId);
@@ -74,23 +76,30 @@ export function MemberConfiguration({
         </>
       )}
       <div className="grid items-start gap-4 sm:grid-cols-2">
-        <Field label="连接">
-          <select
-            required
-            className={inputClass}
-            value={value.connectionId}
-            onChange={(event) =>
-              update({ connectionId: event.target.value, model: '', reasoning: undefined })
-            }
-          >
-            <option value="">选择连接</option>
-            {connections.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </select>
-        </Field>
+        <div className="grid gap-2">
+          <Field label="连接">
+            <select
+              required
+              className={inputClass}
+              value={value.connectionId}
+              onChange={(event) =>
+                update({ connectionId: event.target.value, model: '', reasoning: undefined })
+              }
+            >
+              <option value="">选择连接</option>
+              {connections.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          {configureConnection && (
+            <Button type="button" className="justify-self-start" onClick={configureConnection}>
+              添加连接
+            </Button>
+          )}
+        </div>
         <Field label="模型">
           {connection?.models.length ? (
             <select

@@ -107,6 +107,8 @@ export function ConnectionEditor({
         <ConnectionAuthorization
           flow={flow}
           canLogin={provider !== 'custom' && !(provider === 'qoder' && qoderAuth === 'pat')}
+          close={close}
+          cancelLabel={inline ? '返回' : '取消'}
         />
       ) : (
         <form className="grid gap-4" onSubmit={(event) => void save(event)}>
@@ -139,7 +141,7 @@ export function ConnectionEditor({
             )}
             {inline && provider === 'chatgpt' && (
               <p className="text-sm leading-6 text-slate-500">
-                使用你的 ChatGPT 账号登录，授权完成后选择管家的模型。
+                使用你的 ChatGPT 账号登录，授权完成后选择模型。
               </p>
             )}
             {provider === 'custom' && (

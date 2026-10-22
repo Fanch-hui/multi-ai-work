@@ -6,9 +6,13 @@ import { errorMessage } from './api.js';
 export function ConnectionAuthorization({
   flow,
   canLogin,
+  close,
+  cancelLabel = '取消',
 }: {
   flow: ReturnType<typeof useConnectionFlow>;
   canLogin: boolean;
+  close?: () => void;
+  cancelLabel?: string;
 }) {
   const waiting = flow.phase === 'waiting';
   const getConnectionStatusLabel = () => {
@@ -78,6 +82,11 @@ export function ConnectionAuthorization({
       </div>
       <ErrorNote error={flow.error} />
       <div className="flex flex-wrap justify-end gap-2">
+        {close && (
+          <Button type="button" onClick={close}>
+            {cancelLabel}
+          </Button>
+        )}
         <Button type="button" onClick={flow.edit} disabled={flow.busy}>
           修改配置
         </Button>
