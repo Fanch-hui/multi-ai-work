@@ -69,11 +69,12 @@ export function artifactProducer(
 }
 
 export function artifactGroups(
-  data: Pick<Snapshot, 'artifacts' | 'tasks' | 'conversations'>,
+  data: Pick<Snapshot, 'artifacts' | 'tasks' | 'conversations'> & Partial<Pick<Snapshot, 'bots'>>,
   query = '',
 ): ArtifactGroup[] {
   const tasks = new Map(data.tasks.map((task) => [task.id, task]));
   const conversations = new Map(data.conversations.map((room) => [room.id, room]));
+  const bots = new Map(data.bots?.map((bot) => [bot.id, bot]));
   const groups = new Map<string, ArtifactGroup>();
   const deliverables = data.artifacts.filter(isDeliverableArtifact);
   const current = latestArtifactVersions(deliverables, tasks);
@@ -84,9 +85,8 @@ export function artifactGroups(
     history.push(artifact);
     versions.set(key, history);
   }
-  const search = query.toLocaleLowerCase();
+  const search = query.trim().toLocaleLowerCase();
   for (const artifact of current) {
-    if (!artifact.name.toLocaleLowerCase().includes(search)) continue;
     const { id, title } = groupOrigin(artifact, tasks, conversations);
     let group = groups.get(id);
     if (!group) {
@@ -111,7 +111,23 @@ export function artifactGroups(
     }
     if (artifact.createdAt > group.updatedAt) group.updatedAt = artifact.createdAt;
   }
-  for (const group of groups.values())
+  const matchingGroups: ArtifactGroup[] = [];
+  for (const group of groups.values()) {
+    if (search && !group.title.toLocaleLowerCase().includes(search)) {
+      group.artifacts = group.artifacts.filter(
+        (artifact) =>
+          artifact.name.toLocaleLowerCase().includes(search) ||
+          artifactProducer(artifact, tasks, bots)?.name.toLocaleLowerCase().includes(search),
+      );
+      if (!group.artifacts.length) continue;
+      const visibleIds = new Set(group.artifacts.map((artifact) => artifact.id));
+      for (const id of group.history?.keys() ?? []) {
+        if (!visibleIds.has(id)) group.history?.delete(id);
+      }
+    }
     group.artifacts.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  return [...groups.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    group.updatedAt = group.artifacts[0].createdAt;
+    matchingGroups.push(group);
+  }
+  return matchingGroups.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }

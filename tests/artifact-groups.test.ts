@@ -309,6 +309,101 @@ describe('artifact library conversation groups', () => {
     expect(artifactGroups(data, 'draft')).toEqual([]);
     expect(artifactGroups(data, 'final')[0].artifacts.map((item) => item.id)).toEqual(['new']);
   });
+
+  it('matches the current source conversation name for all of its latest deliverables', () => {
+    const data = {
+      tasks: [
+        task('root', { conversationId: 'main' }),
+        task('child', { conversationId: 'team', botId: 'member' }),
+      ],
+      artifacts: [
+        artifact('report', { taskId: 'root', conversationId: 'main' }),
+        artifact('notes', { taskId: 'child', conversationId: 'team' }),
+      ],
+      conversations: [{ ...main, name: 'Research Project' }, group('team', 'root')],
+    };
+    expect(artifactGroups(data, '  RESEARCH  ')[0]).toMatchObject({
+      title: 'Research Project',
+      artifacts: [{ id: 'report' }, { id: 'notes' }],
+    });
+    expect(artifactGroups(data, '任务群')).toEqual([]);
+    expect(artifactGroups(data, 'Research')[0].artifacts).toHaveLength(2);
+    const renamed = {
+      ...data,
+      conversations: [{ ...main, name: '新项目' }, group('team', 'root')],
+    };
+    expect(artifactGroups(renamed, 'Research')).toEqual([]);
+    expect(artifactGroups(renamed, '新项目')[0].artifacts).toHaveLength(2);
+  });
+
+  it('searches the displayed source title when its conversation has been deleted', () => {
+    const data = {
+      tasks: [task('root', { conversationId: 'gone', goal: '历史项目' })],
+      artifacts: [artifact('report', { taskId: 'root', conversationId: 'gone' })],
+      conversations: [],
+    };
+    expect(artifactGroups(data, '历史项目')[0].artifacts).toEqual(data.artifacts);
+    expect(artifactGroups(data, 'missing')).toEqual([]);
+    expect(
+      artifactGroups(
+        {
+          tasks: [task('later', { conversationId: 'team' })],
+          artifacts: [artifact('report', { taskId: 'later', conversationId: 'team' })],
+          conversations: [group('team', 'gone')],
+        },
+        '任务群 team',
+      )[0].artifacts,
+    ).toHaveLength(1);
+  });
+
+  it('matches only the actual producer including legacy task ownership', () => {
+    const data = {
+      tasks: [task('child', { botId: 'member' })],
+      artifacts: [
+        artifact('explicit', { taskId: 'child', botId: 'chief' }),
+        artifact('legacy', { taskId: 'child' }),
+        artifact('deleted', { taskId: 'child', botId: 'gone' }),
+        artifact('unknown'),
+      ],
+      conversations: [room],
+      bots: [
+        { ...bot('chief'), name: 'Chief' },
+        { ...bot('member'), name: 'Writer' },
+      ],
+    };
+    expect(artifactGroups(data, '  WRITER ')[0].artifacts.map((item) => item.id)).toEqual([
+      'legacy',
+    ]);
+    expect(artifactGroups(data, 'chief')[0].artifacts.map((item) => item.id)).toEqual(['explicit']);
+    expect(artifactGroups({ ...data, bots: [] }, 'Writer')).toEqual([]);
+  });
+
+  it('keeps histories folded during search and searches the previous version after deletion', () => {
+    const old = artifact('old', {
+      name: 'draft.txt',
+      workingPath: '/work/report.txt',
+      botId: 'chief',
+    });
+    const current = artifact('new', {
+      name: 'final.txt',
+      workingPath: '/work/report.txt',
+      botId: 'chief',
+      createdAt: '2026-10-12T13:00:00Z',
+    });
+    const data = {
+      artifacts: [old, current],
+      tasks: [],
+      conversations: [room],
+      bots: [bot('chief')],
+    };
+    const groups = artifactGroups(data, '智能体 chief');
+    expect(groups[0].artifacts).toEqual([current]);
+    expect(groups[0].history?.get(current.id)).toEqual([old]);
+    expect(artifactGroups(data, 'draft')).toEqual([]);
+    expect(artifactGroups({ ...data, artifacts: [old] }, 'draft')[0].artifacts).toEqual([old]);
+    expect(artifactGroups({ ...data, artifacts: [old] }, 'final')).toEqual([]);
+  });
+
   it('keeps different main conversations separate even when their names match', () => {
     const other = { ...main, id: 'other' };
     const tasks = [
