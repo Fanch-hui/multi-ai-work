@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { Snapshot } from '../../../../src/domain/types.js';
 import type { TaskWait } from '../../../../src/domain/task-wait.js';
 import type { Mutate } from '../store.js';
@@ -6,6 +7,7 @@ import { ApprovalCard } from '../TaskDetail.js';
 import { UserQuestionCard } from '../UserQuestionCard.js';
 import { useResource } from './useResource.js';
 import { TaskWaitCard } from './TaskWaitCard.js';
+import { ComputerPanel } from '../computer/ComputerPanel.js';
 
 export function PendingWork({
   data,
@@ -19,16 +21,23 @@ export function PendingWork({
   onSelectConversation: (id: string, openBrowser?: boolean) => void;
 }) {
   const waits = useResource<TaskWait[]>('waits.list');
+  const [computerOpen, setComputerOpen] = useState(false);
   const questions = data.questions.filter((question) => question.status === 'pending');
   const approvals = data.approvals.filter((approval) => approval.status === 'pending');
   const pending =
-    waits.value?.filter((wait) => wait.status === 'pending' && wait.kind !== 'browser-resource') ??
-    [];
+    waits.value?.filter(
+      (wait) =>
+        wait.status === 'pending' &&
+        wait.kind !== 'browser-resource' &&
+        wait.kind !== 'computer-resource',
+    ) ?? [];
   const count = questions.length + approvals.length + pending.length;
   function jump(id: string, openBrowser = false) {
     close();
     onSelectConversation(id, openBrowser);
   }
+  if (computerOpen)
+    return <ComputerPanel data={data} mutate={mutate} close={() => setComputerOpen(false)} />;
   return (
     <Modal
       open
@@ -65,6 +74,7 @@ export function PendingWork({
               wait={wait}
               mutate={mutate}
               onBrowser={() => jump(wait.conversationId, true)}
+              onComputer={() => setComputerOpen(true)}
               resolved={waits.reload}
             />
           </section>

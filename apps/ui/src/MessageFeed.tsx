@@ -1,3 +1,4 @@
+import { composerDrafts } from './composer-drafts.js';
 import { useLayoutEffect, useMemo, useRef } from 'react';
 import { ArrowUpRight } from 'lucide-react';
 import type { Conversation, Snapshot, Task } from '../../../src/domain/types.js';
@@ -235,8 +236,34 @@ export function MessageFeed({
                     'rounded-2xl bg-slate-50 px-4 py-3 text-sm leading-7 text-slate-800',
                   )}
                 >
+                  {message.replyToMessageId && (
+                    <p className="mb-2 border-l-2 border-blue-200 pl-2 text-xs text-slate-500">
+                      回复：
+                      {messages
+                        .find((item) => item.id === message.replyToMessageId)
+                        ?.content.slice(0, 100) ?? '较早的消息'}
+                    </p>
+                  )}
+                  {!!message.references?.length && (
+                    <p className="mb-2 text-xs text-blue-700">
+                      {message.references
+                        .map((item) => `${item.kind === 'skill' ? '/' : '@'}${item.label}`)
+                        .join(' · ')}
+                    </p>
+                  )}
                   <Markdown>{message.content}</Markdown>
                 </div>
+                {message.status === 'committed' && (
+                  <button
+                    type="button"
+                    className="mt-1 text-xs text-slate-400 hover:text-blue-600"
+                    onClick={() =>
+                      composerDrafts.edit(conversation.id, { replyToMessageId: message.id })
+                    }
+                  >
+                    回复此消息
+                  </button>
+                )}
                 {message.artifactIds.length > 0 && (
                   <MessageArtifacts
                     ids={message.artifactIds}

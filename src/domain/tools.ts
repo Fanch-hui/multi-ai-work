@@ -46,6 +46,26 @@ export interface ProcessTools {
 }
 
 export interface ToolExecutionContext {
+  saveWorkSkill?(args: Record<string, unknown>, context: ToolExecutionContext): Promise<unknown>;
+  connectorDrafts?(
+    action: 'create' | 'send' | 'get',
+    args: Record<string, unknown>,
+    context: ToolExecutionContext,
+  ): unknown;
+  executeComputer?(
+    name: string,
+    args: Record<string, unknown>,
+    context: ToolExecutionContext,
+  ): Promise<unknown>;
+  requestCollaboration?(
+    args: Record<string, unknown>,
+    context: ToolExecutionContext,
+  ): Promise<unknown>;
+  resolveCollaboration?(
+    args: Record<string, unknown>,
+    context: ToolExecutionContext,
+  ): Promise<unknown>;
+
   executeBrowser?(
     name: string,
     args: Record<string, unknown>,

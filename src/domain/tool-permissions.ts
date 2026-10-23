@@ -1,6 +1,11 @@
 import type { ApprovalMode } from './types.js';
 
 export const memberToolNames = [
+  'save_work_skill',
+  'request_collaboration',
+  'create_connector_draft',
+  'get_connector_draft',
+  'send_connector_draft',
   'post_message',
   'read_messages',
   'get_task',
@@ -41,9 +46,11 @@ export const chiefToolNames = [
   'stop_process',
   'render_document',
   'manage_routines',
+  'resolve_collaboration',
 ];
 export const chiefOnlyTools = [
   'manage_routines',
+  'resolve_collaboration',
   'delegate_task',
   'list_bots',
   'configure_bot',
@@ -97,6 +104,24 @@ export const toolPermissionGroups = [
     label: '命令执行',
     hint: '执行命令，查看输出并停止本任务的命令。',
     tools: ['run_command', 'list_processes', 'read_process', 'stop_process', 'render_document'],
+  },
+  {
+    id: 'work-skills',
+    label: '技能与协作',
+    hint: '整理可审阅技能草稿，向主管提出成员协作请求。',
+    tools: ['save_work_skill', 'request_collaboration'],
+  },
+  {
+    id: 'connector-drafts',
+    label: '连接器草稿',
+    hint: '准备、读取和发送用户已确认的外部消息草稿；发送仍需连接器权限。',
+    tools: ['create_connector_draft', 'get_connector_draft', 'send_connector_draft'],
+  },
+  {
+    id: 'computer',
+    label: '电脑操作',
+    hint: '观察和操作用户单独授权的桌面应用，可请求人工接管。',
+    tools: ['computer_apps', 'computer_observe', 'computer_action', 'computer_handoff'],
   },
   {
     id: 'browser',

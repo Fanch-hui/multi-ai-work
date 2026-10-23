@@ -188,6 +188,9 @@ export class BackupService {
               'browser_profiles',
               'browser_sessions',
               'task_waits',
+              'work_skill_drafts',
+              'connector_drafts',
+              'collaboration_requests',
               'memory_revisions',
               'memory_usage',
               'compactions',
@@ -317,7 +320,20 @@ export class BackupService {
       value.status = 'cancelled';
       value.resolvedAt = new Date().toISOString();
     }
+    if (table === 'collaboration_requests' && value.status === 'assigned')
+      value.awaitingTaskResume = true;
     if (table === 'browser_sessions') value.status = 'closed';
+    if (table === 'connector_drafts' && value.status === 'sending') {
+      value.status = 'unknown';
+      value.error = '备份已恢复，请核对发送结果';
+    }
+    if (table === 'connector_drafts' && value.status === 'approved') {
+      value.status = 'draft';
+      value.confirmedRevision = undefined;
+      value.confirmedAt = undefined;
+      value.dispatchTaskId = undefined;
+      value.revision++;
+    }
     if (table === 'processes' && value.status === 'running') value.status = 'unknown';
     if (table === 'runs' && ['running', 'waiting_approval', 'waiting_input'].includes(value.status))
       value.status = 'interrupted';

@@ -8,6 +8,8 @@ import type {
 import { WorkBrowserPage } from './work-browser-page.js';
 import { WorkBrowserDownloads } from './work-browser-downloads.js';
 import { WorkBrowserPreview } from './work-browser-preview.js';
+import { BrowserTeachingRecorder } from './browser-teaching.js';
+import type { BrowserTeachingHostMethod } from '../../src/domain/browser-teaching.js';
 
 interface WorkTab {
   id: string;
@@ -24,6 +26,7 @@ interface WorkSession {
   downloads: WorkBrowserDownloads;
   preview: WorkBrowserPreview;
   busy: boolean;
+  teaching: BrowserTeachingRecorder;
 }
 
 export function browserUrl(value: string) {
@@ -38,7 +41,10 @@ export class WorkBrowserHost {
 
   constructor(private window?: BrowserWindow) {}
 
-  async request(method: BrowserHostMethod, input: BrowserHostInput): Promise<unknown> {
+  async request(
+    method: BrowserHostMethod | BrowserTeachingHostMethod,
+    input: BrowserHostInput,
+  ): Promise<unknown> {
     if (method === 'browser.open') return this.open(input);
     if (method === 'browser.close') {
       this.close(input.sessionId);
@@ -46,9 +52,20 @@ export class WorkBrowserHost {
     }
     const current = this.sessions.get(input.sessionId);
     if (!current) throw new Error('工作浏览器会话已关闭，请重新打开');
+    if (method.startsWith('teaching.')) {
+      if (!current.interactive) throw new Error('请先接管浏览器，再开始示范教学');
+      if (method === 'teaching.start')
+        return current.teaching.start(
+          current.id,
+          current.tabs.map((tab) => tab.view.webContents),
+        );
+      if (method === 'teaching.stop') return current.teaching.stop();
+      return current.teaching.status();
+    }
     if (method === 'browser.present') return this.present(current, input);
     if (method === 'browser.interactive') {
       if (current.busy) throw new Error('浏览器操作正在结束，请稍后接管');
+      if (!input.interactive) await current.teaching.stop();
       current.interactive = input.interactive === true;
       current.tabs.forEach((tab) => tab.page.handoff());
       this.showActive(current);
@@ -110,6 +127,7 @@ export class WorkBrowserHost {
       preview: new WorkBrowserPreview(this.window),
       downloads,
       busy: true,
+      teaching: new BrowserTeachingRecorder(),
     };
     this.sessions.set(current.id, current);
     try {
@@ -147,6 +165,7 @@ export class WorkBrowserHost {
     const contents = view.webContents;
     const tab = { id: randomUUID(), view, page: new WorkBrowserPage(contents) };
     current.tabs.push(tab);
+    void current.teaching.add(contents).catch(() => {});
     current.active ||= tab.id;
     current.downloads.add(contents);
     contents.on('render-process-gone', () => {
@@ -250,6 +269,7 @@ export class WorkBrowserHost {
     const current = this.sessions.get(id);
     if (!current) return;
     this.sessions.delete(id);
+    current.teaching.close();
     current.preview.close();
     for (const tab of [...current.tabs]) this.removeTab(current, tab);
     current.downloads.close();

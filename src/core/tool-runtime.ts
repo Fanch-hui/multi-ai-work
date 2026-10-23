@@ -36,7 +36,14 @@ import { TaskWaitService } from './task-waits.js';
 export class ToolRuntime {
   extensions?: Pick<
     ToolExecutionContext,
-    'executeBrowser' | 'manageRoutines' | 'recordArtifactReview'
+    | 'executeBrowser'
+    | 'manageRoutines'
+    | 'recordArtifactReview'
+    | 'saveWorkSkill'
+    | 'connectorDrafts'
+    | 'executeComputer'
+    | 'requestCollaboration'
+    | 'resolveCollaboration'
   >;
   private writeLocks = new Map<string, Promise<unknown>>();
   private pending = new Map<string, Set<Promise<unknown>>>();

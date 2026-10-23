@@ -10,10 +10,16 @@ import { General } from './GeneralSettings.js';
 import { PersonalSettings } from './PersonalSettings.js';
 import { ArchivedConversations } from './ArchivedConversations.js';
 import { FileStorageSettings } from './FileStorageSettings.js';
+import { VoiceSettings } from './voice/VoiceSettings.js';
+import { HostAccessSettings } from './host-access/HostAccessSettings.js';
+import { ConnectorsPanel } from './connectors/ConnectorsPanel.js';
 const tabs = [
   { id: 'personal', label: '个人信息' },
   { id: 'connections', label: '模型供应' },
   { id: 'tools', label: '工具与 Skills' },
+  { id: 'connectors', label: '应用连接' },
+  { id: 'voice', label: '语音' },
+  { id: 'host', label: '常驻与设备接入' },
   { id: 'workspaces', label: '工作目录' },
   { id: 'archived', label: '已归档会话' },
   { id: 'storage', label: '文件存储' },
@@ -65,6 +71,9 @@ export function Settings({
           {tab === 'connections' && <Connections data={data} mutate={mutate} />}
           {tab === 'personal' && <PersonalSettings data={data} mutate={mutate} />}
           {tab === 'tools' && <Integrations data={data} mutate={mutate} />}
+          {tab === 'connectors' && <ConnectorsPanel data={data} mutate={mutate} />}
+          {tab === 'voice' && <VoiceSettings />}
+          {tab === 'host' && <HostAccessSettings data={data} mutate={mutate} />}
           {tab === 'workspaces' && <Workspaces data={data} mutate={mutate} />}
           {tab === 'general' && <General data={data} mutate={mutate} />}
           {tab === 'storage' && <FileStorageSettings />}

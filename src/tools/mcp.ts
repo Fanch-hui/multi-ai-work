@@ -4,7 +4,12 @@ import type { ToolExecutionContext } from '../domain/tools.js';
 import type { ToolDefinition } from '../domain/provider.js';
 import { BridgeMutations } from './mcp-bridge.js';
 import { remoteToolAlias, type McpCatalogDiagnostic, type McpToolTarget } from './mcp-catalog.js';
-import { McpSessionManager, type McpSession, type RemoteTool } from './mcp-sessions.js';
+import {
+  McpSessionManager,
+  type McpSession,
+  type RemoteTool,
+  type McpClientOptions,
+} from './mcp-sessions.js';
 
 const schemaValidator = new Ajv({ strict: false, allErrors: true });
 
@@ -12,13 +17,17 @@ export class McpConnections {
   private bridge = new BridgeMutations();
   private aliases = new Map<string, McpToolTarget>();
   private catalogErrors = new Map<string, McpCatalogDiagnostic>();
-  private sessions = new McpSessionManager(
-    (connectionId) => this.clearCatalog(connectionId),
-    () => {
-      this.aliases.clear();
-      this.catalogErrors.clear();
-    },
-  );
+  private sessions: McpSessionManager;
+  constructor(options: McpClientOptions = {}) {
+    this.sessions = new McpSessionManager(
+      (connectionId) => this.clearCatalog(connectionId),
+      () => {
+        this.aliases.clear();
+        this.catalogErrors.clear();
+      },
+      options,
+    );
+  }
 
   probe(
     connection: ToolConnection,

@@ -1,3 +1,5 @@
+import type { ConversationReference } from '../domain/conversation-reference.js';
+import { resolveReferences, replyMessage, referencePrompt } from './conversation-references.js';
 import type {
   Artifact,
   Bot,
@@ -185,6 +187,8 @@ export class TaskService {
   }
 
   send(input: {
+    references?: ConversationReference[];
+    replyToMessageId?: string;
     conversationId: string;
     content: string;
     targetBotIds?: string[];
@@ -203,7 +207,11 @@ export class TaskService {
     const content = input.content.trim() || (artifactIds.length ? '请阅读所附资料。' : '');
     if (!content) throw new Error('消息不能为空');
     const requestId = input.requestId ?? id();
-    const mentionedBotIds = [...new Set(input.targetBotIds ?? [])];
+    const reply = replyMessage(this.state, room.id, input.replyToMessageId);
+    let directed = input.targetBotIds ?? [];
+    if (!directed.length && reply?.authorBotId && room.memberIds.includes(reply.authorBotId))
+      directed = [reply.authorBotId];
+    const mentionedBotIds = [...new Set(directed)];
     let targets = mentionedBotIds;
     if (!targets.length) {
       targets =
@@ -217,6 +225,7 @@ export class TaskService {
       if (bot.archived || !room.memberIds.includes(botId))
         throw new Error('智能体不是当前会话的有效成员');
     }
+    const references = resolveReferences(this.state, room.id, targets, input.references);
     const fingerprint = createHash('sha256')
       .update(
         JSON.stringify({
@@ -225,6 +234,14 @@ export class TaskService {
           targets: [...targets].sort(),
           mentionedBotIds: [...mentionedBotIds].sort(),
           artifactIds: [...artifactIds].sort(),
+          ...(references.length
+            ? {
+                references: references
+                  .map(({ kind, id }) => ({ kind, id }))
+                  .sort((a, b) => `${a.kind}:${a.id}`.localeCompare(`${b.kind}:${b.id}`)),
+              }
+            : {}),
+          ...(reply ? { replyToMessageId: reply.id } : {}),
         }),
       )
       .digest('hex');
@@ -255,6 +272,8 @@ export class TaskService {
         createdAt: now(),
         targetBotIds: targets,
         ...(mentionedBotIds.length ? { mentionedBotIds } : {}),
+        ...(references.length ? { references } : {}),
+        ...(reply ? { replyToMessageId: reply.id } : {}),
       });
       const recipients = receivingTasks(s, room.id);
       const tasks = targets.map((botId) => {
@@ -263,7 +282,7 @@ export class TaskService {
           return this.create({
             conversationId: room.id,
             botId,
-            goal: content,
+            goal: referencePrompt(message, reply),
             inputArtifactIds: artifactIds,
             requestId: `${requestId}:${botId}`,
             sourceMessageId: message.id,

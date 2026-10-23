@@ -1,3 +1,7 @@
+import { createWorkSkillTools } from './work-skills.js';
+import { createComputerTools } from './computer.js';
+import { createConnectorDraftTools } from './connector-drafts.js';
+import { createCollaborationTools } from './collaboration.js';
 import { z } from 'zod';
 import { unlink, readFile, stat, realpath } from 'node:fs/promises';
 import path from 'node:path';
@@ -36,6 +40,10 @@ export function createBuiltins(mcp: McpConnections): Record<string, Builtin> {
   const network = new NetworkConcurrency();
   return {
     ...createBrowserTools(),
+    ...createWorkSkillTools(),
+    ...createComputerTools(),
+    ...createConnectorDraftTools(),
+    ...createCollaborationTools(),
     ...createOngoingWorkTools(),
     ...createTeamTools(),
     ...createMemoryTools(),

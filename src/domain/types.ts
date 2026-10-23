@@ -150,6 +150,8 @@ export interface Message {
   createdAt: string;
   targetBotIds?: string[];
   mentionedBotIds?: string[];
+  references?: import('./conversation-reference.js').ConversationReferenceOption[];
+  replyToMessageId?: string;
 }
 export interface TaskInput {
   id: string;

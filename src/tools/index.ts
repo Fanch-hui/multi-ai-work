@@ -5,6 +5,7 @@ import { McpConnections } from './mcp.js';
 import { searchHttp } from './http-search.js';
 import { searchConnection, tavilySearchTool } from './search.js';
 import type { ToolDefinition } from '../domain/provider.js';
+import type { McpClientOptions } from './mcp-sessions.js';
 
 function freezeSchema<T>(value: T): T {
   if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
@@ -13,8 +14,8 @@ function freezeSchema<T>(value: T): T {
   return value;
 }
 
-export function createToolRegistry(): ToolRegistry {
-  const mcp = new McpConnections();
+export function createToolRegistry(options: McpClientOptions = {}): ToolRegistry {
+  const mcp = new McpConnections(options);
   const builtins = createBuiltins(mcp);
   const builtinCatalog = Object.entries(builtins).map(([name, tool]) => ({
     name,

@@ -63,7 +63,8 @@ export class TaskWaitService {
 
   resourceAvailable(waitId: string) {
     const wait = required(this.state.storage.get<TaskWait>('task_waits', waitId), '等待不存在');
-    if (wait.kind !== 'browser-resource') throw new Error('此等待需要人工继续');
+    if (!['browser-resource', 'computer-resource'].includes(wait.kind))
+      throw new Error('此等待需要人工继续');
     return this.resolve(waitId, false);
   }
 
@@ -78,6 +79,10 @@ export class TaskWaitService {
   private resumeSummary(wait: TaskWait, interactive: boolean) {
     if (wait.kind === 'approval')
       return `用户已选择继续任务：${wait.summary}。请按当前权限重新请求具体操作的审批。`;
+    if (wait.kind === 'computer-handoff')
+      return `用户已完成电脑接管并确认继续：${wait.summary}。请重新观察窗口后继续任务。`;
+    if (wait.kind === 'computer-resource')
+      return `桌面工作资源已可用：${wait.summary}。请重新获取并观察授权应用。`;
     if (wait.kind === 'browser-handoff')
       return `用户已完成浏览器接管并确认继续：${wait.summary}。请重新读取页面状态后继续任务。`;
     return `${interactive ? '用户已确认继续任务' : '工作浏览器资源已可用'}：${wait.summary}。请重试获取工作浏览器。`;

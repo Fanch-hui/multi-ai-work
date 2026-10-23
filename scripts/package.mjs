@@ -1,3 +1,4 @@
+import { buildComputerHelper } from './computer-helper.mjs';
 import { createRequire } from 'node:module';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile, rm } from 'node:fs/promises';
@@ -58,6 +59,7 @@ await run(process.execPath, [
     ? ['--crt-dir', process.env.MULTI_AI_OFFICE_CRT]
     : []),
 ]);
+const computerHelper = platform === '--mac' ? await buildComputerHelper(project) : undefined;
 const builder = require.resolve('electron-builder/cli.js');
 const metadata = JSON.parse(await readFile(join(project, 'package.json'), 'utf8'));
 const configDirectory = join(project, '.data');
@@ -76,9 +78,20 @@ await writeFile(
   configPath,
   JSON.stringify({
     ...metadata.build,
+    mac: {
+      ...metadata.build.mac,
+      entitlements: join(project, 'resources/entitlements.mac.plist'),
+      entitlementsInherit: join(project, 'resources/entitlements.mac.plist'),
+      extendInfo: {
+        ...metadata.build.mac?.extendInfo,
+        NSMicrophoneUsageDescription: '用于语音输入和与团队成员进行语音对话。',
+        NSScreenCaptureUsageDescription: '用于观察你授权给智能体操作的应用窗口。',
+      },
+    },
     afterPack: join(project, 'scripts/package-dependencies.mjs'),
     extraResources: [
       ...(metadata.build.extraResources ?? []),
+      ...(computerHelper ? [{ from: computerHelper, to: 'computer-helper' }] : []),
       { from: marketConfigPath, to: 'market-config.json' },
       { from: join(project, 'workspace-runtime', runtimeTarget), to: 'workspace-runtime' },
       {

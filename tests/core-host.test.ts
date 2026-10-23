@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CoreToDesktopMessage, DesktopToCoreMessage } from '../src/domain/core-ipc.js';
+import { WorkBrowserHost } from '../apps/desktop/work-browser-host.js';
 import { CoreHost } from '../apps/desktop/core-host.js';
 
 const electron = vi.hoisted(() => ({ fork: vi.fn() }));
@@ -89,11 +90,13 @@ describe('desktop Core process boundary', () => {
 
   it('sends one close request and waits for acknowledgement and process exit', async () => {
     const host = await started();
+    const closeBrowser = vi.spyOn(WorkBrowserHost.prototype, 'closeAll');
     let settled = false;
     const closing = host.close().then(() => {
       settled = true;
     });
     const repeated = host.close();
+    expect(closeBrowser).not.toHaveBeenCalled();
     expect(child.postMessage.mock.calls).toEqual([[{ type: 'close' }]]);
     child.receive({ type: 'closed' });
     await Promise.resolve();
@@ -102,6 +105,8 @@ describe('desktop Core process boundary', () => {
     await Promise.all([closing, repeated]);
     expect(host.running).toBe(false);
     expect(child.kill).not.toHaveBeenCalled();
+    expect(closeBrowser).toHaveBeenCalled();
+    closeBrowser.mockRestore();
   });
 
   it('rejects shutdown when the child exits without confirming resource release', async () => {

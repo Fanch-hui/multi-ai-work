@@ -114,7 +114,14 @@ export class ToolOperationJournal {
     const unknown =
       dispatched &&
       (context.signal.aborted ||
-        (['call_mcp', 'browser_action', 'browser_open', 'browser_tabs'].includes(name) &&
+        ([
+          'call_mcp',
+          'browser_action',
+          'browser_open',
+          'browser_tabs',
+          'computer_action',
+          'send_connector_draft',
+        ].includes(name) &&
           /unknown|结果未知|ECONNRESET|ETIMEDOUT|closed|timeout|timed out|断开/i.test(
             publicError(error),
           )));

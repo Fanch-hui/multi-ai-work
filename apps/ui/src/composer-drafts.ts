@@ -1,3 +1,4 @@
+import type { ConversationReferenceOption } from '../../../src/domain/conversation-reference.js';
 import { useSyncExternalStore, type SetStateAction } from 'react';
 import type { Artifact, Conversation } from '../../../src/domain/types.js';
 import {
@@ -7,6 +8,8 @@ import {
 } from '../../../src/domain/attachment-policy.js';
 
 export interface ComposerDraft {
+  references?: ConversationReferenceOption[];
+  replyToMessageId?: string;
   content: string;
   targets: string[];
   attachments: Artifact[];
@@ -15,7 +18,10 @@ export interface ComposerDraft {
   attaching: boolean;
   error: string;
 }
-type DraftContent = Pick<ComposerDraft, 'content' | 'targets' | 'attachments'>;
+type DraftContent = Pick<
+  ComposerDraft,
+  'content' | 'targets' | 'attachments' | 'references' | 'replyToMessageId'
+>;
 export interface DraftAttachmentReference {
   conversationId: string;
   artifactIds: string[];
@@ -29,6 +35,10 @@ export function composerSubmission(conversation: Conversation, draft: ComposerDr
       conversation.purpose !== 'chief' && draft.targets.length ? draft.targets : undefined,
     artifactIds: draft.attachments.map((artifact) => artifact.id),
     requestId: draft.requestId,
+    ...(draft.references?.length
+      ? { references: draft.references.map(({ kind, id }) => ({ kind, id })) }
+      : {}),
+    ...(draft.replyToMessageId ? { replyToMessageId: draft.replyToMessageId } : {}),
   };
 }
 
@@ -126,7 +136,15 @@ export class ComposerDraftStore {
     this.update(id, {
       sending: false,
       ...(draft.requestId === requestId
-        ? { content: '', targets: [], attachments: [], requestId: crypto.randomUUID(), error: '' }
+        ? {
+            content: '',
+            targets: [],
+            attachments: [],
+            references: undefined,
+            replyToMessageId: undefined,
+            requestId: crypto.randomUUID(),
+            error: '',
+          }
         : {}),
     });
   }
@@ -170,6 +188,7 @@ export function useComposerDraft(conversationId: string) {
   }
   return {
     draft,
+    setReferences: (value: ConversationReferenceOption[]) => setField('references', value),
     setContent: (value: SetStateAction<string>) => setField('content', value),
     setTargets: (value: SetStateAction<string[]>) => setField('targets', value),
     setAttachments: (value: SetStateAction<Artifact[]>) => setField('attachments', value),

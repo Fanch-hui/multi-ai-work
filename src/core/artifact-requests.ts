@@ -17,7 +17,12 @@ export type HostRequest = (
     | 'chooseAvatar'
     | 'openPath'
     | import('../domain/work-browser.js').BrowserHostMethod
-    | 'system.notify',
+    | 'system.notify'
+    | 'system.openExternal'
+    | 'resident.get'
+    | 'resident.set'
+    | import('../domain/computer.js').ComputerHostMethod
+    | import('../domain/browser-teaching.js').BrowserTeachingHostMethod,
   params?: Record<string, unknown>,
 ) => Promise<unknown>;
 

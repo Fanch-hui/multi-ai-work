@@ -4,7 +4,12 @@ export interface TaskWait {
   runId: string;
   conversationId: string;
   botId: string;
-  kind: 'approval' | 'browser-handoff' | 'browser-resource';
+  kind:
+    | 'approval'
+    | 'browser-handoff'
+    | 'browser-resource'
+    | 'computer-handoff'
+    | 'computer-resource';
   summary: string;
   status: 'pending' | 'resumed' | 'cancelled';
   resourceId?: string;

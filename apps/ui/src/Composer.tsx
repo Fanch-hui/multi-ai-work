@@ -1,6 +1,8 @@
+import { VoiceControls } from './voice/VoiceControls.js';
+import { ReferencePicker } from './work-chat/ReferencePicker.js';
 import { ModalPresence } from './ModalPresence.js';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { AtSign, ArrowUp, ChevronDown, X, Square, Paperclip } from 'lucide-react';
+import { ArrowUp, ChevronDown, X, Square, Paperclip } from 'lucide-react';
 import type { Conversation, Snapshot } from '../../../src/domain/types.js';
 import type { Mutate } from './store.js';
 import { errorMessage } from './api.js';
@@ -24,15 +26,13 @@ export function Composer({
   mutate: Mutate;
   configureChief?: () => void;
 }) {
-  const { draft, setContent, setTargets } = useComposerDraft(conversation.id);
+  const { draft, setContent, setTargets, setReferences } = useComposerDraft(conversation.id);
   const { content, targets, error, sending: busy } = draft;
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [voiceTaskIds, setVoiceTaskIds] = useState<string[]>([]);
   const { attachments, setAttachments, attaching, dragging, attach, onPaste, dragHandlers } =
     useAttachments(conversation.id, mutate);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const mentionRef = useRef<HTMLDetailsElement>(null);
-  const currentConversation = useRef(conversation.id);
-  currentConversation.current = conversation.id;
   const composing = useRef(false);
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -40,15 +40,6 @@ export function Composer({
     textarea.style.height = 'auto';
     textarea.style.height = `${Math.min(192, Math.max(48, textarea.scrollHeight))}px`;
   }, [conversation.id, content]);
-  useEffect(() => {
-    function dismissMentions(event: PointerEvent) {
-      const menu = mentionRef.current;
-      if (menu?.open && event.target instanceof Node && !menu.contains(event.target))
-        menu.open = false;
-    }
-    document.addEventListener('pointerdown', dismissMentions);
-    return () => document.removeEventListener('pointerdown', dismissMentions);
-  }, []);
   const main = conversation.purpose === 'chief';
   const members = data.bots.filter(
     (item) => conversation.memberIds.includes(item.id) && !item.archived,
@@ -77,6 +68,43 @@ export function Composer({
         (parent) => parent.id === item.parentId && parent.conversationId === conversation.id,
       ),
   );
+  const voiceTasks = data.tasks.filter((task) => voiceTaskIds.includes(task.id));
+  const voiceFinished =
+    voiceTasks.length > 0 &&
+    voiceTasks.length === voiceTaskIds.length &&
+    voiceTasks.every((task) =>
+      ['completed', 'failed', 'cancelled', 'interrupted'].includes(task.status),
+    );
+  const voiceRuns = new Set(
+    voiceTasks.filter((task) => task.status === 'completed').flatMap((task) => task.runIds),
+  );
+  const voiceReply = voiceFinished
+    ? data.messages
+        .filter(
+          (message) =>
+            message.conversationId === conversation.id &&
+            message.authorType === 'bot' &&
+            message.status === 'committed' &&
+            message.runId &&
+            voiceRuns.has(message.runId) &&
+            message.content.trim(),
+        )
+        .at(-1)
+    : undefined;
+  const voiceFailure =
+    voiceFinished && !voiceReply
+      ? voiceTasks.find((task) => task.status !== 'completed')?.error ||
+        '本次任务没有可朗读的回复，请继续输入'
+      : undefined;
+  async function sendVoice(text: string) {
+    const result = await mutate<{ taskIds: string[] }>('conversations.send', {
+      conversationId: conversation.id,
+      content: text,
+      targetBotIds: targets.length ? targets : undefined,
+      requestId: crypto.randomUUID(),
+    });
+    setVoiceTaskIds(result.taskIds);
+  }
   async function send(event: FormEvent) {
     event.preventDefault();
     const pending = composerDrafts.beginSend(conversation.id);
@@ -84,8 +112,6 @@ export function Composer({
     try {
       await mutate('conversations.send', composerSubmission(conversation, pending));
       composerDrafts.finishSend(conversation.id, pending.requestId);
-      if (currentConversation.current === conversation.id && mentionRef.current)
-        mentionRef.current.open = false;
     } catch (cause) {
       composerDrafts.finishSend(conversation.id, pending.requestId, errorMessage(cause));
     }
@@ -106,6 +132,37 @@ export function Composer({
     <div className="chat-composer-region px-6 pb-3 pt-3 max-sm:px-3">
       <form className="mx-auto w-full max-w-4xl" onSubmit={(event) => void send(event)}>
         <ErrorNote error={error} />
+        {draft.references?.length || draft.replyToMessageId || targets.length ? (
+          <div className="mb-2 flex flex-wrap gap-2 text-xs">
+            {draft.replyToMessageId && (
+              <button
+                type="button"
+                className="max-w-full truncate rounded-lg bg-blue-50 px-3 py-1 text-blue-700"
+                onClick={() =>
+                  composerDrafts.edit(conversation.id, { replyToMessageId: undefined })
+                }
+              >
+                回复：
+                {data.messages
+                  .find((item) => item.id === draft.replyToMessageId)
+                  ?.content.slice(0, 80) ?? '已选择消息'}{' '}
+                ×
+              </button>
+            )}
+            {draft.references?.map((item) => (
+              <button
+                type="button"
+                key={`${item.kind}:${item.id}`}
+                className="rounded-lg bg-slate-100 px-3 py-1"
+                onClick={() => setReferences(draft.references!.filter((other) => other !== item))}
+              >
+                {item.kind === 'skill' ? '/' : '@'}
+                {item.label} ×
+              </button>
+            ))}
+          </div>
+        ) : null}
+
         <div
           {...(!busy ? dragHandlers : {})}
           aria-busy={attaching}
@@ -228,57 +285,29 @@ export function Composer({
               >
                 <Paperclip size={17} />
               </Button>
-              {!main && conversation.kind === 'group' && (
-                <details ref={mentionRef} className="composer-mention-root relative text-sm">
-                  <summary
-                    aria-label="指定成员"
-                    title="指定成员"
-                    className="flex cursor-pointer list-none items-center gap-1.5 rounded-full p-2 text-xs text-slate-500 hover:bg-slate-50"
-                  >
-                    <AtSign size={15} />
-                    {!!targets.length && <span>{targets.length}</span>}
-                  </summary>
-                  <fieldset className="composer-mentions absolute bottom-full left-0 z-10 mb-2 grid max-h-52 w-52 gap-2 overflow-auto rounded-xl border border-slate-200 bg-white p-3 shadow-lg">
-                    <label className="mb-1 flex items-center gap-1.5 border-b border-black/5 pb-2 text-xs font-medium text-slate-700">
-                      <input
-                        type="checkbox"
-                        disabled={busy}
-                        checked={
-                          !!members.length && members.every((bot) => targets.includes(bot.id))
-                        }
-                        onChange={() => {
-                          setTargets(
-                            members.every((bot) => targets.includes(bot.id))
-                              ? []
-                              : members.map((bot) => bot.id),
-                          );
-                        }}
-                      />
-                      @所有人
-                    </label>
-                    {members.map((bot) => (
-                      <label
-                        key={bot.id}
-                        className="flex items-center gap-1.5 text-xs text-slate-600"
-                      >
-                        <input
-                          type="checkbox"
-                          disabled={busy}
-                          checked={targets.includes(bot.id)}
-                          onChange={() => {
-                            setTargets(
-                              targets.includes(bot.id)
-                                ? targets.filter((id) => id !== bot.id)
-                                : [...targets, bot.id],
-                            );
-                          }}
-                        />
-                        {bot.name}
-                      </label>
-                    ))}
-                  </fieldset>
-                </details>
-              )}
+              <ReferencePicker
+                conversationId={conversation.id}
+                members={members}
+                targets={targets}
+                content={content}
+                selected={draft.references ?? []}
+                disabled={busy}
+                setContent={setContent}
+                setTargets={setTargets}
+                setSelected={setReferences}
+              />
+              <VoiceControls
+                conversationId={conversation.id}
+                onDictation={(text) =>
+                  setContent((previous) => (previous.trim() ? `${previous}\n${text}` : text))
+                }
+                onSubmit={sendVoice}
+                reply={voiceReply ? { id: voiceReply.id, text: voiceReply.content } : undefined}
+                taskError={voiceFailure}
+                busy={busy}
+                disabled={attaching}
+              />
+
               {rootTasks.length > 0 && (
                 <Confirm
                   title="停止当前工作？"

@@ -1,3 +1,5 @@
+import { configureVoicePermissions } from './voice-permissions.js';
+import { initializeResidentSettings, closeResidentSettings } from './resident-settings.js';
 import {
   app,
   BrowserWindow,
@@ -82,11 +84,13 @@ async function smokeCore() {
   app.exit(0);
 }
 async function start() {
+  await initializeResidentSettings();
   const currentDirectory = await readDataDirectory(app.getPath('userData'));
   createWindow();
   configureUpdater();
   configureDataDirectory(currentDirectory);
   configureWindowNavigation();
+  configureVoicePermissions(window.webContents, pathToFileURL(pagePath).href);
   registerRendererRequests();
   await startCoreAndShowWindow(currentDirectory);
   configureTrayAndWindowClose();
@@ -294,6 +298,7 @@ async function shutdownDesktop() {
     await updater?.close();
     await core.close();
   } finally {
+    closeResidentSettings();
     tray?.destroy();
     app.exit(0);
   }

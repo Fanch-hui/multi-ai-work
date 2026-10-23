@@ -127,7 +127,7 @@ export class RoutineService {
           createdAt: previous?.createdAt ?? current,
           updatedAt: current,
         };
-        if (fields.schedule.kind === 'once' && !routine.nextRunAt)
+        if (fields.enabled && fields.schedule.kind === 'once' && !routine.nextRunAt)
           throw new Error('请选择未来的执行时间');
         this.state.storage.put('routines', routine);
         return routine;

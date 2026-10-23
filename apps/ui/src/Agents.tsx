@@ -13,6 +13,9 @@ import { modelLabel } from './model-label.js';
 import { Routines } from './local-work/Routines.js';
 import { BrowserProfiles } from './local-work/BrowserProfiles.js';
 import { PendingWork } from './local-work/PendingWork.js';
+import { WorkSkills } from './work-skills/WorkSkills.js';
+import { BotTemplates } from './work-skills/BotTemplates.js';
+import { ComputerPanel } from './computer/ComputerPanel.js';
 export function Agents({
   data,
   mutate,
@@ -34,7 +37,10 @@ export function Agents({
   const [showArchived, setShowArchived] = useState(false);
   const [inspecting, setInspecting] = useState<Bot>();
   const [error, setError] = useState('');
-  const [workPanel, setWorkPanel] = useState<'routines' | 'browser' | 'pending'>();
+  const [workPanel, setWorkPanel] = useState<
+    'routines' | 'browser' | 'pending' | 'skills' | 'templates' | 'computer'
+  >();
+  const [templateBotId, setTemplateBotId] = useState<string>();
   const chief = data.bots.find((bot) => bot.id === data.settings.mainBotId);
   const bots = data.bots.filter((bot) => bot.id !== chief?.id && (showArchived || !bot.archived));
   return (
@@ -65,6 +71,16 @@ export function Agents({
           <Button onClick={() => setWorkPanel('routines')}>例行工作</Button>
           <Button onClick={() => setWorkPanel('pending')}>待我处理</Button>
           <Button onClick={() => setWorkPanel('browser')}>工作浏览器</Button>
+          <Button onClick={() => setWorkPanel('computer')}>电脑操作</Button>
+          <Button onClick={() => setWorkPanel('skills')}>工作技能</Button>
+          <Button
+            onClick={() => {
+              setTemplateBotId(undefined);
+              setWorkPanel('templates');
+            }}
+          >
+            成员模板
+          </Button>
         </div>
         {chief && (
           <article className="mb-8 flex flex-wrap items-center justify-between gap-6 rounded-2xl bg-slate-50 p-6">
@@ -169,6 +185,16 @@ export function Agents({
                     </Button>
                     <Button
                       variant="ghost"
+                      className="px-0 text-xs"
+                      onClick={() => {
+                        setTemplateBotId(bot.id);
+                        setWorkPanel('templates');
+                      }}
+                    >
+                      导出模板
+                    </Button>
+                    <Button
+                      variant="ghost"
                       className="ml-auto size-8 min-h-8 p-0"
                       aria-label={`复制${bot.name}`}
                       onClick={() => {
@@ -215,6 +241,20 @@ export function Agents({
       )}
       {workPanel === 'browser' && (
         <BrowserProfiles data={data} mutate={mutate} close={() => setWorkPanel(undefined)} />
+      )}
+      {workPanel === 'computer' && (
+        <ComputerPanel data={data} mutate={mutate} close={() => setWorkPanel(undefined)} />
+      )}
+      {workPanel === 'skills' && (
+        <WorkSkills data={data} mutate={mutate} close={() => setWorkPanel(undefined)} />
+      )}
+      {workPanel === 'templates' && (
+        <BotTemplates
+          data={data}
+          mutate={mutate}
+          close={() => setWorkPanel(undefined)}
+          botId={templateBotId}
+        />
       )}
       <ModalPresence show={!!editing}>
         {editing && (

@@ -1,3 +1,6 @@
+import { ComputerHost } from './computer-host.js';
+import type { ComputerHostMethod } from '../../src/domain/computer.js';
+import type { BrowserTeachingHostMethod } from '../../src/domain/browser-teaching.js';
 import { app, utilityProcess, net, type BrowserWindow, type UtilityProcess } from 'electron';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -21,6 +24,7 @@ export class CoreHost {
   private closing?: Promise<void>;
   private pending = new Map<string, RequestHandler>();
   private browser?: WorkBrowserHost;
+  private computer?: ComputerHost;
   onChange?: () => void;
 
   get running() {
@@ -32,6 +36,11 @@ export class CoreHost {
     const child = this.createChild(dataDirectory);
     this.child = child;
     this.browser = new WorkBrowserHost(window);
+    this.computer = new ComputerHost({
+      helperPath: app.isPackaged
+        ? join(process.resourcesPath, 'computer-helper')
+        : join(app.getAppPath(), '.data/computer-build/computer-helper'),
+    });
     const sockets = createProviderSocketHost(
       (url, headers) =>
         new net.WebSocket(url, { headers, useSessionCookies: false }) as unknown as ProviderSocket,
@@ -64,10 +73,15 @@ export class CoreHost {
   }
 
   async close() {
-    this.browser?.closeAll();
     const child = this.child;
-    if (!child) return;
+    if (!child) {
+      this.computer?.close();
+      this.browser?.closeAll();
+      return;
+    }
     this.closing ??= this.waitForChildClose(child).finally(() => {
+      this.computer?.close();
+      this.browser?.closeAll();
       this.closing = undefined;
     });
     await this.closing;
@@ -142,12 +156,15 @@ export class CoreHost {
     window?: BrowserWindow,
   ) {
     try {
-      const result = input.method.startsWith('browser.')
-        ? await this.browser?.request(
-            input.method as BrowserHostMethod,
-            input.params as unknown as BrowserHostInput,
-          )
-        : await handleCorePlatformRequest(input.method, input.params, window);
+      let result: unknown;
+      if (input.method.startsWith('computer.'))
+        result = await this.computer?.request(input.method as ComputerHostMethod, input.params);
+      else if (input.method.startsWith('browser.') || input.method.startsWith('teaching.'))
+        result = await this.browser?.request(
+          input.method as BrowserHostMethod | BrowserTeachingHostMethod,
+          input.params as unknown as BrowserHostInput,
+        );
+      else result = await handleCorePlatformRequest(input.method, input.params, window);
       this.send(child, { type: 'host-result', id: input.id, result });
     } catch (error) {
       this.send(child, { type: 'host-result', id: input.id, error: (error as Error).message });
@@ -155,6 +172,7 @@ export class CoreHost {
   }
 
   private childExited(child: UtilityProcess, code: number, startup: StartupHandler) {
+    this.computer?.close();
     this.browser?.closeAll();
     if (this.child === child) this.child = undefined;
     startup.reject(new Error(`Core 已停止 (${code})`));

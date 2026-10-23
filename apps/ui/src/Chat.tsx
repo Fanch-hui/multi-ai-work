@@ -21,6 +21,8 @@ import { useResource } from './local-work/useResource.js';
 import { WorkBrowser } from './local-work/WorkBrowser.js';
 import { PendingWork } from './local-work/PendingWork.js';
 import { TaskWaitCard } from './local-work/TaskWaitCard.js';
+import { ComputerPanel } from './computer/ComputerPanel.js';
+import { WorkCards } from './work-chat/WorkCards.js';
 export function Chat({
   data,
   conversation,
@@ -49,6 +51,7 @@ export function Chat({
   const [manageOpen, setManageOpen] = useState(false);
   const [browserOpen, setBrowserOpen] = useState(false);
   const [pendingOpen, setPendingOpen] = useState(false);
+  const [computerOpen, setComputerOpen] = useState(false);
   useEffect(() => {
     if (browserRequest) setBrowserOpen(true);
   }, [browserRequest]);
@@ -58,13 +61,17 @@ export function Chat({
       (wait) =>
         wait.status === 'pending' &&
         wait.kind !== 'browser-resource' &&
+        wait.kind !== 'computer-resource' &&
         wait.conversationId === conversation?.id,
     ) ?? [];
   const pendingWork =
     data.questions.filter((question) => question.status === 'pending').length +
     data.approvals.filter((approval) => approval.status === 'pending').length +
     (waitResource.value?.filter(
-      (wait) => wait.status === 'pending' && wait.kind !== 'browser-resource',
+      (wait) =>
+        wait.status === 'pending' &&
+        wait.kind !== 'browser-resource' &&
+        wait.kind !== 'computer-resource',
     ).length ?? 0);
   const chief = data.bots.find((bot) => bot.id === conversation?.chiefId);
   const main = conversation?.purpose === 'chief';
@@ -165,6 +172,7 @@ export function Chat({
               onManage={() => setManageOpen(true)}
               onMembers={() => setMembersOpen(true)}
               onBrowser={() => setBrowserOpen((value) => !value)}
+              onComputer={() => setComputerOpen(true)}
               onPending={() => setPendingOpen(true)}
               pendingWork={pendingWork}
             />
@@ -183,11 +191,23 @@ export function Chat({
                           mutate={mutate}
                           resolved={waitResource.reload}
                           onBrowser={() => setBrowserOpen(true)}
+                          onComputer={() => setComputerOpen(true)}
                         />
                       ))}
                     </div>
                   </div>
                 )}
+                <div className="chat-plan-dock px-6 pt-2 max-sm:px-3">
+                  <div className="mx-auto max-h-56 w-full max-w-4xl overflow-auto">
+                    <WorkCards
+                      key={conversation.id}
+                      data={data}
+                      conversationId={conversation.id}
+                      mutate={mutate}
+                      onSelectConversation={onSelectConversation}
+                    />
+                  </div>
+                </div>
                 {plan && (
                   <div className="chat-plan-dock px-6 pt-2 max-sm:px-3">
                     <div className="mx-auto w-full max-w-4xl">
@@ -234,6 +254,9 @@ export function Chat({
           close={() => setPendingOpen(false)}
           onSelectConversation={onSelectConversation}
         />
+      )}
+      {computerOpen && (
+        <ComputerPanel data={data} mutate={mutate} close={() => setComputerOpen(false)} />
       )}
       <ModalPresence show={membersOpen}>
         {membersOpen && (

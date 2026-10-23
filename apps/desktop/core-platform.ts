@@ -1,3 +1,4 @@
+import { handleResidentRequest } from './resident-settings.js';
 import {
   dialog,
   shell,
@@ -23,6 +24,15 @@ export async function handleCorePlatformRequest(
   params: Record<string, unknown>,
   window?: BrowserWindow,
 ) {
+  if (method === 'resident.get' || method === 'resident.set')
+    return handleResidentRequest(method, params);
+  if (method === 'system.openExternal') {
+    const url = new URL(String(params.url));
+    if (url.protocol !== 'https:' || url.username || url.password)
+      throw new Error('登录页面必须是 HTTPS 地址');
+    await shell.openExternal(url.href);
+    return { opened: true };
+  }
   if (method === 'system.notify') return notifyWork(window, params);
   if (method === 'encrypt' || method === 'decrypt') {
     if (

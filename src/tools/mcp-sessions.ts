@@ -4,6 +4,13 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { ToolListChangedNotificationSchema } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolConnection } from '../domain/types.js';
 import type { ToolExecutionContext } from '../domain/tools.js';
+import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js';
+
+export interface McpClientOptions {
+  oauthProvider?: (connection: ToolConnection) => OAuthClientProvider | undefined;
+  fetch?: typeof fetch;
+  oauthFetch?: typeof fetch;
+}
 
 export type RemoteTool = Awaited<ReturnType<Client['listTools']>>['tools'][number];
 
@@ -36,6 +43,7 @@ export class McpSessionManager {
   constructor(
     private readonly onRemoved: (connectionId: string) => void,
     private readonly onClosed: () => void,
+    private readonly options: McpClientOptions = {},
   ) {}
 
   get isClosing(): boolean {
@@ -200,9 +208,12 @@ export class McpSessionManager {
       !['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname)
     )
       throw new Error('远程凭据连接需要 HTTPS');
+    const authProvider = this.options.oauthProvider?.(connection);
     return new StreamableHTTPClientTransport(url, {
+      authProvider,
+      fetch: authProvider ? (this.options.oauthFetch ?? this.options.fetch) : this.options.fetch,
       requestInit: {
-        headers: secret ? { Authorization: `Bearer ${secret}` } : {},
+        headers: secret && !authProvider ? { Authorization: `Bearer ${secret}` } : {},
         redirect: 'error',
       },
     });

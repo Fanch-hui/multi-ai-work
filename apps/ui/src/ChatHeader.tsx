@@ -1,4 +1,4 @@
-import { ArrowLeft, MoreHorizontal, PanelLeft, Users, Globe, Inbox } from 'lucide-react';
+import { ArrowLeft, MoreHorizontal, PanelLeft, Users, Globe, Inbox, Monitor } from 'lucide-react';
 import type { Bot, Conversation } from '../../../src/domain/types.js';
 import { Button, cn } from './components.js';
 import { ConversationAvatar } from './ConversationAvatar.js';
@@ -17,6 +17,7 @@ interface Props {
   onManage: () => void;
   onMembers: () => void;
   onBrowser: () => void;
+  onComputer: () => void;
   onPending: () => void;
   pendingWork: number;
 }
@@ -34,6 +35,7 @@ export function ChatHeader({
   onManage,
   onMembers,
   onBrowser,
+  onComputer,
   onPending,
   pendingWork,
 }: Props) {
@@ -136,6 +138,15 @@ export function ChatHeader({
           onClick={onBrowser}
         >
           <Globe size={16} />
+        </Button>
+        <Button
+          variant="ghost"
+          className="size-8 min-h-8 p-0"
+          aria-label="电脑操作"
+          title="电脑操作"
+          onClick={onComputer}
+        >
+          <Monitor size={16} />
         </Button>
         <Button
           variant="ghost"

@@ -5,6 +5,7 @@ import { errorMessage, request } from '../api.js';
 import type { Mutate } from '../store.js';
 import { Button, ErrorNote, inputClass } from '../components.js';
 import { useResource } from './useResource.js';
+import { BrowserTeaching } from '../computer/BrowserTeaching.js';
 
 export function WorkBrowser({
   conversationId,
@@ -273,6 +274,9 @@ export function WorkBrowser({
           <p className="py-3 text-sm text-slate-500">
             {sessions.loading ? '读取工作浏览器…' : '当前没有正在使用的浏览器会话。'}
           </p>
+        )}
+        {session?.status === 'handoff' && (
+          <BrowserTeaching key={session.id} sessionId={session.id} mutate={mutate} />
         )}
       </div>
       <div ref={viewport} className="min-h-0 flex-1 bg-slate-50" />

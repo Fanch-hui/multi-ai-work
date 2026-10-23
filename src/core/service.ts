@@ -1,3 +1,9 @@
+import { ConnectorService } from './connector-service.js';
+import { DesktopWorkServices } from './desktop-work-services.js';
+import { ConnectorOAuth } from './connector-oauth.js';
+import type { ToolRegistry } from '../domain/tools.js';
+import { conversationReferenceSchema } from '../domain/conversation-reference.js';
+import { referenceOptions } from './conversation-references.js';
 import { join } from 'node:path';
 import { z } from 'zod';
 import type { Bot, ContextCheckpoint, Task, UserQuestion } from '../domain/types.js';
@@ -76,7 +82,10 @@ export class CoreService {
   private teamRequests: TeamRequests;
   private historyRequests: HistoryRequests;
   private backup: BackupService;
-  private registry = createToolRegistry();
+  private registry: ToolRegistry;
+  readonly connectorOAuth: ConnectorOAuth;
+  readonly connectors: ConnectorService;
+  readonly work: DesktopWorkServices;
   private adapters: ProviderAdapter[];
   private maintenance = false;
   private admission: MaintenanceAdmission;
@@ -89,6 +98,13 @@ export class CoreService {
     this.state = new State(dataDirectory);
     const s = this.state.storage;
     this.vault = new Vault(join(dataDirectory, 'credentials.enc.json'), cipher);
+    this.connectorOAuth = new ConnectorOAuth(this.state, this.vault, {
+      openExternal: host ? (url) => host('system.openExternal', { url }) : undefined,
+    });
+    this.registry = createToolRegistry({
+      oauthProvider: (connection) => this.connectorOAuth.provider(connection),
+      oauthFetch: this.connectorOAuth.fetch,
+    });
     this.adapters = adapters ?? [
       ...createNativeAdapters(),
       new ChatGptAdapter(),
@@ -166,18 +182,35 @@ export class CoreService {
     this.routines = new RoutineService(this.state, this.tasks, this.team);
     this.reviews = new ArtifactReviewService(this.state, this.tasks);
     this.browser = new BrowserService(this.state, this.host, this.tools.waits);
-    this.tools.extensions = workToolContext(
+    this.connectors = new ConnectorService(
       this.state,
-      this.routines,
-      this.reviews,
-      this.browser,
-      !!this.host,
+      this.toolConnections,
+      this.tasks,
+      this.registry,
+      this.connectorOAuth,
     );
+    this.work = new DesktopWorkServices(
+      this.state,
+      this.entities,
+      this.tasks,
+      this.routines,
+      this.tools.waits,
+      this.vault,
+      this.host,
+      (method, params) => this.request(method, params),
+    );
+    this.tools.extensions = {
+      ...workToolContext(this.state, this.routines, this.reviews, this.browser, !!this.host),
+      ...this.work.extensions(),
+      connectorDrafts: (action, args, context) => this.connectors.execute(action, args, context),
+    };
     this.notifications = new WorkNotifications(this.state, this.host);
   }
   async start() {
     await this.vault.load();
     this.tools.processes.recover();
+    this.connectors.start();
+    this.work.start();
     this.scheduler.start();
     this.memories.start();
     this.questionDecisions.start();
@@ -192,6 +225,8 @@ export class CoreService {
   }
   async close() {
     this.routines.close();
+    await this.work.stopInputs();
+    await this.connectorOAuth.close();
     await this.notifications.close();
     await this.files.close();
     await this.state.artifactContents.close();
@@ -203,6 +238,7 @@ export class CoreService {
     await this.market.quiesce();
     await this.previews.close();
     await this.scheduler.close();
+    await this.work.close();
     await this.browser.close();
     await this.tools.processes.close();
     await this.registry.close();
@@ -228,6 +264,9 @@ export class CoreService {
   private async handleRequest(method: string, params: Record<string, unknown>): Promise<unknown> {
     if (this.maintenance && method !== 'state.snapshot')
       throw new Error('正在恢复备份，请稍后操作');
+    if (method.startsWith('connectors.') || method.startsWith('connectorDrafts.'))
+      return this.connectors.request(method, params);
+    if (this.work.handles(method)) return this.work.request(method, params);
     if (method.startsWith('market.') || method === 'career.save') {
       if (method === 'market.import' && !params.path) {
         if (!this.host) throw new Error('导入预设需要桌面文件选择器或本地文件路径');
@@ -254,6 +293,8 @@ export class CoreService {
       case 'reviews':
         return this.reviews.request(method, params);
       case 'browser':
+        if (method === 'browser.resume' || method === 'browser.closeSession')
+          await this.work.teaching.finishSession(z.string().parse(params.id));
         return this.browser.request(method, params);
       case 'waits': {
         if (method === 'waits.list')
@@ -263,8 +304,15 @@ export class CoreService {
         const waitId = z.string().parse(params.id);
         const wait = required(this.state.storage.get<TaskWait>('task_waits', waitId), '等待不存在');
         if (method === 'waits.resume') {
-          if (wait.kind === 'browser-handoff')
+          if (wait.kind === 'browser-handoff') {
+            await this.work.teaching.finishSession(wait.resourceId!);
             return this.browser.request('browser.resume', { id: wait.resourceId });
+          }
+          if (wait.kind === 'computer-handoff')
+            return (await this.work.computer.request('computer.session', {}))
+              ? this.work.computer.request('computer.resume', {})
+              : this.tools.waits.resume(waitId);
+          if (wait.kind === 'computer-resource') throw new Error('电脑空闲后将自动继续');
           if (wait.kind === 'browser-resource') throw new Error('浏览器空闲后将自动继续');
           return this.tools.waits.resume(waitId);
         }
@@ -376,6 +424,12 @@ export class CoreService {
           objectId(),
           z.array(z.string()).max(50).parse(params.memberIds),
         );
+      case 'conversations.references':
+        return referenceOptions(
+          this.state,
+          z.string().parse(params.conversationId),
+          z.array(z.string()).optional().parse(params.targetBotIds),
+        );
       case 'conversations.send':
         return this.tasks.send(
           z
@@ -385,6 +439,8 @@ export class CoreService {
               targetBotIds: z.array(z.string()).optional(),
               artifactIds: z.array(z.string()).optional(),
               requestId: z.string().optional(),
+              references: z.array(conversationReferenceSchema).max(12).optional(),
+              replyToMessageId: z.string().optional(),
             })
             .parse(params),
         );
@@ -483,11 +539,11 @@ export class CoreService {
       case 'workspaces.add':
         return this.entities.addWorkspace(params);
       case 'tools.save':
-        return this.toolConnections.save(params.input);
+        return this.connectors.request('connectors.save', params);
       case 'tools.probe':
         return this.toolConnections.probe(objectId());
       case 'tools.delete':
-        await this.toolConnections.delete(objectId());
+        await this.connectors.request('connectors.delete', params);
         break;
       case 'skills.import':
         return this.entities.importSkill(z.string().parse(params.path));
@@ -538,9 +594,13 @@ export class CoreService {
         try {
           resumeFiles = await this.files.pause();
           await this.market.quiesce();
+          await this.work.teaching.close();
+          await this.connectors.prepareRestore();
           await this.browser.reset();
           const result = await this.backup.restore(z.string().parse(params.path));
+          await this.connectors.finishRestore();
           this.routines.pauseRestored();
+          await this.work.resetAfterRestore();
           migrateProviders(s);
           migrateContextSettings(s);
           ensureMemoryContentHashes(s);
