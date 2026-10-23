@@ -10,6 +10,8 @@ import type {
 import type { ProviderSocket } from '../../src/providers/network.js';
 import { createProviderSocketHost } from './provider-sockets.js';
 import { handleCorePlatformRequest } from './core-platform.js';
+import { WorkBrowserHost } from './work-browser-host.js';
+import type { BrowserHostInput, BrowserHostMethod } from '../../src/domain/work-browser.js';
 
 type RequestHandler = { resolve(value: unknown): void; reject(error: Error): void };
 type StartupHandler = { resolve(): void; reject(error: Error): void };
@@ -18,6 +20,7 @@ export class CoreHost {
   private child?: UtilityProcess;
   private closing?: Promise<void>;
   private pending = new Map<string, RequestHandler>();
+  private browser?: WorkBrowserHost;
   onChange?: () => void;
 
   get running() {
@@ -28,6 +31,7 @@ export class CoreHost {
     if (this.child) throw new Error('Core 已经启动');
     const child = this.createChild(dataDirectory);
     this.child = child;
+    this.browser = new WorkBrowserHost(window);
     const sockets = createProviderSocketHost(
       (url, headers) =>
         new net.WebSocket(url, { headers, useSessionCookies: false }) as unknown as ProviderSocket,
@@ -60,6 +64,7 @@ export class CoreHost {
   }
 
   async close() {
+    this.browser?.closeAll();
     const child = this.child;
     if (!child) return;
     this.closing ??= this.waitForChildClose(child).finally(() => {
@@ -137,7 +142,12 @@ export class CoreHost {
     window?: BrowserWindow,
   ) {
     try {
-      const result = await handleCorePlatformRequest(input.method, input.params, window);
+      const result = input.method.startsWith('browser.')
+        ? await this.browser?.request(
+            input.method as BrowserHostMethod,
+            input.params as unknown as BrowserHostInput,
+          )
+        : await handleCorePlatformRequest(input.method, input.params, window);
       this.send(child, { type: 'host-result', id: input.id, result });
     } catch (error) {
       this.send(child, { type: 'host-result', id: input.id, error: (error as Error).message });
@@ -145,6 +155,7 @@ export class CoreHost {
   }
 
   private childExited(child: UtilityProcess, code: number, startup: StartupHandler) {
+    this.browser?.closeAll();
     if (this.child === child) this.child = undefined;
     startup.reject(new Error(`Core 已停止 (${code})`));
     for (const handler of this.pending.values()) {

@@ -42,7 +42,12 @@ export class TeamService {
 
   createChiefConversation(
     name = '新对话',
-    options: { workspaceId?: string; model?: string; reasoning?: string } = {},
+    options: {
+      workspaceId?: string;
+      model?: string;
+      reasoning?: string;
+      selectAsMain?: boolean;
+    } = {},
   ): Conversation {
     const s = this.state.storage,
       settings = this.state.settings();
@@ -68,7 +73,8 @@ export class TeamService {
     };
     s.transaction(() => {
       s.put('conversations', room);
-      s.setMetadata('settings', { ...settings, mainConversationId: room.id });
+      if (options.selectAsMain !== false)
+        s.setMetadata('settings', { ...settings, mainConversationId: room.id });
     });
     this.state.changed();
     return room;

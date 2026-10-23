@@ -68,6 +68,7 @@ describe('model catalog display names', () => {
         data,
         mutate: async () => undefined as never,
         openChief: () => {},
+        onSelectConversation: () => {},
         configureConnection: () => {},
         openMarket: () => {},
       }),

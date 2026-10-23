@@ -16,9 +16,14 @@ import { questionChief } from './question-policy.js';
 import { recoverSchedulerState } from './scheduler-recovery.js';
 
 function priority(task: Task): number {
-  if (task.kind === 'memory-review') return 2;
+  if (task.kind === 'memory-review') return 3;
   if (task.kind === 'question-decision') return 1;
+  if (isAutomatic(task)) return 2;
   return 0;
+}
+
+function isAutomatic(task: Task) {
+  return !!task.trigger?.automatic && !task.interactive;
 }
 
 interface Candidate {
@@ -90,6 +95,11 @@ export class Scheduler {
     if (active.filter((item) => item.account === account).length >= this.accountLimit(account))
       return 'account_limit';
     if (active.length >= this.state.settings().maxActiveRuns) return 'global_limit';
+    if (isAutomatic(task)) {
+      const limit = Math.min(2, Math.max(1, this.state.settings().maxActiveRuns - 1));
+      const background = active.filter((item) => isAutomatic(item.task)).length;
+      if (background >= limit) return 'background_limit';
+    }
     return undefined;
   }
 

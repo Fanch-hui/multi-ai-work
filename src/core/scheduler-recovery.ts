@@ -1,4 +1,5 @@
 import type { Run, Task, UserQuestion, SessionBinding } from '../domain/types.js';
+import type { TaskWait } from '../domain/task-wait.js';
 import { State, now } from './state.js';
 import { recoverTaskInputs } from './task-input-records.js';
 import { progressForRun, recoverManagedRuns } from './managed-progress.js';
@@ -22,10 +23,18 @@ function recoverRunningTasks(s: State['storage']): string[] {
     const question = s
       .all<UserQuestion>('questions')
       .find((item) => item.runId === run.id && item.status === 'pending');
-    if (question) {
+    const wait = s
+      .byField<TaskWait>('task_waits', 'runId', run.id)
+      .find((item) => item.status !== 'cancelled');
+    if (question || wait) {
       s.put('runs', { ...run, status: 'waiting_input', endedAt: now() });
       const task = s.get<Task>('tasks', run.taskId);
-      if (task) s.put('tasks', { ...task, status: 'waiting_input', updatedAt: now() });
+      if (task)
+        s.put('tasks', {
+          ...task,
+          status: wait?.status === 'resumed' ? 'queued' : 'waiting_input',
+          updatedAt: now(),
+        });
       const binding = s.get<SessionBinding>('session_bindings', run.bindingId);
       if (binding?.nativeSessionId)
         s.put('session_bindings', {

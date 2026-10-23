@@ -1,6 +1,12 @@
 import type Database from 'better-sqlite3';
 
 export const entityTables = [
+  'routines',
+  'routine_occurrences',
+  'artifact_reviews',
+  'browser_profiles',
+  'browser_sessions',
+  'task_waits',
   'connections',
   'bots',
   'conversations',

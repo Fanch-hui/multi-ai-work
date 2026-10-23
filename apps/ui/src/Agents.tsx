@@ -10,6 +10,9 @@ import { errorMessage } from './api.js';
 import { BotEditor } from './BotEditor.js';
 import { BotContext } from './BotContext.js';
 import { modelLabel } from './model-label.js';
+import { Routines } from './local-work/Routines.js';
+import { BrowserProfiles } from './local-work/BrowserProfiles.js';
+import { PendingWork } from './local-work/PendingWork.js';
 export function Agents({
   data,
   mutate,
@@ -17,7 +20,9 @@ export function Agents({
   configureConnection,
   headerLeading,
   openMarket,
+  onSelectConversation,
 }: {
+  onSelectConversation: (id: string, openBrowser?: boolean) => void;
   openMarket: () => void;
   headerLeading?: ReactNode;
   data: Snapshot;
@@ -29,6 +34,7 @@ export function Agents({
   const [showArchived, setShowArchived] = useState(false);
   const [inspecting, setInspecting] = useState<Bot>();
   const [error, setError] = useState('');
+  const [workPanel, setWorkPanel] = useState<'routines' | 'browser' | 'pending'>();
   const chief = data.bots.find((bot) => bot.id === data.settings.mainBotId);
   const bots = data.bots.filter((bot) => bot.id !== chief?.id && (showArchived || !bot.archived));
   return (
@@ -55,6 +61,11 @@ export function Agents({
     >
       <div>
         <ErrorNote error={error} />
+        <div className="mb-5 flex flex-wrap gap-2" aria-label="团队工作">
+          <Button onClick={() => setWorkPanel('routines')}>例行工作</Button>
+          <Button onClick={() => setWorkPanel('pending')}>待我处理</Button>
+          <Button onClick={() => setWorkPanel('browser')}>工作浏览器</Button>
+        </div>
         {chief && (
           <article className="mb-8 flex flex-wrap items-center justify-between gap-6 rounded-2xl bg-slate-50 p-6">
             <div className="flex items-center gap-5">
@@ -186,6 +197,25 @@ export function Agents({
           />
         )}
       </div>
+      {workPanel === 'routines' && (
+        <Routines
+          data={data}
+          mutate={mutate}
+          close={() => setWorkPanel(undefined)}
+          onSelectConversation={onSelectConversation}
+        />
+      )}
+      {workPanel === 'pending' && (
+        <PendingWork
+          data={data}
+          mutate={mutate}
+          close={() => setWorkPanel(undefined)}
+          onSelectConversation={onSelectConversation}
+        />
+      )}
+      {workPanel === 'browser' && (
+        <BrowserProfiles data={data} mutate={mutate} close={() => setWorkPanel(undefined)} />
+      )}
       <ModalPresence show={!!editing}>
         {editing && (
           <BotEditor

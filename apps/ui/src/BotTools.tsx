@@ -50,6 +50,13 @@ export const builtinToolLabels: Record<string, string> = {
   list_mcp_tools: '查询外部工具目录',
   call_mcp: '调用外部工具',
   read_skill: '读取 Skill',
+  manage_routines: '管理例行工作',
+  browser_open: '打开工作浏览器',
+  browser_snapshot: '读取浏览器页面',
+  browser_action: '操作浏览器页面',
+  browser_tabs: '管理浏览器标签',
+  browser_handoff: '请求用户接管浏览器',
+  record_artifact_review: '记录成果复核',
 };
 type ToolPermissionsProps = {
   toolNames: string[];

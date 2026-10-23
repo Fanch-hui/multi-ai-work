@@ -182,6 +182,12 @@ export class BackupService {
           }
           const optional =
             [
+              'routines',
+              'routine_occurrences',
+              'artifact_reviews',
+              'browser_profiles',
+              'browser_sessions',
+              'task_waits',
               'memory_revisions',
               'memory_usage',
               'compactions',
@@ -307,6 +313,11 @@ export class BackupService {
     if (table === 'provider_archive') delete value.checkpoint;
     if (table === 'approvals' && value.status === 'pending') value.status = 'rejected';
     if (table === 'questions' && value.status === 'pending') value.status = 'cancelled';
+    if (table === 'task_waits' && value.status === 'pending') {
+      value.status = 'cancelled';
+      value.resolvedAt = new Date().toISOString();
+    }
+    if (table === 'browser_sessions') value.status = 'closed';
     if (table === 'processes' && value.status === 'running') value.status = 'unknown';
     if (table === 'runs' && ['running', 'waiting_approval', 'waiting_input'].includes(value.status))
       value.status = 'interrupted';

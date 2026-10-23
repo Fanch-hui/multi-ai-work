@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { PanelLeft, RefreshCw } from 'lucide-react';
 import { useTeamStore } from './store.js';
+import { subscribeNavigation } from './api.js';
 import { Button } from './components.js';
 import { Chat } from './Chat.js';
 import { MainSidebar, type Page } from './MainSidebar.js';
@@ -26,6 +27,10 @@ export function App() {
     useTeamStore();
   const [page, setPage] = useState<Page>('chat');
   const [selected, setSelected] = useState('');
+  const [browserRequest, setBrowserRequest] = useState<{
+    conversationId: string;
+    revision: number;
+  }>();
   const [collapsed, setCollapsed] = useState(
     () => localStorage.getItem('sidebar-collapsed') === 'true',
   );
@@ -44,6 +49,15 @@ export function App() {
       (item) => item.id === data.settings.mainConversationId && !item.archived,
     ) ||
     data?.conversations.find((item) => !item.archived);
+  useEffect(
+    () =>
+      subscribeNavigation((id) => {
+        setSelected(id);
+        setPage('chat');
+        setBrowserRequest(undefined);
+      }),
+    [],
+  );
   useEffect(() => {
     selectConversation(conversation?.id);
   }, [conversation?.id, selectConversation]);
@@ -52,7 +66,8 @@ export function App() {
     setCollapsed(next);
     localStorage.setItem('sidebar-collapsed', String(next));
   }
-  function openConversation(id: string) {
+  function openConversation(id: string, openBrowser = false) {
+    setBrowserRequest(openBrowser ? { conversationId: id, revision: Date.now() } : undefined);
     setSelected(id);
     setPage('chat');
   }
@@ -126,6 +141,11 @@ export function App() {
           configureChief={() => setConfigureChief(true)}
           onSelectConversation={openConversation}
           sidebarCollapsed={collapsed}
+          browserRequest={
+            browserRequest?.conversationId === conversation?.id
+              ? browserRequest?.revision
+              : undefined
+          }
           onExpandSidebar={toggleSidebar}
         />
       );
@@ -150,6 +170,7 @@ export function App() {
           headerLeading={headerLeading}
           openChief={() => openConversation(data.settings.mainConversationId || '')}
           openMarket={() => setPage('market')}
+          onSelectConversation={openConversation}
           configureConnection={() => setPage('settings')}
         />
       );

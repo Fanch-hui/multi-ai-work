@@ -9,7 +9,7 @@ import {
   LoaderCircle,
   CircleUserRound,
 } from 'lucide-react';
-import type { Artifact, Bot, Snapshot } from '../../../src/domain/types.js';
+import type { Artifact, Bot, Conversation, Snapshot } from '../../../src/domain/types.js';
 import type { Mutate } from './store.js';
 import { errorMessage } from './api.js';
 import { Button, ErrorNote, Modal, timeLabel } from './components.js';
@@ -22,6 +22,7 @@ import { ArtifactRequirement } from './RequirementDetails.js';
 import DeleteArtifactButton from './DeleteArtifactButton.js';
 import { useArtifactSelection } from './ArtifactSelection.js';
 import { Markdown } from './Markdown.js';
+import { ArtifactReviewActions } from './local-work/ArtifactReview.js';
 
 export function ArtifactGroups({
   groups,
@@ -29,7 +30,7 @@ export function ArtifactGroups({
   mutate,
 }: {
   groups: ArtifactGroup[];
-  data: Pick<Snapshot, 'tasks' | 'bots'>;
+  data: Pick<Snapshot, 'tasks' | 'bots'> & Partial<Pick<Snapshot, 'conversations'>>;
   mutate: Mutate;
 }) {
   const selection = useArtifactSelection(
@@ -74,6 +75,7 @@ export function ArtifactGroups({
                   <div className="min-w-0 flex-1">
                     <ArtifactItem
                       artifact={artifact}
+                      reviewConversations={data.conversations}
                       producer={artifactProducer(artifact, tasks, bots)}
                       showProducer
                       layout="row"
@@ -92,6 +94,7 @@ export function ArtifactGroups({
                         <li key={version.id}>
                           <ArtifactItem
                             artifact={version}
+                            reviewConversations={data.conversations}
                             producer={artifactProducer(version, tasks, bots)}
                             showProducer
                             layout="row"
@@ -120,7 +123,10 @@ export function ArtifactItem({
   showProducer,
   layout = 'card',
   allowDelete,
+  reviewConversationId,
+  reviewConversations,
 }: {
+  reviewConversations?: Conversation[];
   artifact: Artifact;
   mutate: Mutate;
   dense?: boolean;
@@ -128,6 +134,7 @@ export function ArtifactItem({
   showProducer?: boolean;
   layout?: 'card' | 'row';
   allowDelete?: boolean;
+  reviewConversationId?: string;
 }) {
   const row = layout === 'row';
   const [preview, setPreview] = useState(false);
@@ -215,6 +222,13 @@ export function ArtifactItem({
             )
           }
         />
+        <ArtifactReviewActions
+          artifacts={[artifact]}
+          conversations={reviewConversations}
+          conversationId={reviewConversationId}
+          mutate={mutate}
+          compact
+        />
         <ErrorNote error={!preview ? error : ''} />
         {notice && (
           <p
@@ -238,6 +252,12 @@ export function ArtifactItem({
               labeled
             />
           )}
+          <ArtifactReviewActions
+            artifacts={[artifact]}
+            conversations={reviewConversations}
+            conversationId={reviewConversationId}
+            mutate={mutate}
+          />
           <Button onClick={() => void open()}>
             <ExternalLink size={15} />
             打开文件

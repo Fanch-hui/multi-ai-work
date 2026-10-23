@@ -14,6 +14,7 @@ export function qoderServiceOptions(
   const authorized = new Map<string, Promise<Record<string, unknown>>>();
   const authorize = async (name: string, args: Record<string, unknown>, callId: string) => {
     context.signal.throwIfAborted();
+    if (context.isWaitingForInput?.()) throw new Error('本轮正在等待人工处理，此调用未执行');
     if (appTools.has(name)) return args;
     if (!nativeTools.has(name) || !context.nativeTools) throw new Error(denied);
     const key = `${name}:${callId}`;

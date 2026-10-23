@@ -19,6 +19,8 @@ import { createOfficeTools } from './office.js';
 import { createSecurityScanTools } from './security-scan.js';
 import { createTaskPlanTools } from './task-plan.js';
 import { createTaskControlTools } from './task-control.js';
+import { createBrowserTools } from './work-browser.js';
+import { createOngoingWorkTools } from './ongoing-work.js';
 
 type Builtin = {
   description: string;
@@ -33,6 +35,8 @@ const argumentsSchema = z.record(z.string(), z.unknown());
 export function createBuiltins(mcp: McpConnections): Record<string, Builtin> {
   const network = new NetworkConcurrency();
   return {
+    ...createBrowserTools(),
+    ...createOngoingWorkTools(),
     ...createTeamTools(),
     ...createMemoryTools(),
     ...createFileTools(),
@@ -147,6 +151,7 @@ export function createBuiltins(mcp: McpConnections): Record<string, Builtin> {
       description:
         '生成并登记最终交付用户的文件（Markdown、DOCX、XLSX、PDF）。过程资料将 purpose 设为 intermediate；默认 deliverable 进入成果库。覆盖前须读取当前文件版本，按成员执行权限确认操作。XLSX 使用 sheets，其他格式使用 content。',
       schema: z.object({
+        previousArtifactId: id.optional(),
         path: text,
         format: z.enum(['markdown', 'docx', 'xlsx', 'pdf']),
         purpose: z.enum(['deliverable', 'intermediate']).default('deliverable'),

@@ -1,6 +1,7 @@
 import type { Approval, Bot, Run, Task } from '../domain/types.js';
 import { State, id, now } from './state.js';
 import { required } from './errors.js';
+import { TaskWaitPendingError, TaskWaitService } from './task-waits.js';
 
 export class ApprovalService {
   private pending = new Map<string, (approved: boolean) => void>();
@@ -16,6 +17,14 @@ export class ApprovalService {
     const bot = required(this.state.storage.get<Bot>('bots', run.botId), '智能体不存在');
     if (bot.archived) throw new Error('智能体已归档');
     if (bot.approvalMode === 'auto') return true;
+    const task = required(this.state.storage.get<Task>('tasks', run.taskId), '任务不存在');
+    if (task.trigger?.automatic && !task.interactive) {
+      const wait = new TaskWaitService(this.state).create(
+        { runId: run.id, task, botId: run.botId, conversation: { id: task.conversationId } },
+        { kind: 'approval', summary },
+      );
+      throw new TaskWaitPendingError(wait);
+    }
     const approval: Approval = {
       id: id(),
       runId: run.id,

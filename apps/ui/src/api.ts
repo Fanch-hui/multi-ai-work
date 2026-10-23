@@ -4,10 +4,21 @@ export type Request = <T = unknown>(method: string, params?: Record<string, unkn
 interface DesktopBridge {
   request: Request;
   subscribe(listener: (event: unknown) => void): () => void;
+  subscribeNavigation?(listener: (conversationId: string) => void): () => void;
   subscribeUpdates?(listener: (state: AppUpdateState) => void): () => void;
   changeDataDirectory?(path: string): Promise<{ path: string; restarting: true }>;
 }
 const desktop = () => (window as Window & { aiTeam?: DesktopBridge }).aiTeam;
+export function subscribeNavigation(listener: (conversationId: string) => void): () => void {
+  return desktop()?.subscribeNavigation?.(listener) ?? (() => {});
+}
+export function setNotificationConversation(conversationId?: string) {
+  const bridge = desktop();
+  if (bridge)
+    void bridge
+      .request('app.notifications.context', { conversationId })
+      .catch((error) => console.error('通知会话状态同步失败', error));
+}
 export function dataDirectoryBridge() {
   const bridge = desktop();
   if (typeof bridge?.changeDataDirectory !== 'function') return undefined;

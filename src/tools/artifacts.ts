@@ -16,6 +16,7 @@ export interface ArtifactInput {
   title?: string;
   sheets?: { name: string; rows: (string | number | boolean | null)[][] }[];
   purpose?: 'deliverable' | 'intermediate';
+  previousArtifactId?: string;
 }
 
 export async function createArtifact(
@@ -62,6 +63,7 @@ export async function createArtifact(
     conversationId: context.conversation.id,
     source: 'write_artifact',
     purpose: input.purpose ?? 'deliverable',
+    previousArtifactId: input.previousArtifactId,
   });
 }
 

@@ -7,6 +7,7 @@ import {
   type OpenDialogOptions,
 } from 'electron';
 import { stat } from 'node:fs/promises';
+import { notifyWork } from './work-notifications.js';
 
 function fileSelectionProperties(
   method: string,
@@ -22,6 +23,7 @@ export async function handleCorePlatformRequest(
   params: Record<string, unknown>,
   window?: BrowserWindow,
 ) {
+  if (method === 'system.notify') return notifyWork(window, params);
   if (method === 'encrypt' || method === 'decrypt') {
     if (
       !safeStorage.isEncryptionAvailable() ||

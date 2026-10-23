@@ -233,9 +233,6 @@ export class QoderAdapter implements ProviderAdapter {
     const nativeInitialization = new Promise<void>((resolve) => {
       initialized = resolve;
     });
-    const result = this.consume(query, context, sessionId, events, initialized, userInput);
-    // Observe stream failures even while control requests are initializing.
-    void result.catch(() => {});
     const cancel = () => {
       void query.interrupt().catch(() => {});
     };
@@ -252,6 +249,9 @@ export class QoderAdapter implements ProviderAdapter {
       void interruption.catch(() => {});
       inputController.abort(new Error('等待用户回答'));
     };
+    const result = this.consume(query, context, sessionId, events, initialized, userInput, pause);
+    // Observe stream failures even while control requests are initializing.
+    void result.catch(() => {});
     context.signal.addEventListener('abort', cancel, { once: true });
     try {
       preparationSignal.throwIfAborted();
@@ -421,10 +421,12 @@ export class QoderAdapter implements ProviderAdapter {
     events: QoderEvents,
     initialized: () => void,
     userInput: QoderInput,
+    onToolResult: () => void,
   ): Promise<ProviderResult> {
     const workspace = await realpath(context.workspacePath);
     let inputTokens = 0,
       outputTokens = 0;
+    const pendingToolCalls = new Set<string>();
     for await (const message of query) {
       if (message.session_id && message.session_id !== sessionId)
         throw new Error('Qoder 返回了其他原生会话');
@@ -435,6 +437,22 @@ export class QoderAdapter implements ProviderAdapter {
       }
       userInput.accept(message);
       events.accept(message);
+      if (message.type === 'assistant' && !message.parent_tool_use_id)
+        for (const block of message.message.content)
+          if (block.type === 'tool_use' && block.id) pendingToolCalls.add(block.id);
+      if (
+        message.type === 'user' &&
+        !message.parent_tool_use_id &&
+        Array.isArray(message.message.content)
+      ) {
+        let paired = false;
+        for (const block of message.message.content) {
+          if (block.type !== 'tool_result' || !block.tool_use_id) continue;
+          pendingToolCalls.delete(block.tool_use_id);
+          paired = true;
+        }
+        if (paired && !pendingToolCalls.size) onToolResult();
+      }
       if (message.type !== 'result' || message.origin?.kind === 'task-notification') continue;
       context.signal.throwIfAborted();
       if (message.subtype !== 'success' || message.is_error)

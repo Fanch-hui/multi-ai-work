@@ -56,6 +56,7 @@ export class Executor {
 
   cancelQuestions(task: Task) {
     this.tools.questions.cancelTask(task.id);
+    this.tools.waits.cancelTask(task.id);
     if (task.kind === 'question-decision') this.questionDecisionFailed(task, '主管代答已停止');
   }
 
@@ -110,7 +111,7 @@ export class Executor {
       writer.close();
       const duration = Date.now() - inferenceStarted;
       await this.settleOutput(run, token, signal);
-      if (result.outcome === 'waiting_input' || this.tools.questions.forRun(run.id)) {
+      if (result.outcome === 'waiting_input' || this.tools.waiting(run.id)) {
         this.results.waitForInput(
           scope,
           prepared.input,
@@ -132,7 +133,7 @@ export class Executor {
       await this.tools.settle(run.id);
       await this.tools.processes.settleRun(run.id);
       const duration = inferenceStarted === undefined ? undefined : Date.now() - inferenceStarted;
-      if (this.tools.questions.forRun(run.id)) {
+      if (this.tools.waiting(run.id)) {
         this.results.waitForInput(
           scope,
           undefined,

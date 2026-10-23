@@ -4,6 +4,7 @@ import type { Mutate } from './store.js';
 import { ArtifactItem } from './Artifacts.js';
 import { artifactProducer } from './artifact-groups.js';
 import { ImageAttachment, isImageAttachment } from './ImageAttachment.js';
+import { ArtifactReviewActions, sameReviewTask } from './local-work/ArtifactReview.js';
 
 export function MessageArtifacts({
   ids,
@@ -15,7 +16,7 @@ export function MessageArtifacts({
   ids: string[];
   user: boolean;
   conversation: Conversation;
-  data: Pick<Snapshot, 'artifacts' | 'tasks' | 'bots'>;
+  data: Pick<Snapshot, 'artifacts' | 'tasks' | 'bots'> & Partial<Pick<Snapshot, 'conversations'>>;
   mutate: Mutate;
 }) {
   const artifacts = new Map(data.artifacts.map((artifact) => [artifact.id, artifact]));
@@ -39,11 +40,22 @@ export function MessageArtifacts({
         <summary className="w-fit cursor-pointer rounded-md px-2 py-1.5 tabular-nums hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-blue-500">
           {files.length} 个文件
         </summary>
+        {sameReviewTask(files, data.tasks) && (
+          <ArtifactReviewActions
+            artifacts={files}
+            conversations={data.conversations}
+            conversationId={conversation.id}
+            mutate={mutate}
+            compact
+          />
+        )}
         <ul className="@container mt-2 list-none divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white">
           {files.map((artifact) => (
             <li key={artifact.id}>
               <ArtifactItem
                 artifact={artifact}
+                reviewConversations={data.conversations}
+                reviewConversationId={conversation.id}
                 producer={artifactProducer(artifact, tasks, bots)}
                 showProducer
                 layout="row"
@@ -57,12 +69,40 @@ export function MessageArtifacts({
   }
   return (
     <div className="mt-3 flex flex-wrap gap-2">
+      {!user && files.length > 1 && sameReviewTask(files, data.tasks) && (
+        <div className="w-full">
+          <ArtifactReviewActions
+            artifacts={files}
+            conversations={data.conversations}
+            conversationId={conversation.id}
+            mutate={mutate}
+            compact
+          />
+        </div>
+      )}
       {files.map((artifact) =>
         isImageAttachment(artifact) ? (
-          <ImageAttachment artifact={artifact} key={artifact.id} conversationId={conversation.id} />
+          <div key={artifact.id}>
+            <ImageAttachment artifact={artifact} conversationId={conversation.id} />
+            {!user && (
+              <ArtifactReviewActions
+                artifacts={[artifact]}
+                conversations={data.conversations}
+                conversationId={conversation.id}
+                mutate={mutate}
+                compact
+              />
+            )}
+          </div>
         ) : (
           <div className="w-full" key={artifact.id}>
-            <ArtifactItem artifact={artifact} mutate={mutate} dense />
+            <ArtifactItem
+              artifact={artifact}
+              reviewConversations={data.conversations}
+              reviewConversationId={conversation.id}
+              mutate={mutate}
+              dense
+            />
           </div>
         ),
       )}

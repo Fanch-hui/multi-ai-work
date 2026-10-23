@@ -31,8 +31,13 @@ import { ToolTiming } from './tool-timing.js';
 import { ToolOperationJournal, type ToolCall } from './tool-operation-journal.js';
 import { ContextReferences } from './context-references.js';
 import { ToolContextFactory } from './tool-context.js';
+import { TaskWaitService } from './task-waits.js';
 
 export class ToolRuntime {
+  extensions?: Pick<
+    ToolExecutionContext,
+    'executeBrowser' | 'manageRoutines' | 'recordArtifactReview'
+  >;
   private writeLocks = new Map<string, Promise<unknown>>();
   private pending = new Map<string, Set<Promise<unknown>>>();
   private contexts: ToolContextFactory;
@@ -41,6 +46,7 @@ export class ToolRuntime {
   readonly processes: ProcessService;
   readonly questions: QuestionService;
   readonly plans: TaskPlanService;
+  readonly waits: TaskWaitService;
   controls?: TaskControlService;
   constructor(
     private state: State,
@@ -53,6 +59,7 @@ export class ToolRuntime {
   ) {
     this.processes = new ProcessService(state);
     this.questions = new QuestionService(state);
+    this.waits = new TaskWaitService(state);
     this.plans = new TaskPlanService(state);
     this.contexts = new ToolContextFactory(
       state,
@@ -72,8 +79,11 @@ export class ToolRuntime {
     this.inputControllers.set(runId, controller);
     return controller.signal;
   }
+  waiting(runId: string) {
+    return !!(this.questions.forRun(runId) || this.waits.forRun(runId));
+  }
   yieldInput(runId: string) {
-    if (this.questions.forRun(runId)) this.inputControllers.get(runId)?.abort();
+    if (this.waiting(runId)) this.inputControllers.get(runId)?.abort();
   }
   releaseRun(runId: string) {
     this.qoderTools.get(runId)?.close();
@@ -125,7 +135,10 @@ export class ToolRuntime {
     workspace: Workspace,
     signal: AbortSignal,
   ): ToolExecutionContext {
-    return this.contexts.create(run, task, bot, room, workspace, signal, this.controls);
+    return Object.assign(
+      this.contexts.create(run, task, bot, room, workspace, signal, this.controls),
+      this.extensions,
+    );
   }
 
   definitions(context: ToolExecutionContext, bot: Bot): ToolDefinition[] {
@@ -232,7 +245,7 @@ export class ToolRuntime {
     const journal = new ToolOperationJournal(this.state, call);
     const lookup = journal.lookup();
     if (lookup.kind === 'reused') return lookup.result;
-    if (this.questions.forRun(call.context.runId)) throw new Error('本轮正在等待用户回答');
+    if (this.waiting(call.context.runId)) throw new Error('本轮正在等待人工处理，此调用未执行');
     const operation = journal.start(lookup);
     const queuedAt = performance.now();
     let dispatched = false;
@@ -247,10 +260,20 @@ export class ToolRuntime {
       journal.complete(operation, result);
       const modelResult = await this.prepareModelResult(call, currentBot, result);
       journal.finish(operation, result, modelResult);
-      return modelResult;
+      return this.waitResult(call.context.runId, modelResult);
     } catch (error) {
-      return journal.fail(operation, error, dispatched);
+      return this.waitResult(call.context.runId, journal.fail(operation, error, dispatched));
     }
+  }
+
+  private waitResult(runId: string, result: unknown) {
+    const wait = this.waits.forRun(runId);
+    if (!wait) return result;
+    return {
+      ...(result && typeof result === 'object' && !Array.isArray(result) ? result : { result }),
+      waitingForInput: true,
+      waitId: wait.id,
+    };
   }
 
   private authorizeCall(
@@ -338,7 +361,7 @@ export class ToolRuntime {
       throw new Error('当前任务有活跃命令，请先完成或停止该命令');
     const execute = () => {
       if (writesWorkspace) timing.record('workspaceQueueMs', performance.now() - queuedAt);
-      if (this.questions.forRun(context.runId)) throw new Error('本轮正在等待用户回答');
+      if (this.waiting(context.runId)) throw new Error('本轮正在等待人工处理，此调用未执行');
       const executionContext: ToolExecutionContext = {
         ...context,
         callId,

@@ -31,7 +31,12 @@ export type TaskStatus =
   | 'failed'
   | 'cancelled'
   | 'interrupted';
-export type TaskQueueReason = 'global_limit' | 'account_limit' | 'session_busy' | 'dependencies';
+export type TaskQueueReason =
+  | 'global_limit'
+  | 'account_limit'
+  | 'session_busy'
+  | 'dependencies'
+  | 'background_limit';
 export type RunStatus =
   | 'running'
   | 'waiting_approval'
@@ -178,6 +183,10 @@ export interface SessionBinding {
   memoryVersions?: Record<string, number>;
 }
 export interface Task {
+  trigger?: import('./routines.js').TaskTrigger;
+  interactive?: boolean;
+  reviewId?: string;
+  reworkOfTaskId?: string;
   id: string;
   conversationId: string;
   botId: string;
@@ -271,6 +280,8 @@ export interface ImageMetadata {
   path: string;
 }
 export interface Artifact {
+  seriesId?: string;
+  previousArtifactId?: string;
   objectHash?: string;
   contentSource?: import('./artifact-content.js').ArtifactContentSource;
   id: string;

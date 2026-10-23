@@ -4,6 +4,7 @@ export function artifactVersionKey(
   artifact: Artifact,
   tasks: ReadonlyMap<string, Pick<Task, 'botId'>> = new Map(),
 ): string {
+  if (artifact.seriesId) return JSON.stringify(['series', artifact.seriesId]);
   const botId = artifact.botId ?? (artifact.taskId ? tasks.get(artifact.taskId)?.botId : undefined);
   let producer = ['artifact', artifact.id];
   if (botId) producer = ['bot', botId];

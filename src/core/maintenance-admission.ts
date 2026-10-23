@@ -8,6 +8,9 @@ import { terminal } from '../domain/task-status.js';
 type Purpose = 'update' | 'data-directory';
 
 export class MaintenanceAdmission {
+  get blocked() {
+    return !!this.owner;
+  }
   private owner?: Purpose;
   private requests = 0;
   constructor(

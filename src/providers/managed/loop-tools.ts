@@ -86,7 +86,7 @@ async function executeGroup<
           data: { name: call.name, callId: call.id, phase: 'started' },
         });
         let result: unknown;
-        if (state.waitingForInput()) result = { error: '本轮正在等待用户回答，此调用未执行' };
+        if (state.waitingForInput()) result = { error: '本轮正在等待人工处理，此调用未执行' };
         else if (call.parseError) result = { error: call.parseError };
         else result = await context.executeTool(call.name, call.args, call.id);
         // Persist every successful in-flight result, even after a sibling fails or is cancelled.

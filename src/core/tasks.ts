@@ -63,6 +63,9 @@ export class TaskService {
     questionId?: string;
     planStepId?: string;
     sourceMessageId?: string;
+    trigger?: Task['trigger'];
+    reviewId?: string;
+    reworkOfTaskId?: string;
   }): Task {
     const s = this.state.storage;
     this.requireActive(input.conversationId);
@@ -169,6 +172,10 @@ export class TaskService {
       planId: planned?.planId,
       planStepId: planned?.planStepId,
       sourceMessageId: input.sourceMessageId,
+      trigger: input.trigger ?? parent?.trigger,
+      interactive: parent?.interactive,
+      reviewId: input.reviewId ?? parent?.reviewId,
+      reworkOfTaskId: input.reworkOfTaskId,
       createdAt: now(),
       updatedAt: now(),
     };

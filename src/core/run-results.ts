@@ -247,8 +247,9 @@ export class RunResults {
     const { run, task, binding, writer, cutoff } = scope;
     const draft = writer.current;
     const s = this.state.storage,
-      question = this.tools.questions.forRun(run.id);
-    if (!question) throw new Error('等待用户状态缺少问题记录');
+      question = this.tools.questions.forRun(run.id),
+      wait = this.tools.waits.forRun(run.id);
+    if (!question && !wait) throw new Error('等待状态缺少记录');
     s.transaction(() => {
       s.put('runs', {
         ...(s.get<Run>('runs', run.id) ?? run),
@@ -262,7 +263,10 @@ export class RunResults {
       if (result.text.trim()) writer.complete(result.text, []);
       else writer.interrupt();
       this.tasks.update(task, {
-        status: question.status === 'answered' ? 'queued' : 'waiting_input',
+        status:
+          question?.status === 'answered' || wait?.status === 'resumed'
+            ? 'queued'
+            : 'waiting_input',
         error: undefined,
       });
       if (result.messages && input)

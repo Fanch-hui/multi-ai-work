@@ -301,7 +301,13 @@ export function TaskDetail({
           </h4>
           <div className="grid gap-2">
             {artifacts.map((item) => (
-              <ArtifactItem key={item.id} artifact={item} mutate={mutate} dense />
+              <ArtifactItem
+                key={item.id}
+                artifact={item}
+                reviewConversations={data.conversations}
+                mutate={mutate}
+                dense
+              />
             ))}
           </div>
         </section>

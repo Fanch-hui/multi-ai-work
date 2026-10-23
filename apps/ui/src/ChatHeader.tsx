@@ -1,4 +1,4 @@
-import { ArrowLeft, MoreHorizontal, PanelLeft, Users } from 'lucide-react';
+import { ArrowLeft, MoreHorizontal, PanelLeft, Users, Globe, Inbox } from 'lucide-react';
 import type { Bot, Conversation } from '../../../src/domain/types.js';
 import { Button, cn } from './components.js';
 import { ConversationAvatar } from './ConversationAvatar.js';
@@ -16,6 +16,9 @@ interface Props {
   onViewChange: (view: ChatView) => void;
   onManage: () => void;
   onMembers: () => void;
+  onBrowser: () => void;
+  onPending: () => void;
+  pendingWork: number;
 }
 
 export function ChatHeader({
@@ -30,6 +33,9 @@ export function ChatHeader({
   onViewChange,
   onManage,
   onMembers,
+  onBrowser,
+  onPending,
+  pendingWork,
 }: Props) {
   const main = conversation.purpose === 'chief';
   const tabClass = 'border-b-2 py-1.5 text-xs';
@@ -112,6 +118,25 @@ export function ChatHeader({
         </button>
       </nav>
       <div className="flex shrink-0 items-center gap-1">
+        <Button
+          variant="ghost"
+          className="min-h-8 gap-1 px-2 text-xs"
+          aria-label="待我处理"
+          title="待我处理"
+          onClick={onPending}
+        >
+          <Inbox size={16} />
+          {pendingWork > 0 && <span className="tabular-nums">{pendingWork}</span>}
+        </Button>
+        <Button
+          variant="ghost"
+          className="size-8 min-h-8 p-0"
+          aria-label="工作浏览器"
+          title="工作浏览器"
+          onClick={onBrowser}
+        >
+          <Globe size={16} />
+        </Button>
         <Button
           variant="ghost"
           className="size-8 min-h-8 p-0"

@@ -115,6 +115,7 @@ export function taskRecordStatus(task: Task, processes: ProcessRecord[]): string
       (
         {
           global_limit: '等待空闲名额',
+          background_limit: '等待后台执行名额',
           account_limit: '等待连接空闲',
           session_busy: '等待上一轮',
           dependencies: '等待前置任务',

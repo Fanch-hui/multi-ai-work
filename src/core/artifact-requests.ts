@@ -11,7 +11,13 @@ import { publicError, required } from './errors.js';
 import type { ArtifactStorage } from './artifact-storage.js';
 
 export type HostRequest = (
-  method: 'chooseDirectory' | 'chooseFile' | 'chooseAvatar' | 'openPath',
+  method:
+    | 'chooseDirectory'
+    | 'chooseFile'
+    | 'chooseAvatar'
+    | 'openPath'
+    | import('../domain/work-browser.js').BrowserHostMethod
+    | 'system.notify',
   params?: Record<string, unknown>,
 ) => Promise<unknown>;
 

@@ -46,6 +46,13 @@ export interface ProcessTools {
 }
 
 export interface ToolExecutionContext {
+  executeBrowser?(
+    name: string,
+    args: Record<string, unknown>,
+    context: ToolExecutionContext,
+  ): Promise<unknown>;
+  manageRoutines?(args: Record<string, unknown>, context: ToolExecutionContext): Promise<unknown>;
+  recordArtifactReview?(args: Record<string, unknown>, context: ToolExecutionContext): unknown;
   callId?: string;
   resumeOperations?: Record<string, string>;
   assertAuthorized?(): void;

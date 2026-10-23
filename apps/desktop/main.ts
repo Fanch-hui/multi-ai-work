@@ -1,4 +1,16 @@
-import { app, BrowserWindow, ipcMain, shell, Menu, Tray, nativeImage, dialog, net } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  shell,
+  Menu,
+  Tray,
+  nativeImage,
+  dialog,
+  net,
+  powerMonitor,
+} from 'electron';
+import { setActiveConversation } from './work-notifications.js';
 import { dirname, join, isAbsolute } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { CoreHost } from './core-host.js';
@@ -78,6 +90,12 @@ async function start() {
   registerRendererRequests();
   await startCoreAndShowWindow(currentDirectory);
   configureTrayAndWindowClose();
+  powerMonitor.on('resume', () => {
+    if (!exiting && core.running)
+      void core
+        .request('routines.checkDue', {})
+        .catch((error) => dialog.showErrorBox('例行工作恢复失败', error.message));
+  });
 }
 function createWindow() {
   window = new BrowserWindow({
@@ -178,6 +196,11 @@ function registerRendererRequests() {
       Array.isArray(params)
     )
       throw new Error('请求参数无效');
+    if (method === 'app.notifications.context') {
+      const id = (params as Record<string, unknown>).conversationId;
+      setActiveConversation(typeof id === 'string' ? id : undefined);
+      return { ok: true };
+    }
     if (exiting) throw new Error('应用正在退出，请稍后操作');
     if (dataDirectory!.busy) throw new Error('正在更改数据目录，请稍候');
     if (method === 'app.dataDirectory.change') {

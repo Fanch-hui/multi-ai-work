@@ -16,6 +16,7 @@ export const memberToolNames = [
   'edit_file',
   'list_artifacts',
   'register_artifact',
+  'record_artifact_review',
   'search_messages',
   'fetch_web',
   'search_web',
@@ -39,8 +40,10 @@ export const chiefToolNames = [
   'read_process',
   'stop_process',
   'render_document',
+  'manage_routines',
 ];
 export const chiefOnlyTools = [
+  'manage_routines',
   'delegate_task',
   'list_bots',
   'configure_bot',
@@ -74,7 +77,14 @@ export const toolPermissionGroups = [
     id: 'write',
     label: '文件与成果',
     hint: '创建、修改、删除文件及生成成果。',
-    tools: ['write_file', 'edit_file', 'write_artifact', 'register_artifact', 'delete_file'],
+    tools: [
+      'write_file',
+      'edit_file',
+      'write_artifact',
+      'register_artifact',
+      'delete_file',
+      'record_artifact_review',
+    ],
   },
   {
     id: 'web',
@@ -87,6 +97,18 @@ export const toolPermissionGroups = [
     label: '命令执行',
     hint: '执行命令，查看输出并停止本任务的命令。',
     tools: ['run_command', 'list_processes', 'read_process', 'stop_process', 'render_document'],
+  },
+  {
+    id: 'browser',
+    label: '工作浏览器',
+    hint: '使用单独授权的浏览器配置读取网页、执行操作或请求人工接管。',
+    tools: [
+      'browser_open',
+      'browser_snapshot',
+      'browser_action',
+      'browser_tabs',
+      'browser_handoff',
+    ],
   },
   {
     id: 'external',

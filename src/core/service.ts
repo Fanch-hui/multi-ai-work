@@ -41,6 +41,12 @@ import { createStorageMemoryStore, ensureMemoryContentHashes } from './memory-st
 import { queueContextCompaction } from './conversation-compaction.js';
 import { migrateReplyArtifacts } from './reply-artifacts.js';
 import { ArtifactStorage } from './artifact-storage.js';
+import { RoutineService } from './routines.js';
+import { ArtifactReviewService } from './artifact-reviews.js';
+import { BrowserService } from './work-browser.js';
+import { workToolContext } from './work-tool-context.js';
+import type { TaskWait } from '../domain/task-wait.js';
+import { WorkNotifications } from './work-notifications.js';
 
 export type { HostRequest } from './artifact-requests.js';
 export class CoreService {
@@ -60,6 +66,10 @@ export class CoreService {
   readonly market: MarketService;
   readonly previews: ArtifactPreviews;
   readonly files: ArtifactStorage;
+  readonly routines: RoutineService;
+  readonly reviews: ArtifactReviewService;
+  readonly browser: BrowserService;
+  private notifications: WorkNotifications;
   private toolConnections: ToolConnections;
   private connectionRequests: CoreConnections;
   private artifactRequests: ArtifactRequests;
@@ -153,6 +163,17 @@ export class CoreService {
       this.scheduler,
       this.tools.processes,
     );
+    this.routines = new RoutineService(this.state, this.tasks, this.team);
+    this.reviews = new ArtifactReviewService(this.state, this.tasks);
+    this.browser = new BrowserService(this.state, this.host, this.tools.waits);
+    this.tools.extensions = workToolContext(
+      this.state,
+      this.routines,
+      this.reviews,
+      this.browser,
+      !!this.host,
+    );
+    this.notifications = new WorkNotifications(this.state, this.host);
   }
   async start() {
     await this.vault.load();
@@ -165,8 +186,13 @@ export class CoreService {
       () => this.state.changed('content'),
     );
     this.files.start(() => !this.maintenance && !this.scheduler.hasActive());
+    this.browser.start();
+    this.notifications.start();
+    this.routines.start(() => !this.maintenance && !this.admission.blocked);
   }
   async close() {
+    this.routines.close();
+    await this.notifications.close();
     await this.files.close();
     await this.state.artifactContents.close();
     this.connectionRequests.closeLogins();
@@ -177,6 +203,7 @@ export class CoreService {
     await this.market.quiesce();
     await this.previews.close();
     await this.scheduler.close();
+    await this.browser.close();
     await this.tools.processes.close();
     await this.registry.close();
     await this.vault.flush();
@@ -218,6 +245,35 @@ export class CoreService {
       return this.historyRequests.request(method, params);
     }
     switch (method.split('.')[0]) {
+      case 'routines':
+        if (method === 'routines.checkDue') {
+          this.routines.tick();
+          return { ok: true };
+        }
+        return this.routines.request(method, params);
+      case 'reviews':
+        return this.reviews.request(method, params);
+      case 'browser':
+        return this.browser.request(method, params);
+      case 'waits': {
+        if (method === 'waits.list')
+          return this.state.storage
+            .all<TaskWait>('task_waits')
+            .filter((w) => w.status === 'pending');
+        const waitId = z.string().parse(params.id);
+        const wait = required(this.state.storage.get<TaskWait>('task_waits', waitId), '等待不存在');
+        if (method === 'waits.resume') {
+          if (wait.kind === 'browser-handoff')
+            return this.browser.request('browser.resume', { id: wait.resourceId });
+          if (wait.kind === 'browser-resource') throw new Error('浏览器空闲后将自动继续');
+          return this.tools.waits.resume(waitId);
+        }
+        if (method === 'waits.cancel') {
+          await this.scheduler.cancel(wait.taskId);
+          return { cancelled: true };
+        }
+        throw new Error('不支持的等待操作');
+      }
       case 'connections':
         return this.connectionRequests.request(method, params);
       case 'artifacts':
@@ -482,7 +538,9 @@ export class CoreService {
         try {
           resumeFiles = await this.files.pause();
           await this.market.quiesce();
+          await this.browser.reset();
           const result = await this.backup.restore(z.string().parse(params.path));
+          this.routines.pauseRestored();
           migrateProviders(s);
           migrateContextSettings(s);
           ensureMemoryContentHashes(s);

@@ -4,6 +4,7 @@ import { normalize } from 'node:path';
 import type { Artifact, Bot, Conversation, Run, Task } from '../domain/types.js';
 import type { ToolExecutionContext } from '../domain/tools.js';
 import { id, now, type State } from './state.js';
+import { artifactSeries } from './artifact-review-series.js';
 
 export function registerTaskArtifact(
   state: State,
@@ -20,6 +21,7 @@ export function registerTaskArtifact(
   )
     throw new Error('文件内容已变化，请重新读取后登记');
   const workingPath = input.workingPath ?? (input.source ? undefined : input.path);
+  const series = artifactSeries(state, task, input.previousArtifactId);
   const requirementVersion =
     input.requirementVersion ?? state.storage.get<Run>('runs', run.id)?.requirementVersion;
   const previous = state.storage
@@ -35,6 +37,7 @@ export function registerTaskArtifact(
         artifact.source === input.source &&
         artifact.purpose === input.purpose &&
         artifact.requirementVersion === requirementVersion &&
+        artifact.previousArtifactId === series.previousArtifactId &&
         normalize(artifact.workingPath ?? '') === normalize(workingPath ?? ''),
     );
   if (previous) {
@@ -56,8 +59,12 @@ export function registerTaskArtifact(
     conversationId: room.id,
     createdAt: now(),
     requirementVersion,
+    seriesId: series.seriesId,
+    previousArtifactId: series.previousArtifactId,
   };
   state.storage.transaction(() => {
+    for (const related of series.related)
+      state.storage.put('artifacts', { ...related, seriesId: series.seriesId });
     state.storage.put('artifacts', artifact);
     const current = state.storage.get<Task>('tasks', task.id)!;
     state.storage.put('tasks', {

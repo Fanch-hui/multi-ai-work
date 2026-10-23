@@ -181,7 +181,7 @@ export class RunPreparation {
         return image ? [image] : [];
       }),
       resolveImage: imageResolver(this.state, toolContext),
-      isWaitingForInput: () => !!this.tools.questions.forRun(run.id),
+      isWaitingForInput: () => this.tools.waiting(run.id),
       inputSignal: this.tools.inputSignal(run.id),
       prompt: manualCompaction ? '' : prompt,
       messages: [],
