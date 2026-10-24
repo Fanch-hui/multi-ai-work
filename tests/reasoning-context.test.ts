@@ -88,6 +88,7 @@ function modelHistory(): ModelHistoryEntry[] {
       sequence: 3,
       message: { role: 'user', content: '最新用户要求：保留完整工具配对' },
     },
+    { messageId: 'reply-2', sequence: 4, message: marker },
   ];
 }
 
@@ -96,6 +97,7 @@ function archiveMessages(): Message[] {
     { ...storedMessage('user-1', 1, 'user', '历史背景'.repeat(500)), sequence: 1 },
     { ...storedMessage('reply-1', 2, 'bot', '已读取历史资料'), sequence: 2 },
     { ...storedMessage('user-2', 3, 'user', '最新用户要求：保留完整工具配对'), sequence: 3 },
+    { ...storedMessage('reply-2', 4, 'bot', '最新轮配置'), sequence: 4 },
   ];
 }
 
@@ -144,7 +146,7 @@ describe('推理配置历史与压缩', () => {
     expect(prepared.checkpoint?.sourceMessageIds).toEqual(['user-1', 'reply-1']);
   });
 
-  it('摘要失败时不改写输入历史或保存检查点', async () => {
+  it.each(['summary_failed', 'source_changed'])('%s 时保留最新轮配置与原基线', async (reason) => {
     const messages = archiveMessages();
     const history = modelHistory();
     const originalMessages = structuredClone(messages);
@@ -158,12 +160,14 @@ describe('推理配置历史与压缩', () => {
     });
     const prepared = await manager.prepare({
       ...contextInput(messages, history),
+      isSourceCurrent: () => reason !== 'source_changed',
       summarize: async () => {
-        throw new Error('summary unavailable');
+        if (reason === 'summary_failed') throw new Error('summary unavailable');
+        return '旧背景和已完成读取已整理。';
       },
     });
 
-    expect(prepared.compaction).toMatchObject({ status: 'failed', reason: 'summary_failed' });
+    expect(prepared.compaction).toMatchObject({ status: 'failed', reason });
     expect(prepared.messages).toEqual(
       history.map((entry) => ({
         ...entry.message,

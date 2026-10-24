@@ -79,6 +79,8 @@ describe('managed Responses reasoning effort updates', () => {
   it.each([
     { effort: 'none', updates: true, expected: 'low' },
     { effort: 'max', updates: true, expected: 'low' },
+    { effort: 'ultra', updates: false, expected: 'ultra' },
+    { effort: 'persistent', updates: false, expected: 'persistent' },
     { effort: 'provider-special', updates: false, expected: 'provider-special' },
     { effort: undefined, updates: true, expected: 'low' },
     { effort: undefined, defaultUnknown: true, updates: false, expected: undefined },
@@ -221,6 +223,176 @@ describe('managed Responses reasoning effort updates', () => {
     ]);
     expect(responsesInput(restored, new Map(), true)).toEqual([
       { type: 'configuration_update', reasoning: { effort: 'high' } },
+    ]);
+  });
+
+  it('preserves saved updates when recovery selects another effort', () => {
+    const saved: ModelMessage[] = [
+      { role: 'assistant', content: '', reasoningUpdate: { baseline: 'low', effort: 'low' } },
+    ];
+    const restored = structuredClone(saved);
+    appendReasoningUpdate(restored, 'medium', 'high');
+    appendReasoningUpdate(restored, 'medium', 'high');
+
+    expect(restored).toEqual([
+      ...saved,
+      { role: 'assistant', content: '', reasoningUpdate: { baseline: 'low', effort: 'high' } },
+    ]);
+    expect(responsesInput(restored, new Map(), true)).toEqual([
+      { type: 'configuration_update', reasoning: { effort: 'high' } },
+    ]);
+  });
+
+  it('coalesces only adjacent request updates while preserving message boundaries and history', () => {
+    const messages: ModelMessage[] = [
+      { role: 'user', content: 'first' },
+      { role: 'assistant', content: '', reasoningUpdate: { baseline: 'low', effort: 'low' } },
+      { role: 'assistant', content: '', reasoningUpdate: { baseline: 'low', effort: 'high' } },
+      { role: 'assistant', content: 'completed work' },
+      { role: 'assistant', content: '', reasoningUpdate: { baseline: 'low', effort: 'medium' } },
+      { role: 'assistant', content: '', reasoningUpdate: { baseline: 'low', effort: 'low' } },
+    ];
+    const saved = structuredClone(messages);
+
+    expect(responsesInput(messages, new Map(), true)).toEqual([
+      { role: 'user', content: 'first' },
+      { type: 'configuration_update', reasoning: { effort: 'high' } },
+      { role: 'assistant', content: 'completed work' },
+      { type: 'configuration_update', reasoning: { effort: 'low' } },
+    ]);
+    expect(responsesInput(messages)).toEqual([
+      { role: 'user', content: 'first' },
+      { role: 'assistant', content: 'completed work' },
+    ]);
+    expect(messages).toEqual(saved);
+  });
+
+  it.each(['history', 'latest tool result'])(
+    'reestablishes the selected baseline after compacting %s with surviving updates',
+    async (scenario) => {
+      let request: Record<string, unknown> = {};
+      configureProviderFetch(async (_input, init) => {
+        request = JSON.parse(String(init?.body));
+        return streamResponse(1, []);
+      });
+      const context = createContext();
+      context.bot.reasoning = 'high';
+      const update: ModelMessage = {
+        role: 'assistant',
+        content: '',
+        reasoningUpdate: { baseline: 'low', effort: 'high' },
+      };
+      const current: ModelMessage = { role: 'user', content: 'keep the current requirement' };
+      const messages: ModelMessage[] =
+        scenario === 'history'
+          ? [
+              { role: 'user', content: 'old background '.repeat(1500) },
+              { role: 'assistant', content: 'old answer '.repeat(1500) },
+              current,
+              update,
+            ]
+          : [
+              {
+                role: 'assistant',
+                content: '',
+                reasoningUpdate: { baseline: 'low', effort: 'low' },
+              },
+              current,
+              update,
+              {
+                role: 'assistant',
+                content: '',
+                toolCalls: [{ id: 'read-1', name: 'advance', arguments: '{}' }],
+              },
+              { role: 'tool', callId: 'read-1', content: 'large result '.repeat(3000) },
+            ];
+      context.progress = {
+        messages,
+        currentStart: scenario === 'history' ? 2 : 1,
+        pendingInputIds: [],
+        text: '',
+        turnId: 'restored-turn',
+        attempt: 0,
+        phase: 'ready',
+      };
+      let saved: RunContext['progress'];
+      context.saveProgress = async (progress) => {
+        saved = structuredClone(progress);
+      };
+      const original = structuredClone(messages);
+      context.compactContext = (history, { currentStart }) =>
+        compactRunMessages(history, {
+          currentStart,
+          force: true,
+          budget: 16000,
+          trigger: 1000,
+          fixedTokens: 100,
+          protocol: 'responses',
+          signal: context.signal,
+          summarize: async () => 'Earlier work completed.',
+          preserveToolOutput: async () => ({
+            text: 'Full result: artifact-1',
+            artifactIds: ['artifact-1'],
+          }),
+        });
+
+      const result = await runManaged(
+        createClient('https://api.openai.com/v1'),
+        context,
+        'responses',
+      );
+
+      expect(request.reasoning).toEqual({ effort: 'high' });
+      expect(result.contextMessages).toContainEqual(current);
+      expect(saved && saved.messages[saved.currentStart]).toEqual(current);
+      expect(result.contextMessages!.filter((message) => message.reasoningUpdate)).toEqual([
+        { role: 'assistant', content: '', reasoningUpdate: { baseline: 'high', effort: 'high' } },
+      ]);
+      expect(result.messages!.slice(0, original.length)).toEqual(original);
+      expect(
+        result
+          .messages!.filter((message) => message.reasoningUpdate)
+          .map((message) => message.reasoningUpdate),
+      ).toEqual([
+        ...original
+          .filter((message) => message.reasoningUpdate)
+          .map((message) => message.reasoningUpdate),
+        { baseline: 'high', effort: 'high' },
+      ]);
+    },
+  );
+
+  it('retains the restored baseline when compaction leaves the projection unchanged', async () => {
+    let request: Record<string, unknown> = {};
+    configureProviderFetch(async (_input, init) => {
+      request = JSON.parse(String(init?.body));
+      return streamResponse(1, []);
+    });
+    const context = createContext();
+    context.bot.reasoning = 'high';
+    context.progress = {
+      messages: [
+        { role: 'user', content: 'current requirement' },
+        { role: 'assistant', content: '', reasoningUpdate: { baseline: 'low', effort: 'high' } },
+      ],
+      currentStart: 0,
+      pendingInputIds: [],
+      text: '',
+      turnId: 'restored-turn',
+      attempt: 0,
+      phase: 'ready',
+    };
+    context.compactContext = async () => undefined;
+
+    const result = await runManaged(
+      createClient('https://api.openai.com/v1'),
+      context,
+      'responses',
+    );
+
+    expect(request.reasoning).toEqual({ effort: 'low' });
+    expect(result.contextMessages!.filter((message) => message.reasoningUpdate)).toEqual([
+      { role: 'assistant', content: '', reasoningUpdate: { baseline: 'low', effort: 'high' } },
     ]);
   });
 

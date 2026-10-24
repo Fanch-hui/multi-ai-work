@@ -19,19 +19,14 @@ export function responsesInput(
   images = new Map<string, string>(),
   includeReasoningUpdates = false,
 ): ResponseInput {
-  return messages.flatMap((message) => {
+  const input = messages.flatMap((message) => {
     if (message.reasoningUpdate) {
       return includeReasoningUpdates
         ? [{ type: 'configuration_update', reasoning: { effort: message.reasoningUpdate.effort } }]
         : [];
     }
     if (message.providerItems?.length)
-      return message.providerItems.filter(
-        (item) =>
-          !item ||
-          typeof item !== 'object' ||
-          (item as { type?: unknown }).type !== 'configuration_update',
-      );
+      return message.providerItems.filter((item) => !isConfigurationUpdate(item));
     const text = modelMessageContent(message);
     const content = message.images?.length
       ? [
@@ -55,8 +50,21 @@ export function responsesInput(
         arguments: serializeToolArguments(call.arguments),
       });
     return items;
-  }) as ResponseInput;
+  });
+  // Adjacent saved updates describe one effective setting; keep the archive intact.
+  return input.filter(
+    (item, index) => !isConfigurationUpdate(item) || !isConfigurationUpdate(input[index + 1]),
+  ) as ResponseInput;
 }
+
+function isConfigurationUpdate(item: unknown): boolean {
+  return (
+    !!item &&
+    typeof item === 'object' &&
+    (item as { type?: unknown }).type === 'configuration_update'
+  );
+}
+
 export function chatInput(
   messages: ModelMessage[],
   instructions: string,

@@ -139,6 +139,40 @@ describe('Responses WebSocket transport', () => {
     expect(http).not.toHaveBeenCalled();
   });
 
+  it('continues the same response while appended updates change the effective reasoning effort', async () => {
+    const { transport, http } = setup();
+    let history: unknown[] = [{ role: 'user', content: 'start' }];
+    for (const effort of ['medium', 'high', 'low']) {
+      const update = { type: 'configuration_update', reasoning: { effort } };
+      const extra = history.length === 1 ? [] : [{ role: 'user', content: `continue ${effort}` }];
+      history = [...history, ...extra, update];
+      await consume(transport, { ...body(history), reasoning: { effort: 'medium' } });
+      history = [...history, ...output];
+    }
+
+    expect(connections).toBe(1);
+    expect(requests.map((request) => request.reasoning)).toEqual([
+      { effort: 'medium' },
+      { effort: 'medium' },
+      { effort: 'medium' },
+    ]);
+    expect(requests.slice(1).map((request) => request.previous_response_id)).toEqual([
+      'response',
+      'response',
+    ]);
+    expect(requests.slice(1).map((request) => request.input)).toEqual([
+      [
+        { role: 'user', content: 'continue high' },
+        { type: 'configuration_update', reasoning: { effort: 'high' } },
+      ],
+      [
+        { role: 'user', content: 'continue low' },
+        { type: 'configuration_update', reasoning: { effort: 'low' } },
+      ],
+    ]);
+    expect(http).not.toHaveBeenCalled();
+  });
+
   it('sends full input when instructions, tools, or prior history change', async () => {
     const { transport } = setup();
     await consume(transport);

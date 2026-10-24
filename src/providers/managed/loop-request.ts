@@ -208,6 +208,10 @@ async function compactRunContext(
   if (!isSmallerProjection(state.messages, projection.messages, state.currentStart, protocol)) {
     throw new Error('上下文压缩未缩小历史或未保留用户输入与完整工具配对');
   }
-  await state.applyProjection(projection.messages, projection.currentStart);
+  const messages = projection.messages.filter((message) => !message.reasoningUpdate);
+  const removedBeforeCurrent = projection.messages
+    .slice(0, projection.currentStart)
+    .filter((message) => message.reasoningUpdate).length;
+  await state.applyProjection(messages, projection.currentStart - removedBeforeCurrent);
   return true;
 }

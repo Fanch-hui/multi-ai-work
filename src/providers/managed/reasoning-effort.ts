@@ -1,15 +1,6 @@
 import type { ModelMessage, RunContext } from '../../domain/provider.js';
 
-const supportedEfforts = new Set([
-  'none',
-  'minimal',
-  'low',
-  'medium',
-  'high',
-  'xhigh',
-  'max',
-  'ultra',
-]);
+const supportedEfforts = new Set(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
 
 export function knownReasoningEffort(value: unknown): string | undefined {
   return typeof value === 'string' && supportedEfforts.has(value) ? value : undefined;
@@ -39,16 +30,6 @@ export function appendReasoningUpdate(
   baseline: string,
   effort: string,
 ): void {
-  const previous = messages.at(-1)?.reasoningUpdate;
-  if (previous) {
-    if (previous.effort === effort) return;
-    messages[messages.length - 1] = {
-      role: 'assistant',
-      content: '',
-      reasoningUpdate: { baseline: previous.baseline, effort },
-    };
-    return;
-  }
   const history = reasoningUpdateHistory(messages);
   const stableBaseline = history[0]?.baseline ?? baseline;
   if (history.at(-1)?.effort === effort) return;

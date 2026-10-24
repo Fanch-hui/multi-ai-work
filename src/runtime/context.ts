@@ -308,7 +308,12 @@ export class ContextManager {
         instructionsHash: contextCompatibilityHash(input),
         sourceHash: record.sourceHash,
       };
-      const prepared = result(selected.suffix, fixedTokens, next, input.protocol);
+      const prepared = result(
+        selected.suffix.filter((entry) => !entry.message.reasoningUpdate),
+        fixedTokens,
+        next,
+        input.protocol,
+      );
       if (prepared.estimatedTokens >= original.estimatedTokens) return fail('not_smaller');
       if (prepared.estimatedTokens >= trigger!) return fail('over_budget');
       this.store.saveCheckpoint(next);
