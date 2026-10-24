@@ -293,14 +293,45 @@ describe('Responses WebSocket transport', () => {
     const { transport, http } = setup();
     respond = (socket) =>
       socket.send(
-        JSON.stringify({ type: 'error', status: 429, error: { code: 'rate_limit_exceeded' } }),
+        JSON.stringify({
+          type: 'error',
+          status: 429,
+          error: { code: 'rate_limit_exceeded', param: 'service_tier' },
+        }),
       );
     await expect(consume(transport)).rejects.toMatchObject({
       status: 429,
       code: 'rate_limit_exceeded',
+      param: 'service_tier',
     });
     expect(http).not.toHaveBeenCalled();
   });
+
+  it.each(['input[0].type', 'input["private content"]'])(
+    'filters rejected WebSocket parameters before passing errors upward: %s',
+    async (param) => {
+      const { transport, http } = setup();
+      respond = (socket) =>
+        socket.send(
+          JSON.stringify({
+            type: 'error',
+            status: 400,
+            code: 'subscription_sharing_unsupported_capability',
+            param,
+            message: 'private fixture content',
+          }),
+        );
+      const error = await consume(transport).catch((failure: unknown) => failure);
+      expect(error).toMatchObject({
+        status: 400,
+        code: 'subscription_sharing_unsupported_capability',
+      });
+      expect(error).toHaveProperty('message', '模型 WebSocket 请求失败');
+      if (param === 'input[0].type') expect(error).toHaveProperty('param', param);
+      else expect(error).not.toHaveProperty('param');
+      expect(http).not.toHaveBeenCalled();
+    },
+  );
 
   it('closes cancelled requests without sending an HTTP fallback', async () => {
     const { transport, http } = setup();

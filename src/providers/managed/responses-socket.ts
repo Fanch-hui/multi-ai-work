@@ -1,6 +1,7 @@
 import type { ResponseStreamEvent } from 'openai/resources/responses/responses';
 import { providerWebSocket, type ProviderSocket } from '../network.js';
 import { InterruptedModelStreamError } from './request-errors.js';
+import { modelErrorDetails } from './retry.js';
 
 export async function openResponsesSocket(
   url: string,
@@ -89,13 +90,18 @@ export async function* socketResponse(
         if (event.type === 'error') {
           const value = event as unknown as {
             code?: string;
-            error?: { code?: string };
+            param?: unknown;
+            error?: { code?: string; param?: unknown };
             status?: number;
           };
-          throw Object.assign(new Error('模型 WebSocket 请求失败'), {
-            code: value.error?.code ?? value.code,
-            status: value.status,
-          });
+          throw Object.assign(
+            new Error('模型 WebSocket 请求失败'),
+            modelErrorDetails({
+              code: value.error?.code ?? value.code,
+              status: value.status,
+              param: value.error?.param ?? value.param,
+            }),
+          );
         }
         yield event;
         if (

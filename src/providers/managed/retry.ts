@@ -9,13 +9,66 @@ import { ModelRecoveryPendingError, type ModelRecovery } from '../../domain/reco
 const transientStatuses = new Set([429, 502, 503, 504]);
 const transientCodes = new Set(['server_is_overloaded', 'server_error', 'rate_limit_exceeded']);
 
-export function modelErrorDetails(error: unknown): { status?: number; code?: string } {
+const responseParameters = new Set([
+  'background',
+  'context_management',
+  'conversation',
+  'include',
+  'input',
+  'instructions',
+  'max_output_tokens',
+  'max_tool_calls',
+  'metadata',
+  'model',
+  'parallel_tool_calls',
+  'previous_response_id',
+  'prompt',
+  'prompt_cache_key',
+  'prompt_cache_options',
+  'prompt_cache_retention',
+  'reasoning',
+  'safety_identifier',
+  'service_tier',
+  'store',
+  'stream',
+  'stream_options',
+  'temperature',
+  'text',
+  'tool_choice',
+  'tools',
+  'top_logprobs',
+  'top_p',
+  'truncation',
+  'user',
+]);
+
+function safeErrorParameter(value: unknown): value is string {
+  if (typeof value !== 'string' || value.length > 160) return false;
+  const root = value.split(/[.[]/, 1)[0];
+  return (
+    responseParameters.has(root) &&
+    /^[a-z_][a-z0-9_]*(?:(?:\.[A-Za-z_][A-Za-z0-9_]{0,47})|(?:\[\d{1,6}\])){0,8}$/.test(value)
+  );
+}
+
+export function modelErrorDetails(error: unknown): {
+  status?: number;
+  code?: string;
+  param?: string;
+} {
   if (!error || typeof error !== 'object') return {};
-  const source = error as { status?: unknown; code?: unknown; error?: { code?: unknown } };
+  const source = error as {
+    status?: unknown;
+    code?: unknown;
+    param?: unknown;
+    error?: { code?: unknown; param?: unknown };
+  };
   const code = source.code ?? source.error?.code ?? networkErrorCode(error);
+  const param = source.param ?? source.error?.param;
   return {
     ...(Number.isSafeInteger(source.status) ? { status: source.status as number } : {}),
     ...(typeof code === 'string' && /^[a-zA-Z0-9_]+$/.test(code) ? { code } : {}),
+    ...(safeErrorParameter(param) ? { param } : {}),
   };
 }
 

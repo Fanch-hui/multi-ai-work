@@ -11,7 +11,7 @@ import type { ModelMessage, RunContext } from '../../domain/provider.js';
 import type { Usage } from '../../domain/types.js';
 import type { ModelActivityKind } from '../../domain/task-activity.js';
 import { responsesInput } from './messages.js';
-import { markPartialOutput } from './retry.js';
+import { markPartialOutput, modelErrorDetails } from './retry.js';
 import { resolveMessageImages } from '../images.js';
 import { ModelRequest } from './request.js';
 import { InterruptedModelStreamError } from './request-errors.js';
@@ -127,17 +127,19 @@ export class ResponsesAccumulator {
       }
     }
     if (event.type === 'response.failed' || event.type === 'response.incomplete') {
+      const details =
+        event.type === 'response.failed' ? modelErrorDetails(event.response.error) : {};
       const code =
         event.type === 'response.failed'
-          ? (event.response.error?.code ?? 'failed')
+          ? (details.code ?? 'failed')
           : (event.response.incomplete_details?.reason ?? 'incomplete');
       throw Object.assign(
         new Error(`模型响应未完成：${code}`),
-        event.type === 'response.failed' ? { code } : {},
+        event.type === 'response.failed' ? { ...details, code } : {},
       );
     }
     if (event.type === 'error')
-      throw Object.assign(new Error('模型返回错误事件'), { code: event.code });
+      throw Object.assign(new Error('模型返回错误事件'), modelErrorDetails(event));
     if (event.type === 'response.completed') {
       if (event.response.status !== 'completed') throw new Error('模型终态无效');
       this.completed = event.response;

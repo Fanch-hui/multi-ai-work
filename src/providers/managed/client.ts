@@ -86,11 +86,12 @@ export function providerError(error: unknown): Error {
   )
     return error.cause.failure;
   if (error instanceof OpenAI.APIConnectionError) return providerNetworkError(error);
-  const { status, code } = modelErrorDetails(error);
+  const safeDetails = modelErrorDetails(error);
+  const { status, code } = safeDetails;
   if (error instanceof OpenAI.APIError || status || code) {
     const details = [status ? `HTTP ${status}` : '', code ?? ''].filter(Boolean).join('，');
     const message = isTransientModelError(error) ? '模型服务繁忙，请稍后重试' : '模型请求失败';
-    return new Error(`${message}${details ? `（${details}）` : ''}`);
+    return Object.assign(new Error(`${message}${details ? `（${details}）` : ''}`), safeDetails);
   }
   return error instanceof Error ? error : new Error('模型请求失败');
 }

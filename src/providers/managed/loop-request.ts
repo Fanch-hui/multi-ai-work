@@ -166,7 +166,9 @@ async function prepareRequest(
   let reasoningUpdates = false;
   if (protocol === 'responses') {
     const model = context.connection.models?.find((item) => item.id === context.bot.model);
+    // SIWC rejects configuration items even when the supplemented model catalog supports them.
     const supportsUpdates =
+      context.connection.provider !== 'chatgpt' &&
       model?.supportsReasoningEffortUpdates === true &&
       model.reasoning?.length !== 0 &&
       officialResponsesEndpoint(client.baseURL);
