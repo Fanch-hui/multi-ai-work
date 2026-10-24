@@ -1,5 +1,5 @@
 import type { Conversation, Message, Run, Snapshot, Task } from '../../../src/domain/types.js';
-import { chiefConversationIds, isChiefHome } from './chief-work.js';
+import { chiefMainConversationIds, isChiefHome } from './chief-work.js';
 
 type FeedData = Pick<Snapshot, 'messages' | 'tasks' | 'runs'> & Partial<Pick<Snapshot, 'chief'>>;
 export interface WorkingMember {
@@ -25,7 +25,7 @@ export function workingMembers(
   conversation: Conversation,
   messages: Message[],
 ): WorkingMember[] {
-  const conversationIds = chiefConversationIds(data, conversation);
+  const conversationIds = chiefMainConversationIds(data, conversation);
   const tasks = new Map(
     data.tasks
       .filter(
@@ -52,7 +52,7 @@ export function recoveringTasks(
   messages: Message[],
 ): Task[] {
   if (conversation.kind !== 'private') return [];
-  const conversationIds = chiefConversationIds(data, conversation);
+  const conversationIds = chiefMainConversationIds(data, conversation);
   const streamingRuns = new Set(
     messages.filter((message) => message.status === 'draft').map((message) => message.runId),
   );

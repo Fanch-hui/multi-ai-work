@@ -4,6 +4,7 @@ import { Circle, Database, Gauge } from 'lucide-react';
 import type { Conversation, Snapshot } from '../../../src/domain/types.js';
 import { conversationStatistics } from './conversation-statistics.js';
 import { StatisticsDetails } from './StatisticsDetails.js';
+import { focusedConversation } from './chief-work.js';
 import { ContextCompactionControl } from './ContextCompactionControl.js';
 import type { Mutate } from './store.js';
 
@@ -132,7 +133,7 @@ export function ConversationStats({
                 <ContextCompactionControl
                   key={conversation.id}
                   data={data}
-                  conversation={conversation}
+                  conversation={focusedConversation(data, conversation)}
                   mutate={mutate}
                 />
               )

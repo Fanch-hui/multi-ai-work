@@ -7,10 +7,19 @@ import { Button, ErrorNote } from '../components.js';
 import { useResource } from '../local-work/useResource.js';
 import { RoutineWorkCard } from './RoutineWorkCard.js';
 import { SkillDraftCard } from './SkillDraftCard.js';
+import { focusedConversation } from '../chief-work.js';
+import { conversationWorkItems, workCardConversationIds } from './work-card-scope.js';
 import { ConnectorDraftsPanel } from '../connectors/ConnectorDraftsPanel.js';
 
-export function conversationSkillDrafts(drafts: WorkSkillDraft[], conversationId: string) {
-  return drafts.filter((draft) => draft.sourceConversationId === conversationId && !draft.skillId);
+export function conversationSkillDrafts(
+  drafts: WorkSkillDraft[],
+  scope: string | ReadonlySet<string>,
+) {
+  const ids = typeof scope === 'string' ? new Set([scope]) : scope;
+  return drafts.filter(
+    (draft) =>
+      !!draft.sourceConversationId && ids.has(draft.sourceConversationId) && !draft.skillId,
+  );
 }
 
 export function activeCollaborations(requests: CollaborationRequest[]) {
@@ -35,21 +44,28 @@ export function WorkCards({
   mutate: Mutate;
   onSelectConversation: (id: string) => void;
 }) {
+  const conversationIds = workCardConversationIds(data, conversationId);
+  const room = data.conversations.find((item) => item.id === conversationId);
+  const executionId = room ? focusedConversation(data, room).id : conversationId;
   const skills = useResource<WorkSkillDraft[]>('workSkills.list');
   const routines = useResource<Routine[]>('routines.list');
   const collaboration = useResource<(CollaborationRequest & { task?: Task })[]>(
     'collaboration.list',
-    { conversationId },
+    { conversationId: executionId },
   );
-  const drafts = conversationSkillDrafts(skills.value ?? [], conversationId);
-  const schedules =
-    routines.value?.filter((routine) => routine.conversationId === conversationId) ?? [];
+  const drafts = conversationSkillDrafts(skills.value ?? [], conversationIds);
+  const schedules = conversationWorkItems(routines.value ?? [], conversationIds);
   const requests = activeCollaborations(collaboration.value ?? []);
   const history = recentCollaborations(collaboration.value ?? []);
   return (
     <div className="space-y-2" aria-label="会话工作卡片">
       <ErrorNote error={skills.error || routines.error || collaboration.error} />
-      <ConnectorDraftsPanel conversationId={conversationId} mutate={mutate} compact />
+      <ConnectorDraftsPanel
+        conversationId={conversationIds.size === 1 ? conversationId : undefined}
+        conversationIds={[...conversationIds]}
+        mutate={mutate}
+        compact
+      />
       {drafts.length > 0 && (
         <details className="rounded-lg border border-blue-100 bg-blue-50/60 p-3">
           <summary className="cursor-pointer text-xs font-medium text-blue-800">

@@ -140,7 +140,7 @@ export function Composer({
     }
   }
   const getMessagePlaceholder = () => {
-    if (home) return '交代新工作，补充要求，或继续之前的事项…';
+    if (home) return '和管家聊聊，或交代一项工作…';
     if (busyMembers.length) {
       if (mixedTargets) {
         return '给成员发消息，或补充当前任务…';
@@ -167,9 +167,9 @@ export function Composer({
                 className="rounded-lg bg-blue-50 px-3 py-1 text-blue-700"
                 onClick={() => composerDrafts.edit(conversation.id, { targetContextId: undefined })}
               >
-                发送到：
+                参考工作：
                 {data.chief?.contexts.find((item) => item.id === draft.targetContextId)?.title ||
-                  '已选择事项'}{' '}
+                  '历史工作'}{' '}
                 ×
               </button>
             )}
@@ -405,7 +405,11 @@ export function Composer({
           </div>
         </div>
         {conversation.kind === 'private' && (
-          <ConversationStats data={data} conversation={execution} mutate={mutate} />
+          <ConversationStats
+            data={data}
+            conversation={home ? conversation : execution}
+            mutate={mutate}
+          />
         )}
       </form>
       <ModalPresence show={settingsOpen && !!configureChief}>

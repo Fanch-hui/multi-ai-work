@@ -1,7 +1,7 @@
 import type { Conversation, Snapshot } from '../../../src/domain/types.js';
 import type { PlanStep, TaskPlan } from '../../../src/domain/task-plan.js';
 import { recordTaskActive, taskRecordStatus } from './conversation-records.js';
-import { focusedChiefContext, isChiefHome } from './chief-work.js';
+import { chiefConversationIds, isChiefHome } from './chief-work.js';
 
 type PlanData = Pick<Snapshot, 'taskPlans' | 'tasks'> & Partial<Pick<Snapshot, 'chief'>>;
 const activeStepStatuses = new Set([
@@ -38,10 +38,12 @@ export function conversationTaskPlans(data: PlanData, conversation: Conversation
 }
 
 export function currentTaskPlan(data: PlanData, conversation: Conversation): TaskPlan | undefined {
-  const context = isChiefHome(data, conversation) ? focusedChiefContext(data) : undefined;
-  const plans = context
+  const conversationIds = isChiefHome(data, conversation)
+    ? chiefConversationIds(data, conversation)
+    : undefined;
+  const plans = conversationIds
     ? data.taskPlans
-        .filter((plan) => context.conversationIds.includes(plan.conversationId))
+        .filter((plan) => conversationIds.has(plan.conversationId))
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id))
     : conversationTaskPlans(data, conversation);
   const tasks = new Map(data.tasks.map((task) => [task.id, task]));

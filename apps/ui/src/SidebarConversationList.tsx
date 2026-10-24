@@ -176,14 +176,16 @@ function ConversationRow({
           />
         )}
       </button>
-      <button
-        aria-label={`管理会话 ${item.name}`}
-        title="管理会话"
-        onClick={() => onManage(item.id)}
-        className="absolute right-1 rounded-md p-1 text-slate-400 opacity-0 hover:bg-black/5 focus-visible:opacity-100 group-hover:opacity-100 max-md:opacity-100"
-      >
-        <MoreHorizontal size={13} />
-      </button>
+      {item.id !== data?.chief?.homeConversationId && item.chiefRole !== 'home' && (
+        <button
+          aria-label={`管理会话 ${item.name}`}
+          title="管理会话"
+          onClick={() => onManage(item.id)}
+          className="absolute right-1 rounded-md p-1 text-slate-400 opacity-0 hover:bg-black/5 focus-visible:opacity-100 group-hover:opacity-100 max-md:opacity-100"
+        >
+          <MoreHorizontal size={13} />
+        </button>
+      )}
     </div>
   );
 }

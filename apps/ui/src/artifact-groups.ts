@@ -52,12 +52,18 @@ function groupOrigin(
     conversationId = task.conversationId;
     room = conversations.get(conversationId);
   }
-  const context = chief?.contexts.find((item) => item.conversationIds.includes(conversationId));
+  const context = chief?.contexts.find(
+    (item) => item.id === artifact.chiefContextId || item.conversationIds.includes(conversationId),
+  );
   if (context)
-    return { id: `work:${context.id}`, title: context.title, workspaceId: context.workspaceId };
+    return {
+      id: `work:${context.id}`,
+      title: context.title,
+      workspaceId: artifact.workspaceId ?? context.workspaceId,
+    };
   return {
     id: `conversation:${conversationId}`,
-    workspaceId: room?.workspaceId,
+    workspaceId: artifact.workspaceId ?? room?.workspaceId,
     title:
       room?.name ||
       originalRoom?.name ||
@@ -84,6 +90,7 @@ export function artifactGroups(
   const conversations = new Map(data.conversations.map((room) => [room.id, room]));
   const bots = new Map(data.bots?.map((bot) => [bot.id, bot]));
   const groups = new Map<string, ArtifactGroup>();
+  const projects = new Map<string, Set<string>>();
   const deliverables = data.artifacts.filter(isDeliverableArtifact);
   const current = latestArtifactVersions(deliverables, tasks);
   const versions = new Map<string, Artifact[]>();
@@ -106,6 +113,13 @@ export function artifactGroups(
         artifacts: [],
       };
       groups.set(id, group);
+    }
+    const project = data.workspaces?.find((item) => item.id === workspaceId)?.name;
+    if (project) {
+      const names = projects.get(id) ?? new Set<string>();
+      names.add(project);
+      projects.set(id, names);
+      group.project = [...names].join(' · ');
     }
     group.artifacts.push(artifact);
     const seenContent = new Set([artifact.sha256]);

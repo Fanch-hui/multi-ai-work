@@ -1,10 +1,9 @@
 import { composerDrafts } from './composer-drafts.js';
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef } from 'react';
 import { ArrowUpRight } from 'lucide-react';
 import type { Conversation, Message, Snapshot, Task } from '../../../src/domain/types.js';
-import type { ChiefContextView } from '../../../src/domain/chief-work.js';
 import type { ConversationHistory, Mutate } from './store.js';
-import { Badge, ErrorNote, cn, timeLabel } from './components.js';
+import { Badge, cn, timeLabel } from './components.js';
 import Avatar, { UserAvatar } from './Avatar.js';
 import { ConversationAvatar } from './ConversationAvatar.js';
 import { Markdown } from './Markdown.js';
@@ -18,8 +17,7 @@ import { taskRecovery } from './task-activity.js';
 import { messageInputFeedbackIndex } from './task-input-feedback.js';
 import { chiefConversationIds, isChiefHistory, isChiefHome } from './chief-work.js';
 import { conversationRecordTasks } from './conversation-records.js';
-import { ChiefInputCards } from './ChiefInputCards.js';
-import { errorMessage } from './api.js';
+import { ChiefInputFeedback } from './ChiefInputFeedback.js';
 export function MessageFeed({
   data,
   history,
@@ -33,30 +31,18 @@ export function MessageFeed({
   mutate: Mutate;
   onSelectConversation: (id: string) => void;
 }) {
-  const [replying, setReplying] = useState(false);
-  const [replyError, setReplyError] = useState('');
   const { scrollRef, contentRef, pauseFollow } = useScrollFollow(conversation.id);
-  async function reply(message: Message) {
-    if (!isChiefHistory(data, conversation)) {
-      composerDrafts.edit(conversation.id, { replyToMessageId: message.id });
-      return;
-    }
-    setReplying(true);
-    setReplyError('');
-    try {
-      const context = await mutate<ChiefContextView>('chief.contexts.create', {
-        legacyConversationId: conversation.id,
-        title: conversation.name,
-        workspaceId: conversation.workspaceId,
-      });
-      const home = data.chief!.homeConversationId;
-      composerDrafts.edit(home, { replyToMessageId: message.id, targetContextId: context.id });
-      onSelectConversation(home);
-    } catch (cause) {
-      setReplyError(errorMessage(cause));
-    } finally {
-      setReplying(false);
-    }
+  function reply(message: Message) {
+    const target = isChiefHistory(data, conversation)
+      ? data.chief!.homeConversationId
+      : conversation.id;
+    composerDrafts.edit(target, {
+      replyToMessageId: message.id,
+      targetContextId: data.chief?.contexts.find((context) =>
+        context.conversationIds.includes(message.conversationId),
+      )?.id,
+    });
+    if (target !== conversation.id) onSelectConversation(target);
   }
   const messages = useMemo(
     () => conversationMessages(data, conversation),
@@ -236,6 +222,7 @@ export function MessageFeed({
               <div className={cn('min-w-0', user ? 'max-w-[85%]' : 'flex-1')}>
                 {home &&
                   message.chiefContextId &&
+                  message.chiefContextId !== data.chief?.mainContextId &&
                   message.chiefContextId !== previous?.chiefContextId && (
                     <p className="mb-2 text-xs text-slate-400">
                       {
@@ -304,8 +291,7 @@ export function MessageFeed({
                   <button
                     type="button"
                     className="mt-1 text-xs text-slate-400 hover:text-blue-600"
-                    disabled={replying}
-                    onClick={() => void reply(message)}
+                    onClick={() => reply(message)}
                   >
                     {isChiefHistory(data, conversation) ? '在管家回复此消息' : '回复此消息'}
                   </button>
@@ -323,6 +309,9 @@ export function MessageFeed({
                     data={data}
                     mutate={mutate}
                   />
+                )}
+                {home && user && (
+                  <ChiefInputFeedback data={data} messageId={message.id} mutate={mutate} />
                 )}
                 {!!inputFeedback.length && (
                   <div
@@ -342,7 +331,6 @@ export function MessageFeed({
             </article>
           );
         })}
-        <ErrorNote error={replyError} />
         {!!working.length && (
           <div
             className="grid gap-3"
@@ -377,7 +365,6 @@ export function MessageFeed({
         {approvals.map((item) => (
           <ApprovalCard key={item.id} approval={item} data={data} mutate={mutate} />
         ))}
-        {home && <ChiefInputCards data={data} mutate={mutate} />}
         {!!questions.length && (
           <div className="grid min-w-0 grid-cols-1 gap-3">
             {questions.map((item) => (

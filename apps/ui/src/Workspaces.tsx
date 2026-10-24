@@ -1,11 +1,28 @@
 import { useState, type FormEvent } from 'react';
 import { FolderOpen, Plus } from 'lucide-react';
-import type { Snapshot } from '../../../src/domain/types.js';
+import type { Snapshot, Workspace } from '../../../src/domain/types.js';
 import type { Mutate } from './store.js';
 import { choosePath, errorMessage } from './api.js';
 import { Button, ErrorNote, Field, Modal, inputClass } from './components.js';
+function workspaceAccess(workspace: Pick<Workspace, 'enabled' | 'writable'>) {
+  if (workspace.enabled === false) return 'revoked';
+  return workspace.writable ? 'write' : 'read';
+}
+const accessLabels = { write: '读写', read: '只读', revoked: '已撤销' };
+
 export function Workspaces({ data, mutate }: { data: Snapshot; mutate: Mutate }) {
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<string>();
+  const [enabled, setEnabled] = useState(true);
+  function edit(workspace?: Workspace) {
+    setEditing(workspace?.id);
+    setPath(workspace?.path ?? '');
+    setName(workspace?.name ?? '');
+    setWritable(workspace?.writable ?? true);
+    setEnabled(workspace?.enabled !== false);
+    setError('');
+    setOpen(true);
+  }
   const [path, setPath] = useState('');
   const [name, setName] = useState('');
   const [writable, setWritable] = useState(true);
@@ -24,7 +41,10 @@ export function Workspaces({ data, mutate }: { data: Snapshot; mutate: Mutate })
     setBusy(true);
     setError('');
     try {
-      await mutate('workspaces.add', { name, path, writable });
+      await mutate(
+        editing ? 'workspaces.update' : 'workspaces.add',
+        editing ? { id: editing, name, writable, enabled } : { name, path, writable },
+      );
       setOpen(false);
       setName('');
       setPath('');
@@ -39,11 +59,8 @@ export function Workspaces({ data, mutate }: { data: Snapshot; mutate: Mutate })
       <div className="mb-5 flex items-center justify-between">
         <div>
           <h2 className="text-balance text-base font-semibold">授权工作目录</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            每个会话绑定一个目录，文件与成果保持可追溯。
-          </p>
         </div>
-        <Button variant="primary" onClick={() => setOpen(true)}>
+        <Button variant="primary" onClick={() => edit()}>
           <Plus size={16} />
           添加目录
         </Button>
@@ -62,19 +79,22 @@ export function Workspaces({ data, mutate }: { data: Snapshot; mutate: Mutate })
               </p>
             </div>
             <span className="rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-600">
-              {item.writable ? '可创建成果' : '只读'}
+              {accessLabels[workspaceAccess(item)]}
             </span>
+            <Button variant="ghost" onClick={() => edit(item)} aria-label={`管理目录 ${item.name}`}>
+              管理
+            </Button>
           </div>
         ))}
       </div>
       {!data.workspaces.length && (
         <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center">
           <FolderOpen className="mx-auto mb-3 text-slate-400" size={24} />
-          <p className="mb-4 text-sm text-slate-600">选择资料目录，开始你的第一个工作会话。</p>
-          <Button onClick={() => setOpen(true)}>添加目录</Button>
+          <p className="mb-4 text-sm text-slate-600">授权资料目录，让管家使用其中的文件。</p>
+          <Button onClick={() => edit()}>添加目录</Button>
         </div>
       )}
-      <Modal open={open} onOpenChange={setOpen} title="添加工作目录">
+      <Modal open={open} onOpenChange={setOpen} title={editing ? '管理工作目录' : '添加工作目录'}>
         <form className="grid gap-4" onSubmit={(event) => void save(event)}>
           <Field label="名称">
             <input
@@ -89,28 +109,39 @@ export function Workspaces({ data, mutate }: { data: Snapshot; mutate: Mutate })
             <div className="flex gap-2">
               <input
                 required
+                disabled={!!editing}
                 className={inputClass}
                 value={path}
                 onChange={(event) => setPath(event.target.value)}
                 placeholder="/path/to/workspace"
               />
-              <Button type="button" aria-label="选择工作目录" onClick={() => void browse()}>
-                <FolderOpen size={16} />
-              </Button>
+              {!editing && (
+                <Button type="button" aria-label="选择工作目录" onClick={() => void browse()}>
+                  <FolderOpen size={16} />
+                </Button>
+              )}
             </div>
           </Field>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={writable}
-              onChange={(event) => setWritable(event.target.checked)}
-            />
-            允许创建成果和更新本任务自产文件
-          </label>
+          <Field label="访问权限">
+            <select
+              className={inputClass}
+              aria-label="目录访问权限"
+              disabled={editing === data.settings.defaultWorkspaceId}
+              value={workspaceAccess({ enabled, writable })}
+              onChange={(event) => {
+                setEnabled(event.target.value !== 'revoked');
+                setWritable(event.target.value === 'write');
+              }}
+            >
+              <option value="write">读写</option>
+              <option value="read">只读</option>
+              {editing && <option value="revoked">已撤销</option>}
+            </select>
+          </Field>
           <ErrorNote error={error} />
           <div className="flex justify-end">
             <Button variant="primary" disabled={busy}>
-              {busy ? '添加中…' : '授权目录'}
+              {busy ? '保存中…' : '保存'}
             </Button>
           </div>
         </form>

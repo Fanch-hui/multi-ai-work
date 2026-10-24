@@ -9,7 +9,14 @@ export function isChiefHome(data: ChiefData, conversation: Conversation): boolea
 }
 
 export function focusedChiefContext(data: ChiefData) {
-  return data.chief?.contexts.find((context) => context.id === data.chief?.focusContextId);
+  return data.chief?.contexts.find(
+    (context) => context.id === data.chief?.mainContextId || context.kind === 'main',
+  );
+}
+
+export function chiefMainConversationIds(data: ChiefData, conversation: Conversation): Set<string> {
+  if (!isChiefHome(data, conversation)) return new Set([conversation.id]);
+  return new Set([conversation.id, ...(focusedChiefContext(data)?.conversationIds ?? [])]);
 }
 
 export function chiefConversationIds(data: ChiefData, conversation: Conversation): Set<string> {

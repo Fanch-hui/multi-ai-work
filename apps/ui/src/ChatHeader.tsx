@@ -14,7 +14,7 @@ interface Props {
   onExpandSidebar: () => void;
   onSelectConversation: (id: string) => void;
   onViewChange: (view: ChatView) => void;
-  onManage: () => void;
+  onManage?: () => void;
   onMembers: () => void;
   onBrowser: () => void;
   onComputer: () => void;
@@ -148,15 +148,17 @@ export function ChatHeader({
         >
           <Monitor size={16} />
         </Button>
-        <Button
-          variant="ghost"
-          className="size-8 min-h-8 p-0"
-          aria-label="管理当前会话"
-          title="管理会话"
-          onClick={onManage}
-        >
-          <MoreHorizontal size={17} />
-        </Button>
+        {onManage && (
+          <Button
+            variant="ghost"
+            className="size-8 min-h-8 p-0"
+            aria-label="管理当前会话"
+            title="管理会话"
+            onClick={onManage}
+          >
+            <MoreHorizontal size={17} />
+          </Button>
+        )}
       </div>
     </div>
   );

@@ -77,6 +77,26 @@ describe('连接器与草稿界面', () => {
     ])
       expect(markup).toContain(text);
   });
+  it('管家汇集关联工作的待审阅草稿并保持其他私聊隔离', () => {
+    resources.drafts = [
+      { ...draft, id: 'main', conversationId: 'main-part', title: '主对话草稿' },
+      { ...draft, id: 'worker', conversationId: 'work-part', title: '后台工作草稿' },
+      { ...draft, id: 'foreign', conversationId: 'foreign', title: '其他私聊草稿' },
+    ];
+    const markup = renderToStaticMarkup(
+      createElement(ConnectorDraftsPanel, {
+        conversationIds: ['main-part', 'work-part'],
+        compact: true,
+        mutate,
+      }),
+    );
+    expect(resources.calls).toContainEqual(['connectorDrafts.list', {}]);
+    expect(markup).toContain('主对话草稿');
+    expect(markup).toContain('后台工作草稿');
+    expect(markup).not.toContain('其他私聊草稿');
+    expect(markup.match(/aria-label="外发草稿"/g)).toHaveLength(1);
+  });
+
   it('发送完成后退出聊天待办，未知结果保留核查入口', () => {
     resources.drafts = [{ ...draft, status: 'sent' }];
     expect(

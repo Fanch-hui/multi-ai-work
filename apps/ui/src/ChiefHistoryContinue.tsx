@@ -1,7 +1,5 @@
 import { useState } from 'react';
-import type { ChiefContextView } from '../../../src/domain/chief-work.js';
 import type { Conversation, Snapshot } from '../../../src/domain/types.js';
-import type { Mutate } from './store.js';
 import { Button, ErrorNote } from './components.js';
 import { composerDrafts } from './composer-drafts.js';
 import { errorMessage } from './api.js';
@@ -10,12 +8,10 @@ import { requireAttachmentCapacity } from '../../../src/domain/attachment-policy
 export function ChiefHistoryContinue({
   data,
   conversation,
-  mutate,
   onSelectConversation,
 }: {
   data: Snapshot;
   conversation: Conversation;
-  mutate: Mutate;
   onSelectConversation: (id: string) => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -30,13 +26,14 @@ export function ChiefHistoryContinue({
       const draft = composerDrafts.read(home);
       if (withDraft)
         requireAttachmentCapacity(draft.attachments.length, previous.attachments.length);
-      const context = await mutate<ChiefContextView>('chief.contexts.create', {
-        title: conversation.name,
-        workspaceId: conversation.workspaceId,
-        legacyConversationId: conversation.id,
-      });
+      const anchor = data.messages
+        .filter((message) => message.conversationId === conversation.id)
+        .at(-1);
       composerDrafts.edit(home, {
-        targetContextId: context.id,
+        targetContextId: data.chief?.contexts.find((context) =>
+          context.conversationIds.includes(conversation.id),
+        )?.id,
+        replyToMessageId: anchor?.id,
         ...(withDraft
           ? {
               content: [draft.content, previous.content].filter(Boolean).join('\n\n'),

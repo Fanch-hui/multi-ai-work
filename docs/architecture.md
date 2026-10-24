@@ -5,7 +5,7 @@
 ```mermaid
 flowchart TD
   User[用户消息] --> Entry{管家固定入口}
-  Entry -->|是| Routing[ChiefRoutingService 保存输入并选择事项]
+  Entry -->|是| Routing[ChiefRoutingService 保存输入并接入连续主对话]
   Entry -->|群聊或成员私聊| Task[TaskService 保存消息与任务输入]
   Routing --> Task
   Task --> Scheduler[Scheduler 判断排队与准入]
@@ -26,29 +26,55 @@ flowchart TD
 
 一次用户消息可能创建任务，也可能成为正在执行任务的补充输入。任务运行成功后，若仍有未接收输入或成员结果，任务会重新排队或等待成员。`Run` 保存一次执行的结果，`Task` 保存整个任务的进度，两者各自表达不同的生命周期。
 
-## 管家主入口与工作事项
+## 连续管家主对话与后台工作
 
-`settings.mainConversationId` 是固定可见主入口。每个 `ChiefWorkContext` 保存事项名称与当前 `ChiefContextPart`；工作段关联真实执行 `Conversation`，继续使用其工作区、消息、任务、绑定和权限。不同事项可以并发，同一事项沿现有任务补充输入规则串行接续。管家统一读取 Bot 的模型、推理强度和上下文配置，模型或连接变更须等待管家任务结束。
+`settings.mainConversationId` 是固定可见入口，名称和头像取自管家 Bot；模型、推理强度和上下文预算统一在「我的团队」配置。每个入口拥有唯一 `mainContextId`，指向 `ChiefWorkContext.kind = main` 的连续交流上下文。问候、讨论、追问和补充共用当前主段；实际执行继续使用 `Conversation → Task → Run → SessionBinding`。
 
 | 服务 | 权威状态与职责 |
 | --- | --- |
-| `ChiefRoutingService` | `ChiefInput` 接收、幂等、归属判断、澄清、重试、取消和派发 |
-| `ChiefContextService` | 事项、工作段及当前焦点；实际进度读取 Task |
-| `ChiefTimelineService` | `ChiefTimelineEntry` 的稳定显示顺序、消息引用与已读投影 |
+| `ChiefRoutingService` | `ChiefInput` 接收、幂等、顺序接入主段、重试与取消 |
+| `ChiefContextService` | `main / work / history` 工作归属、当前段及来源引用；实际进度读取 Task |
+| `ChiefWorkService` | `start_work / list_work`、独立工作创建、补充与续做、项目选择及资料授权 |
+| `ChiefWorkReports` | 关键等待和最终结果的持久回报队列、去重及主对话串行接收 |
+| `ChiefTimelineService` | `ChiefTimelineEntry` 稳定显示顺序、原消息引用与已读投影 |
 | `ChiefHistoryService` | 管家直属历史检索、原消息锚点及确切来源授权 |
 | `ChiefMaintenanceService` | 上下文压力判断、压缩或分段、来源校验与交接 |
 
-`chief.inputs.send` 先在事务中保存输入和时间线引用，立即展示用户消息。明确事项、回复引用和明确接续语直接解析；其他请求用独立后台任务判断续接、新建或澄清。请求只携带有界候选资料，工具列表为空，返回的事项、项目和历史来源 ID 由 Core 校验。路由使用独立内部会话，受现有账号及全局调度限制。多个待输入按提交顺序处理，单条澄清释放后续输入；派发时在同一事务中创建正式消息并绑定原时间线条目，清除输入中的临时正文。
+`chief.inputs.send` 在事务中保存输入与时间线引用，立即展示同一个用户消息气泡，再按提交顺序直接接入当前主段。派发时保存正式消息、绑定原时间线条目并清除临时正文。回复引用和旧工作参数作为本轮背景交给管家理解；归属问题由管家自然询问。失败与重试关联原输入和消息，已派发任务失败时沿真实 Task 的恢复规则处理。
 
-焦点记录手动选择的修订号。路由依据提交时焦点与修订号决定是否更新焦点；后台进展及完成通知只进入时间线。附件向派发的实际会话授予确切 ID；跨事项历史召回和任务成果查询也只保存实际返回的任务或成果授权。普通成员及群继续遵循原有来源绑定。
+文件制作、修改、命令及多步骤工作通过 `start_work` 建立独立内部会话，使用同一 Chief Bot 和普通 Task。调用幂等键由 Core 按来源任务和工具调用生成。该工作根任务通过工作索引关联主对话来源，不挂为主对话 Task 的子任务，主聊天可继续接收新消息。团队协作由后台工作建立显式来源任务群，成员任务沿现有父子任务树执行。
 
-时间线只保存原消息或待派发输入的引用，原消息 ID、会话 ID 和序号保留。页面按独立显示序号分页，流式更新沿原消息 ID 合并；已读确认按真实来源分组保存。原会话分页继续服务历史、群聊和私聊。快照与增量携带 `chief` 目录、焦点和待输入，消息投影附带事项与显示序号。
+`send_task_input` 补充活动工作，消息在目标执行会话保存并保留来源及需求版本，接收游标取自目标会话。已结束工作以同一稳定工作 ID 创建关联的新 Task，保留 `reworkOfTaskId`、相关历史和成果。控制工具使用真实 Task/Run ID 校验主入口对工作及其成员后代的权限。附件与历史成果按确切 ID 授权，各工作保留自己的资料范围。
 
-迁移在调度恢复前选择普通管家主入口，保留其消息为时间线基线；其他旧对话作为历史保留。活动旧任务沿用原会话及绑定并接入事项，新输出进入统一时间线。已完成旧任务首次继续时创建关联事项与执行会话，带入相关原文、成果及历史任务引用。例行工作保留专用内部会话，汇报统一进入主入口。迁移版本和映射持久保存，重复迁移保持稳定。
+后台回报按工作、任务和内容版本去重并持久保存；用户输入优先。主会话空闲且待输入已接入后，回报由普通主对话任务串行处理，同一绑定只有一个写入者。原始工具过程留在工作记录，管家向用户发表简短状态和交付。Scheduler 优先接入主对话；全局和同账号上限大于 1 时为前台保留一个名额，上限为 1 时按原额度排队。
 
-SQLite 存储兼容版本为 2，新备份格式为 3。新备份保存事项、段、输入和时间线关系，旧备份恢复后执行同样迁移；尚未派发的恢复输入保留正文，等待用户重试。历史全文索引采用 FTS5 trigram、短词匹配和相关性排序，后台分批重建，查询先限定获准的管家直属历史。`recall_work` 返回候选，`read_work_history` 按原消息锚点展开原文及成果。
+时间线保存原消息或待输入引用，保留原消息 ID、会话 ID 和序号，按独立显示序号分页。流式更新按原消息 ID 合并，已读按实际展示的来源消息分组确认。旧时间线及历史可继续查看；后台工作中的普通过程输出保存在真实执行会话。快照与增量携带工作目录、唯一主上下文和待输入。
 
-上下文达到配置阈值后，活动任务继续沿现有完整工具边界压缩。事项收尾后，维护任务判断压缩续做或切换新段。切段前检查任务树、待输入、问答、审批、命令和待对账操作；摘要包含目标、约束、进度、决定、待办、成果及历史位置，并保存近期用户原文引用。来源指纹再次校验成功后原子创建新段，更新当前指针。整理期间输入持久等待，维护锁释放时通知路由接续。工作段与 `SessionBinding.generation` 分别表示工作接续和配置兼容性。
+主界面展示消息、输入框及一行真实后台工作进度；历史搜索位于「记录」，成果位于「库」。群聊与成员私聊保留会话管理。底部用量累计全部 Chief 请求，包括主聊天、本人后台工作和摘要整理；上下文占用读取当前主段，成员用量在各自任务详情查看。
+
+## 项目授权与实际执行目录
+
+`Workspace` 是授权目录的唯一来源，`enabled = false` 表示撤销，`writable` 表示读写或只读。`settings.defaultWorkspaceId` 稳定指向业务数据目录下的内置 `workspace`。迁移按实际路径复用该目录记录；显示名称、排序及最近使用项目不参与默认选择。
+
+新工作未指定项目时使用内置「工作成果」，续做沿用原项目；明确名称匹配不到或重名时先询问确认。设置中的「工作目录」通过 `workspaces.add / workspaces.update` 登记目录、改名及调整授权。撤销保留目录记录、历史和原文件，内置默认目录保持可用。
+
+管家可访问全部已授权目录，普通成员仅访问任务所在项目。`workspace-authorization.ts` 逐次解析工具的显式项目和实际路径，在审批、写锁及派发前确定有效工作区，并在排队或审批后重新检查。文件、搜索、命令执行目录、进程记录与成果归属共用该结果；文档转换分别校验输入来源与输出项目。会话的工作区不随某次工具调用改写。
+
+授权收紧与目录写操作互斥，活跃写入或命令需先收尾；符号链接、敏感文件、观察版本及确切成果引用继续沿现有边界校验。
+
+## 管家升级与历史兼容
+
+数据库兼容版本为 3，备份格式为 4，恢复支持格式 1–4。结构升级预检位于表迁移、管家指令同步和调度恢复之前，要求全部任务结束或停止，运行与命令进程收尾。旧版本存在活动工作时，启动明确要求先在原版本完成或停止。
+
+迁移保留固定入口及全部原消息、Task、Run、绑定、协议、成果 ID 和显示序号；旧话题上下文成为历史归属。新主段使用新绑定，按时间线来源引用组织近期原文和历史摘要，原协议保存在原绑定。稳定映射和迁移标记使重复执行保持幂等。旧任务接续建立关联的新 Task 和执行段，未知副作用先核查对账。
+
+未派发输入保留请求 ID、消息 ID、附件和引用后进入主对话队列；已派发输入保留原归属。备份恢复将未结束任务标为中断、清理自动恢复检查点，待执行输入等待用户明确重试。恢复时内置目录定位到当前业务数据目录，外部项目保留原路径。新主段继承固定入口原有的记忆授权范围，原记忆分区和来源持续保留。
+
+历史全文索引采用可重建的 SQLite FTS5 trigram、短词匹配和相关性排序，先过滤获准的管家直属历史，再由 `recall_work` 搜索候选、`read_work_history` 按消息锚点展开原文和成果。
+
+主对话与各工作分别管理上下文，沿用既有预算和默认 85% 压缩阈值。活动执行在完整工具边界压缩；到达阈值后判断压缩续做或阶段交接。主段切换只等待主会话轮次、输入、问答、审批、命令及对账收尾，独立后台工作继续执行；工作换段检查其完整任务树。
+
+交接保存目标、约束、决定、进度、待办、成果、后台工作引用及近期用户原文锚点，来源复核后原子更新当前段。摘要或校验失败保留现有可用历史，整理期间新输入持久等待。工作段与 `SessionBinding.generation` 分别表达工作接续和配置兼容性。
 
 ## 调度与执行的阅读顺序
 
@@ -58,7 +84,7 @@ SQLite 存储兼容版本为 2，新备份格式为 3。新备份保存事项、
 4. [run-preparation.ts](../src/core/run-preparation.ts)：目录准备、历史和提示词、图片、工具及检查点回调装配。
 5. [run-results.ts](../src/core/run-results.ts)：完成、提问等待、恢复和失败时的持久化。
 
-Scheduler 按现有优先级安排前台任务、主管代答和记忆整理，并检查依赖、成员资格、同成员同会话占用、账号额度与全局额度。排队展示与实际准入复用候选资料。取消请求先保存请求时间，再停止执行并等待实际收尾。
+Scheduler 优先安排管家主对话，再按现有优先级安排执行任务、主管代答和记忆整理，并检查依赖、成员资格、同成员同会话占用、账号额度与全局额度。排队展示与实际准入复用候选资料。取消请求先保存请求时间，再停止执行并等待实际收尾。
 
 成功结束模型运行后，任务结果按以下优先级保存：
 
@@ -90,7 +116,7 @@ Scheduler 按现有优先级安排前台任务、主管代答和记忆整理，�
 
 最终回复通过 `reply-artifacts.ts` 自动附加尚未发表的最新交付文件，同任务已通过 `post_message` 发出的文件沿用原消息；显式重发仍保留。启动与备份恢复时校正历史最终回复的重复附件关联，原文件和消息正文保留。
 
-库与自动交付共用 `latestArtifactVersions`，显式版本系列优先，其余按事项、智能体和工作路径选择最新文件；旧成果沿用原会话归属。同事项跨段修改连续显示，库按事项分组并标注项目，历史版本折叠保留。真实产出者、任务、成果 ID 和正文持续保存。
+库与自动交付共用 `latestArtifactVersions`，显式版本系列优先，其余按稳定工作、实际项目、产出智能体和工作路径选择最新文件。续做沿用工作归属，跨段版本连续展示，不同工作或项目的同名文件独立保存。旧成果保留历史归属；库按工作分组并标注实际项目，历史版本折叠保留。真实产出者、任务、成果 ID 和正文持续保存。
 
 聊天中的 AI 附件、工作记录的成果列表和库统一通过 `isDeliverableArtifact` 筛选最终交付。用户上传的资料保留在自己的消息中，工具全文、文档预览页等过程文件供内部读取。库将内容不同的历史交付版本折叠在当前成果下。
 
@@ -148,12 +174,12 @@ Release 草稿上传复用已校验安装包，并查询包源提交 SHA 对应�
 
 | 变更 | 优先测试 |
 | --- | --- |
-| 管家输入、迁移、历史、分段与展示 | [chief-routing](../tests/chief-routing.test.ts)、[chief-contracts](../tests/chief-contracts.test.ts)、[chief-history](../tests/chief-history.test.ts)、[chief-maintenance](../tests/chief-maintenance.test.ts)、[chief-maintenance-routing](../tests/chief-maintenance-routing.test.ts)、[chief-compat](../tests/chief-compat.test.ts)、[chief-work-ui](../tests/chief-work-ui.test.ts) |
+| 连续管家、后台工作、迁移与展示 | [chief-background-work](../tests/chief-background-work.test.ts)、[chief-continuity-migration](../tests/chief-continuity-migration.test.ts)、 [chief-routing](../tests/chief-routing.test.ts)、[chief-contracts](../tests/chief-contracts.test.ts)、[chief-history](../tests/chief-history.test.ts)、[chief-maintenance](../tests/chief-maintenance.test.ts)、[chief-maintenance-routing](../tests/chief-maintenance-routing.test.ts)、[chief-compat](../tests/chief-compat.test.ts)、[chief-work-ui](../tests/chief-work-ui.test.ts) |
 | 调度、启动恢复、补充输入 | [scheduler](../tests/scheduler.test.ts)、[scheduler-recovery](../tests/scheduler-recovery.test.ts)、[task-input-admission](../tests/task-input-admission.test.ts)、[core-user-input](../tests/core-user-input.test.ts) |
 | 执行结果、草稿、提问与停止 | [execution-lifecycle](../tests/execution-lifecycle.test.ts)、[run-publication](../tests/run-publication.test.ts)、[core-questions](../tests/core-questions.test.ts)、[task-controls](../tests/task-controls.test.ts) |
 | 文件交付、历史附件与库版本 | [reply-artifacts](../tests/reply-artifacts.test.ts)、[artifact-groups](../tests/artifact-groups.test.ts)、[artifact-delete](../tests/artifact-delete.test.ts) |
 | 协议、历史、检查点与压缩 | [managed-history](../tests/managed-history.test.ts)、[managed-progress](../tests/managed-progress.test.ts)、[managed-progress-deltas](../tests/managed-progress-deltas.test.ts)、[managed-recovery-lifecycle](../tests/managed-recovery-lifecycle.test.ts)、[manual-compaction-mcp](../tests/manual-compaction-mcp.test.ts) |
-| 工具权限、操作保存与 MCP 生命周期 | [core-permissions](../tests/core-permissions.test.ts)、[core-mcp-revocation](../tests/core-mcp-revocation.test.ts)、[tool-operation-lifecycle](../tests/tool-operation-lifecycle.test.ts)、[mcp-lifecycle](../tests/mcp-lifecycle.test.ts) |
+| 工具权限、操作保存与 MCP 生命周期 | [workspace-authorization](../tests/workspace-authorization.test.ts)、 [core-permissions](../tests/core-permissions.test.ts)、[core-mcp-revocation](../tests/core-mcp-revocation.test.ts)、[tool-operation-lifecycle](../tests/tool-operation-lifecycle.test.ts)、[mcp-lifecycle](../tests/mcp-lifecycle.test.ts) |
 | 存储、增量快照和桌面进程 | [storage-binding](../tests/storage-binding.test.ts)、[snapshot-cache](../tests/snapshot-cache.test.ts)、[snapshot-sync](../tests/snapshot-sync.test.ts)、[snapshot-store](../tests/snapshot-store.test.ts)、[core-host](../tests/core-host.test.ts) |
 
 测试文件位于 `tests/`，以上名称对应 `.test.ts`。涉及本地 HTTP/WebSocket 的协议用例需要允许监听本机临时端口。

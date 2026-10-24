@@ -6,6 +6,7 @@ import { Button, Confirm, ErrorNote, Field, Modal, inputClass } from '../compone
 import type { Mutate } from '../store.js';
 import { errorMessage } from '../api.js';
 import { ModalPresence } from '../ModalPresence.js';
+import { conversationWorkItems } from '../work-chat/work-card-scope.js';
 import { useResource } from '../local-work/useResource.js';
 
 const statusLabels = {
@@ -20,10 +21,12 @@ const statusLabels = {
 
 export function ConnectorDraftsPanel({
   conversationId,
+  conversationIds,
   mutate,
   compact = false,
 }: {
   conversationId?: string;
+  conversationIds?: string[];
   mutate: Mutate;
   compact?: boolean;
 }) {
@@ -31,10 +34,11 @@ export function ConnectorDraftsPanel({
     'connectorDrafts.list',
     conversationId ? { conversationId } : {},
   );
-  const active =
-    resource.value?.filter((draft) => !['sent', 'cancelled'].includes(draft.status)) ?? [];
-  const history =
-    resource.value?.filter((draft) => ['sent', 'cancelled'].includes(draft.status)) ?? [];
+  const drafts = conversationIds
+    ? conversationWorkItems(resource.value ?? [], new Set(conversationIds))
+    : (resource.value ?? []);
+  const active = drafts.filter((draft) => !['sent', 'cancelled'].includes(draft.status));
+  const history = drafts.filter((draft) => ['sent', 'cancelled'].includes(draft.status));
   if (compact && !active.length && !resource.error) return null;
   return (
     <section className="grid min-w-0 gap-3" aria-label="外发草稿">

@@ -15,7 +15,18 @@ import { ComposerDraftStore, composerSubmission } from '../apps/ui/src/composer-
 import { currentTaskPlan } from '../apps/ui/src/task-plans.js';
 import { TeamSnapshotStore } from '../apps/ui/src/snapshot-store.js';
 import { SidebarConversationList } from '../apps/ui/src/SidebarConversationList.js';
-import { ChiefInputCards } from '../apps/ui/src/ChiefInputCards.js';
+import { ChiefInputFeedback } from '../apps/ui/src/ChiefInputFeedback.js';
+import { Workspaces } from '../apps/ui/src/Workspaces.js';
+import { ChatHeader } from '../apps/ui/src/ChatHeader.js';
+import {
+  workCardConversationIds,
+  conversationWorkItems,
+} from '../apps/ui/src/work-chat/work-card-scope.js';
+import { conversationSkillDrafts } from '../apps/ui/src/work-chat/WorkCards.js';
+import { MessageFeed } from '../apps/ui/src/MessageFeed.js';
+import { OnboardingProfile } from '../apps/ui/src/OnboardingProfile.js';
+import { ChiefWorkProgress } from '../apps/ui/src/ChiefWorkProgress.js';
+import { workingMembers } from '../apps/ui/src/message-feed.js';
 import { artifactGroups } from '../apps/ui/src/artifact-groups.js';
 import { ApprovalCard } from '../apps/ui/src/TaskDetail.js';
 import { UserQuestionCard } from '../apps/ui/src/UserQuestionCard.js';
@@ -82,7 +93,7 @@ function snapshot(): Snapshot {
   return {
     connections: [],
     bots: [],
-    conversations: [home, room('a1'), room('a2'), room('b1')],
+    conversations: [home, room('a1'), room('a2'), room('b1'), room('main-part')],
     workspaces: [],
     messages: [],
     tasks: [],
@@ -113,7 +124,12 @@ function snapshot(): Snapshot {
     chief: {
       homeConversationId: 'home',
       focusContextId: 'b',
-      contexts: [context('a', ['a1', 'a2']), context('b', ['b1'])],
+      mainContextId: 'main',
+      contexts: [
+        context('a', ['a1', 'a2']),
+        context('b', ['b1']),
+        { ...context('main', ['main-part']), kind: 'main' },
+      ],
       inputs: [],
     },
   };
@@ -184,7 +200,7 @@ describe('single Chief workspace presentation', () => {
       'a-next',
       'member',
     ]);
-    expect(focusedConversation(data, home).id).toBe('b1');
+    expect(focusedConversation(data, home).id).toBe('main-part');
     expect(chiefTaskContext(data, 'member')?.id).toBe('a');
   });
 
@@ -231,7 +247,7 @@ describe('single Chief workspace presentation', () => {
     expect(question).not.toContain('事项 b');
   });
 
-  it('uses the focused work plan when another background plan is newer', () => {
+  it('shows the latest real work plan without changing the continuous main context', () => {
     const data = snapshot();
     data.tasks = [task('a', 'a2'), task('b', 'b1')];
     data.taskPlans = [
@@ -254,7 +270,8 @@ describe('single Chief workspace presentation', () => {
         updatedAt: time,
       },
     ];
-    expect(currentTaskPlan(data, home)?.id).toBe('plan-b');
+    expect(currentTaskPlan(data, home)?.id).toBe('plan-a');
+    expect(focusedConversation(data, home).id).toBe('main-part');
   });
 
   it('binds a manually chosen work target to its draft and clears it after sending', () => {
@@ -295,7 +312,7 @@ describe('single Chief workspace presentation', () => {
     expect(html).not.toContain('hidden-router');
   });
 
-  it('renders clarification candidates and retains a retry action for failed routing', () => {
+  it('attaches compact retry and clarification feedback to the original message', () => {
     const data = snapshot();
     data.chief!.inputs = [
       {
@@ -314,13 +331,15 @@ describe('single Chief workspace presentation', () => {
     ];
     const render = () =>
       renderToStaticMarkup(
-        createElement(ChiefInputCards, {
+        createElement(ChiefInputFeedback, {
           data,
+          messageId: 'pending',
           mutate: async () => undefined as never,
         }),
       );
     expect(render()).toContain('要修改哪份报告');
-    expect(render()).toContain('事项 a');
+    expect(render()).toContain('回复管家');
+    expect(render()).not.toContain('事项 a');
     expect(render()).not.toContain('事项 b');
     data.chief!.inputs[0] = {
       ...data.chief!.inputs[0],
@@ -330,6 +349,225 @@ describe('single Chief workspace presentation', () => {
     };
     expect(render()).toContain('重试');
     expect(render()).toContain('连接中断');
+  });
+
+  it('keeps an actual model failure next to the submitted message', () => {
+    const data = snapshot();
+    data.tasks = [{ ...task('chat', 'main-part'), status: 'failed', error: '模型连接中断' }];
+    data.chief!.inputs = [
+      {
+        id: 'input',
+        homeConversationId: 'home',
+        messageId: 'message',
+        requestId: 'request',
+        fingerprint: '',
+        artifactIds: [],
+        taskIds: ['chat'],
+        status: 'dispatched',
+        createdAt: time,
+      },
+    ];
+    const html = renderToStaticMarkup(
+      createElement(ChiefInputFeedback, {
+        data,
+        messageId: 'message',
+        mutate: async () => undefined as never,
+      }),
+    );
+    expect(html).toContain('模型连接中断');
+    expect(html).toContain('重试');
+    expect(html).not.toContain('取消');
+  });
+
+  it('counts all Chief usage while reading only the main context and keeping worker activity out of chat waiting', () => {
+    const data = snapshot();
+    data.tasks = [
+      task('chat', 'main-part'),
+      task('work', 'a2'),
+      { ...task('summary', 'router'), kind: 'chief-context-maintenance' },
+      { ...task('member', 'group'), botId: 'member' },
+    ];
+    data.runs = data.tasks.map((item, index) => ({
+      id: `r-${item.id}`,
+      taskId: item.id,
+      botId: item.botId,
+      bindingId: item.id,
+      status: 'running',
+      configRevision: 1,
+      createdAt: `${time}-${index}`,
+      usage: { source: 'reported', inputTokens: 10, outputTokens: 1 },
+      contextUsage: {
+        source: 'app-estimated',
+        estimatedTokens: item.id === 'chat' ? 5 : 90,
+        contextWindow: 100,
+      },
+    }));
+    const stats = conversationStatistics(data, home);
+    expect(stats.usage.total).toBe(33);
+    expect(stats.context.percent).toBe(5);
+    expect(workingMembers(data, home, []).map((item) => item.task.id)).toEqual(['chat']);
+    expect(
+      conversationStatistics(data, data.conversations.find((item) => item.id === 'main-part')!)
+        .usage.total,
+    ).toBe(33);
+  });
+
+  it('keeps the fixed Chief header focused on chat and advanced controls while member management remains available', () => {
+    const props = {
+      conversation: home,
+      bots: [],
+      view: 'chat' as const,
+      pending: 0,
+      working: 0,
+      sidebarCollapsed: false,
+      onExpandSidebar: () => {},
+      onSelectConversation: () => {},
+      onViewChange: () => {},
+      onMembers: () => {},
+      onBrowser: () => {},
+      onComputer: () => {},
+      onPending: () => {},
+      pendingWork: 0,
+    };
+    const main = renderToStaticMarkup(createElement(ChatHeader, props));
+    expect(main).not.toContain('管理当前会话');
+    expect(main).toContain('电脑操作');
+    expect(main).toContain('工作浏览器');
+    const member = renderToStaticMarkup(
+      createElement(ChatHeader, {
+        ...props,
+        conversation: room('member', { purpose: undefined }),
+        onManage: () => {},
+      }),
+    );
+    expect(member).toContain('管理当前会话');
+  });
+
+  it('summarizes actual independent work in one progress row', () => {
+    const data = snapshot();
+    data.chief!.contexts[0].kind = 'work';
+    data.chief!.contexts[1].kind = 'work';
+    data.tasks = [task('a', 'a2'), task('b', 'b1'), task('chat', 'main-part')];
+    const html = renderToStaticMarkup(
+      createElement(ChiefWorkProgress, {
+        data,
+        onRecords: () => {},
+        onSelectConversation: () => {},
+      }),
+    );
+    expect(html).toContain('2 项进行中');
+    expect(html).toContain('事项 a');
+    expect(html).toContain('事项 b');
+    expect(html).not.toContain('事项 main');
+    expect(html).toContain('查看记录');
+  });
+
+  it('configures Chief identity and model during onboarding without selecting a project', () => {
+    const data = snapshot();
+    data.settings.defaultWorkspaceId = 'default';
+    data.workspaces = [
+      { id: 'foreign', name: '外部项目', path: '/foreign', writable: true },
+      { id: 'default', name: '工作成果', path: '/default', writable: true },
+    ];
+    const connection = {
+      id: 'connection',
+      name: 'ChatGPT',
+      provider: 'chatgpt' as const,
+      status: 'ready' as const,
+      concurrency: 2,
+      revision: 1,
+      createdAt: time,
+      models: [{ id: 'model', name: 'Model' }],
+    };
+    const html = renderToStaticMarkup(
+      createElement(OnboardingProfile, {
+        data,
+        connection,
+        mutate: async () => undefined as never,
+        busy: false,
+        onSubmit: async () => {},
+      }),
+    );
+    expect(html).toContain('管家的名字');
+    expect(html).toContain('头像');
+    expect(html).toContain('选择一个模型');
+    expect(html).not.toContain('工作目录');
+    expect(html).not.toContain('外部项目');
+  });
+
+  it('shows the actual authorization state for each project directory', () => {
+    const data = snapshot();
+    data.workspaces = [
+      { id: 'default', name: '工作成果', path: '/default', writable: true },
+      { id: 'read', name: '资料', path: '/read', writable: false },
+      { id: 'revoked', name: '旧项目', path: '/old', writable: true, enabled: false },
+    ];
+    const html = renderToStaticMarkup(
+      createElement(Workspaces, { data, mutate: async () => undefined as never }),
+    );
+    expect(html).toContain('读写');
+    expect(html).toContain('只读');
+    expect(html).toContain('已撤销');
+    expect(html).toContain('管理目录 资料');
+  });
+
+  it('projects review items from associated work and groups while retaining their real sources', () => {
+    const data = snapshot();
+    data.conversations.push(
+      room('group', {
+        kind: 'group',
+        purpose: 'task',
+        sourceConversationId: 'a2',
+        sourceTaskId: 'work',
+      }),
+      room('foreign', { purpose: undefined }),
+    );
+    data.tasks = [task('work', 'a2'), task('member', 'group', 'work'), task('private', 'foreign')];
+    const scope = workCardConversationIds(data, 'home');
+    expect(scope.has('main-part')).toBe(true);
+    expect(scope.has('a1')).toBe(true);
+    expect(scope.has('group')).toBe(true);
+    expect(scope.has('foreign')).toBe(false);
+    const routine = { id: 'routine', conversationId: 'a2' };
+    const unrelated = { id: 'unrelated', conversationId: 'foreign' };
+    expect(conversationWorkItems([routine, unrelated], scope)).toEqual([routine]);
+    const drafts = [
+      { id: 'skill', sourceConversationId: 'group' },
+      { id: 'other', sourceConversationId: 'foreign' },
+    ] as import('../src/domain/work-skills.js').WorkSkillDraft[];
+    expect(conversationSkillDrafts(drafts, scope)).toEqual([drafts[0]]);
+    expect(conversationSkillDrafts(drafts, scope)[0]).toBe(drafts[0]);
+    expect([...workCardConversationIds(data, 'group')]).toEqual(['group']);
+    expect([...workCardConversationIds(data, 'foreign')]).toEqual(['foreign']);
+  });
+
+  it('links work-created task groups from the fixed main conversation', () => {
+    const data = snapshot();
+    data.conversations.push(
+      room('report-group', {
+        name: '报告协作群',
+        kind: 'group',
+        purpose: 'task',
+        sourceConversationId: 'a2',
+        sourceTaskId: 'work',
+      }),
+      room('private-group', {
+        name: '其他私聊群',
+        kind: 'group',
+        purpose: 'task',
+        sourceConversationId: 'foreign',
+      }),
+    );
+    const html = renderToStaticMarkup(
+      createElement(MessageFeed, {
+        data,
+        conversation: home,
+        mutate: async () => undefined as never,
+        onSelectConversation: () => {},
+      }),
+    );
+    expect(html).toContain('报告协作群');
+    expect(html).not.toContain('其他私聊群');
   });
 
   it('groups deliverables by stable work item across execution parts', () => {
@@ -353,6 +591,31 @@ describe('single Chief workspace presentation', () => {
     ]);
     expect(groups[0].project).toBe('报告项目');
     expect(artifactGroups(data, '报告项目')).toHaveLength(2);
+  });
+
+  it('labels work deliverables with their actual project sources', () => {
+    const data = snapshot();
+    data.workspaces = [
+      { id: 'project', name: '报告', path: '/reports', writable: true },
+      { id: 'other', name: '代码', path: '/code', writable: true },
+    ];
+    data.artifacts = ['project', 'other'].map((workspaceId, index) => ({
+      id: `file-${index}`,
+      chiefContextId: 'a',
+      conversationId: 'a2',
+      workspaceId,
+      name: `file-${index}.txt`,
+      mimeType: 'text/plain',
+      path: `/artifacts/${index}`,
+      size: 1,
+      sha256: `${index}`,
+      purpose: 'deliverable',
+      createdAt: time,
+    }));
+    const groups = artifactGroups(data);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].project).toBe('报告 · 代码');
+    expect(artifactGroups(data, '代码')).toHaveLength(1);
   });
 
   it('orders a unified timeline by display sequence through reload and streaming updates', async () => {

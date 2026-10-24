@@ -5,7 +5,6 @@ import type {
   ChiefHistoryReadResult,
   ChiefHistorySearchResult,
 } from '../../../src/domain/chief-history.js';
-import type { ChiefContextView } from '../../../src/domain/chief-work.js';
 import type { Snapshot } from '../../../src/domain/types.js';
 import type { Mutate } from './store.js';
 import { errorMessage, request } from './api.js';
@@ -51,19 +50,8 @@ export function ChiefHistorySearch({
     setRead(undefined);
   }
   async function continueWork(hit: ChiefHistoryHit) {
-    let contextId = hit.contextId;
-    if (contextId) await mutate('chief.contexts.activate', { id: contextId });
-    else {
-      const context = await mutate<ChiefContextView>('chief.contexts.create', {
-        title: hit.title,
-        workspaceId: hit.workspaceId,
-        legacyConversationId: hit.conversationId,
-        legacyTaskId: hit.taskId,
-      });
-      contextId = context.id;
-    }
     composerDrafts.edit(data.chief!.homeConversationId, {
-      targetContextId: contextId,
+      targetContextId: hit.contextId,
       replyToMessageId: hit.messageId,
     });
     onContinue();

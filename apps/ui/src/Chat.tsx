@@ -23,7 +23,7 @@ import { PendingWork } from './local-work/PendingWork.js';
 import { TaskWaitCard } from './local-work/TaskWaitCard.js';
 import { ComputerPanel } from './computer/ComputerPanel.js';
 import { WorkCards } from './work-chat/WorkCards.js';
-import { ChiefWorkSelector } from './ChiefWorkSelector.js';
+import { ChiefWorkProgress } from './ChiefWorkProgress.js';
 import { ChiefHistoryContinue } from './ChiefHistoryContinue.js';
 import {
   chiefConversationIds,
@@ -126,7 +126,6 @@ export function Chat({
           <ChiefHistoryContinue
             data={data}
             conversation={conversation}
-            mutate={mutate}
             onSelectConversation={onSelectConversation}
           />
         </div>
@@ -156,6 +155,7 @@ export function Chat({
             data={data}
             conversation={conversation}
             mutate={mutate}
+            onContinueHistory={() => setView('chat')}
           />
         </div>
       );
@@ -211,7 +211,7 @@ export function Chat({
               sidebarCollapsed={sidebarCollapsed}
               onExpandSidebar={onExpandSidebar}
               onSelectConversation={onSelectConversation}
-              onManage={() => setManageOpen(true)}
+              onManage={home ? undefined : () => setManageOpen(true)}
               onMembers={() => setMembersOpen(true)}
               onBrowser={() => setBrowserOpen((value) => !value)}
               onComputer={() => setComputerOpen(true)}
@@ -244,7 +244,7 @@ export function Chat({
                     <WorkCards
                       key={conversation.id}
                       data={data}
-                      conversationId={execution?.id ?? conversation.id}
+                      conversationId={conversation.id}
                       mutate={mutate}
                       onSelectConversation={onSelectConversation}
                     />
@@ -252,14 +252,16 @@ export function Chat({
                 </div>
                 {home && (
                   <div className="chat-plan-dock px-6 pt-2 max-sm:px-3">
-                    <ChiefWorkSelector
-                      data={data}
-                      mutate={mutate}
-                      onSelectConversation={onSelectConversation}
-                    />
+                    <div className="mx-auto w-full max-w-4xl">
+                      <ChiefWorkProgress
+                        data={data}
+                        onRecords={() => setView('records')}
+                        onSelectConversation={onSelectConversation}
+                      />
+                    </div>
                   </div>
                 )}
-                {plan && (
+                {!home && plan && (
                   <div className="chat-plan-dock px-6 pt-2 max-sm:px-3">
                     <div className="mx-auto w-full max-w-4xl">
                       <TaskPlanCard

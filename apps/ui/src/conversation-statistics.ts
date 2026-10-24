@@ -96,15 +96,24 @@ function contextReading(events: RunEvent[], run?: Run) {
 
 export function conversationStatistics(
   data: Pick<Snapshot, 'tasks' | 'runs' | 'events'> &
-    Partial<Pick<Snapshot, 'connections' | 'chief'>>,
+    Partial<Pick<Snapshot, 'connections' | 'chief' | 'settings'>>,
   conversation: Conversation,
 ) {
+  const main = data.chief?.contexts.find(
+    (context) => context.id === data.chief?.mainContextId || context.kind === 'main',
+  );
+  const chiefTotal =
+    !!data.chief &&
+    (conversation.id === data.chief.homeConversationId ||
+      main?.conversationIds.includes(conversation.id));
   const work = data.chief?.contexts.find((context) => context.conversationId === conversation.id);
   const conversationIds = new Set(work?.conversationIds ?? [conversation.id]);
-  const tasks = data.tasks.filter(
-    (task) =>
-      !['memory-review', 'question-decision'].includes(task.kind ?? '') &&
-      conversationIds.has(task.conversationId),
+  const chiefId = data.settings?.mainBotId ?? conversation.chiefId;
+  const tasks = data.tasks.filter((task) =>
+    chiefTotal
+      ? task.botId === chiefId
+      : !['memory-review', 'question-decision'].includes(task.kind ?? '') &&
+        conversationIds.has(task.conversationId),
   );
   const taskIds = new Set(tasks.map((task) => task.id));
   const runs = byTime(data.runs.filter((run) => taskIds.has(run.taskId)));
@@ -115,8 +124,11 @@ export function conversationStatistics(
   );
   const turns = rootTasks.filter((task) => runs.some((run) => run.taskId === task.id)).length;
   const latestRun = runs.at(-1);
+  const currentConversationId = chiefTotal
+    ? (main?.conversationId ?? conversation.id)
+    : conversation.id;
   const currentTaskIds = new Set(
-    tasks.filter((task) => task.conversationId === conversation.id).map((task) => task.id),
+    tasks.filter((task) => task.conversationId === currentConversationId).map((task) => task.id),
   );
   const contextRun = runs.filter((run) => currentTaskIds.has(run.taskId)).at(-1);
   return {

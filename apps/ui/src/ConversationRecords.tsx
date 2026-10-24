@@ -15,25 +15,28 @@ import {
 import { conversationTaskPlans } from './task-plans.js';
 import { TaskWorkOverview } from './TaskWorkOverview.js';
 import { TaskPlanCard } from './TaskPlanCard.js';
+import { ChiefHistorySearch } from './ChiefHistorySearch.js';
+import { inputClass } from './components.js';
 import { contextRecordTasks, isChiefHome } from './chief-work.js';
 
 export function ConversationRecords({
   data,
   conversation,
   mutate,
+  onContinueHistory,
 }: {
   data: Snapshot;
   conversation: Conversation;
   mutate: Mutate;
+  onContinueHistory?: () => void;
 }) {
   const [selectedId, setSelected] = useState<string>();
   const [memberId, setMember] = useState<string>();
-  const [contextId, setContext] = useState('current');
+  const [contextId, setContext] = useState('all');
+  const [historyQuery, setHistoryQuery] = useState('');
   const home = isChiefHome(data, conversation);
   const contexts = home ? (data.chief?.contexts ?? []) : [];
-  const context = contexts.find(
-    (item) => item.id === (contextId === 'current' ? data.chief?.focusContextId : contextId),
-  );
+  const context = contexts.find((item) => item.id === contextId);
   const allTasks = conversationRecordTasks(data, conversation);
   const tasks = context ? contextRecordTasks(allTasks, context.conversationIds) : allTasks;
   const plans = home
@@ -48,7 +51,7 @@ export function ConversationRecords({
   const scopedData = { ...data, tasks, processes };
   const contextFilter = home && (
     <label className="flex items-center gap-3 text-xs text-slate-500">
-      工作事项
+      工作记录
       <select
         className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
         aria-label="筛选工作记录的事项"
@@ -59,8 +62,7 @@ export function ConversationRecords({
           setMember(undefined);
         }}
       >
-        <option value="current">当前事项</option>
-        <option value="all">全部事项</option>
+        <option value="all">全部工作</option>
         {contexts.map((item) => (
           <option key={item.id} value={item.id}>
             {item.title}
@@ -68,6 +70,27 @@ export function ConversationRecords({
         ))}
       </select>
     </label>
+  );
+  const search = home && (
+    <details className="min-w-0 border-b border-slate-100 pb-4">
+      <summary className="cursor-pointer text-sm text-slate-600">查找历史对话</summary>
+      <div className="mt-3 grid gap-3">
+        <input
+          className={inputClass}
+          aria-label="搜索历史对话"
+          placeholder="输入关键词"
+          value={historyQuery}
+          onChange={(event) => setHistoryQuery(event.target.value)}
+        />
+        <ChiefHistorySearch
+          query={historyQuery}
+          workspaceId=""
+          data={data}
+          mutate={mutate}
+          onContinue={() => onContinueHistory?.()}
+        />
+      </div>
+    </details>
   );
   const history = !!plans.length && (
     <details className="min-w-0 border-b border-slate-100 pb-4">
@@ -84,6 +107,7 @@ export function ConversationRecords({
   if (!member)
     return (
       <div className="mx-auto grid w-full min-w-0 max-w-3xl gap-5">
+        {search}
         {contextFilter}
         {history}
         <Empty compact title="暂无工作记录" description="智能体的任务和操作会显示在这里。" />
@@ -91,6 +115,7 @@ export function ConversationRecords({
     );
   return (
     <div className="mx-auto grid w-full min-w-0 max-w-3xl grid-cols-1 gap-5">
+      {search}
       {contextFilter}
       {history}
       <nav
