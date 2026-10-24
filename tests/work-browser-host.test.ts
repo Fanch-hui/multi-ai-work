@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { runInNewContext } from 'node:vm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BrowserSnapshot } from '../src/domain/work-browser.js';
@@ -372,7 +372,8 @@ describe('dedicated work browser host', () => {
     const event = { preventDefault: vi.fn() };
     partition.emit('will-download', event, item, mocks.views[0].webContents);
     const path = item.setSavePath.mock.calls[0][0];
-    expect(path).toMatch(new RegExp(`^${downloadDirectory}/[a-f0-9-]+-report.pdf$`));
+    expect(dirname(path)).toBe(downloadDirectory);
+    expect(basename(path)).toMatch(/^[a-f0-9-]+-report\.pdf$/);
     item.emit('done', {}, 'completed');
     expect(await request('browser.downloads')).toEqual([
       { path, name: 'report.pdf', mimeType: 'application/pdf', size: 50 },
