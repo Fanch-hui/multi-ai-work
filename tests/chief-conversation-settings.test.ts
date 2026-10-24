@@ -5,8 +5,8 @@ import { eventually, setup } from './core-harness.js';
 
 afterEach(() => configureProviderFetch((input, init) => fetch(input, init)));
 
-describe('主管会话模型与推理设置', () => {
-  it('JSON 请求区分省略管家档位与显式默认，并让新对话继承保存结果', async () => {
+describe('管家统一模型与推理设置', () => {
+  it('JSON 请求区分省略管家档位与显式默认，创建事项保持固定入口', async () => {
     const { core, connection } = await setup(async () => ({ text: '完成' }));
     core.scheduler.pause();
     core.state.storage.put('connections', {
@@ -31,17 +31,18 @@ describe('主管会话模型与推理设置', () => {
     const next = (await core.request('chief.conversations.create', {
       name: '新对话',
     })) as Conversation;
-    expect(next.reasoning).toBeUndefined();
-    expect(core.state.storage.get<Conversation>('conversations', existing.id)?.reasoning).toBe(
-      'high',
-    );
+    expect(next.id).toBe(existing.id);
+    expect(next.id).toBe(core.state.settings().mainConversationId);
+    expect(
+      core.chief.contexts.list().filter((context) => ['原对话', '新对话'].includes(context.title)),
+    ).toHaveLength(2);
     expect((await configure({ reasoning: 'high' })).reasoning).toBe('high');
     await expect(configure({ reasoning: 'low' })).rejects.toThrow('不支持');
     expect(core.state.storage.get<Bot>('bots', initial.id)?.reasoning).toBe('high');
   });
 
   it.each(['custom', 'chatgpt'] as const)(
-    '%s 主对话按连接能力继承推理设置，显式默认覆盖 Chief 档位',
+    '%s 统一设置按连接能力继承推理档位，显式默认保存到 Chief',
     async (provider) => {
       const { core, connection } = await setup(async () => ({ text: '完成' }));
       core.scheduler.pause();
@@ -58,32 +59,44 @@ describe('主管会话模型与推理设置', () => {
         model: 'test',
         reasoning: 'high',
       });
-      const legacy = (await core.request('chief.conversations.create', {
-        name: '旧配置',
+      const homeId = core.state.settings().mainConversationId!;
+      const inheritedLegacy = (await core.request('chief.conversations.update', {
+        id: homeId,
       })) as Conversation;
-      expect(legacy.reasoning).toBe(provider === 'custom' ? 'high' : undefined);
+      expect(inheritedLegacy.reasoning).toBe(provider === 'custom' ? 'high' : undefined);
+      expect(core.state.storage.get<Bot>('bots', chief.id)?.reasoning).toBe(
+        inheritedLegacy.reasoning,
+      );
       core.state.storage.put('connections', {
         ...connection,
         provider,
         status: 'ready',
         models: [{ id: 'test', name: '测试', reasoning: ['high'] }],
       });
-      const inherited = (await core.request('chief.conversations.create', {
-        name: '继承支持的档位',
+      const inherited = (await core.request('chief.conversations.update', {
+        id: homeId,
+        reasoning: 'high',
       })) as Conversation;
       expect(inherited.reasoning).toBe('high');
-      const automatic = (await core.request('chief.conversations.create', {
-        name: '显式默认',
+      const automatic = (await core.request('chief.conversations.update', {
+        id: homeId,
         reasoning: '',
       })) as Conversation;
       expect(automatic.reasoning).toBeUndefined();
+      expect(core.state.storage.get<Bot>('bots', chief.id)?.reasoning).toBeUndefined();
       await expect(
-        core.request('chief.conversations.create', { name: '无效选择', reasoning: 'low' }),
+        core.request('chief.conversations.update', { id: homeId, reasoning: 'low' }),
       ).rejects.toThrow('不支持');
+      await expect(
+        core.request('chief.conversations.create', {
+          name: '事项',
+          reasoning: 'high',
+        }),
+      ).rejects.toThrow('统一设置');
     },
   );
 
-  it('旧主对话可更新独立推理设置，下一轮使用新值，其他对话与 Chief 默认保持独立', async () => {
+  it('统一推理设置在所有事项下一轮生效，原消息与工作目录保留', async () => {
     const observed: (string | undefined)[] = [];
     const { core, connection } = await setup(async (context) => {
       observed.push(context.bot.reasoning);
@@ -100,12 +113,11 @@ describe('主管会话模型与推理设置', () => {
     await core.request('chief.configure', {
       input: { connectionId: connection.id, model: 'test', reasoning: 'low' },
     });
-    const old = (await core.request('chief.conversations.create', {
-      name: '旧对话',
-    })) as Conversation;
-    const other = (await core.request('chief.conversations.create', {
-      name: '其他对话',
-    })) as Conversation;
+    const first = core.chief.contexts.create({ title: '报告 A' });
+    const second = core.chief.contexts.create({ title: '报告 B' });
+    const old = core.state.storage.get<Conversation>('conversations', first.conversationId)!;
+    const other = core.state.storage.get<Conversation>('conversations', second.conversationId)!;
+    core.state.storage.put('conversations', { ...other, model: 'test', reasoning: 'low' });
     const updated = (await core.request('chief.conversations.update', {
       id: old.id,
       reasoning: 'high',
@@ -116,13 +128,14 @@ describe('主管会话模型与推理设置', () => {
       reasoning: 'high',
       workspaceId: old.workspaceId,
     });
-    expect(core.state.storage.get<Conversation>('conversations', other.id)?.reasoning).toBe('low');
-    expect(core.state.storage.get<Bot>('bots', old.chiefId!)?.reasoning).toBe('low');
-    const sent = core.tasks.send({ conversationId: old.id, content: '收到请回复' });
-    await eventually(
-      () => core.state.storage.get<Task>('tasks', sent.taskIds[0])?.status === 'completed',
-    );
-    expect(observed).toEqual(['high']);
+    expect(core.state.storage.get<Bot>('bots', old.chiefId!)?.reasoning).toBe('high');
+    for (const room of [old, other]) {
+      const sent = core.tasks.send({ conversationId: room.id, content: '收到请回复' });
+      await eventually(
+        () => core.state.storage.get<Task>('tasks', sent.taskIds[0])?.status === 'completed',
+      );
+    }
+    expect(observed).toEqual(['high', 'high']);
     const switched = (await core.request('chief.conversations.update', {
       id: old.id,
       model: 'alternate',
@@ -186,7 +199,7 @@ describe('主管会话模型与推理设置', () => {
     expect(activeSetting.reasoning).toBe('high');
     await expect(
       core.request('chief.conversations.update', { id: room.id, model: 'another-model' }),
-    ).rejects.toThrow('先停止');
+    ).rejects.toThrow('结束或停止');
     core.tasks.update(task, { status: 'cancelled' });
     core.state.storage.put('conversations', { ...room, archived: true });
     await expect(
@@ -242,13 +255,15 @@ describe('主管会话模型与推理设置', () => {
     expect(core.state.storage.get<Connection>('connections', connection.id)?.models).toEqual(
       catalog.models,
     );
-    expect(
-      (
-        (await core.request('chief.conversations.create', {
-          name: '所选推理',
-          reasoning: 'high',
-        })) as Conversation
-      ).reasoning,
-    ).toBe('high');
+    const configured = (await core.request('chief.configure', {
+      input: { reasoning: 'high' },
+    })) as Bot;
+    expect(configured.reasoning).toBe('high');
+    const room = (await core.request('chief.conversations.create', {
+      name: '所选推理',
+      reasoning: 'high',
+    })) as Conversation;
+    expect(room.id).toBe(core.state.settings().mainConversationId);
+    expect(core.state.storage.get<Bot>('bots', chief.id)?.reasoning).toBe('high');
   });
 });

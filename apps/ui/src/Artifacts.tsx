@@ -53,6 +53,9 @@ export function ArtifactGroups({
               >
                 {group.title}
               </h2>
+              {group.project && (
+                <p className="mt-1 truncate text-xs text-slate-400">{group.project}</p>
+              )}
             </div>
             <span className="shrink-0 text-xs text-slate-500 tabular-nums">
               {group.artifacts.length} 个成果

@@ -73,7 +73,7 @@ describe('技能与预设备份', () => {
     state.storage.put('preset_installations', installation(packageDirectory));
     const created = await backup.create();
     const manifest = JSON.parse(await readFile(join(created.path, 'manifest.json'), 'utf8'));
-    expect(manifest.version).toBe(2);
+    expect(manifest.version).toBe(3);
     expect(manifest.resources).toHaveLength(2);
     await rm(directory, { recursive: true });
     await rm(packageDirectory, { recursive: true });

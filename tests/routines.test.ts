@@ -48,6 +48,41 @@ describe('例行工作', () => {
     expect(service.request('routines.history', { id: routine.id })).toHaveLength(1);
   });
 
+  it('管家工作切段后例行执行使用当前段并保留指定资料授权', async () => {
+    const { core, service, input, save } = await fixture();
+    const attachment = await importAttachmentBytes(
+      core.state,
+      core.state.settings().mainConversationId!,
+      '例行资料.txt',
+      'text/plain',
+      Buffer.from('例行输入').toString('base64'),
+    );
+    const routine = await save({ ...input, inputArtifactIds: [attachment.id] });
+    const context = core.chief.contexts.list().find((item) => item.routineId === routine.id)!;
+    const next = core.chief.contexts.rotate(
+      context.id,
+      '继续每日整理',
+      [],
+      routine.inputArtifactIds,
+    );
+    expect(next.conversationId).not.toBe(routine.conversationId);
+    const occurrence = service.request('routines.runNow', {
+      id: routine.id,
+      requestId: 'after-context-switch',
+    }) as RoutineOccurrence;
+    expect(core.state.storage.get<Task>('tasks', occurrence.taskId!)).toMatchObject({
+      conversationId: next.conversationId,
+      inputArtifactIds: routine.inputArtifactIds,
+    });
+    expect(service.request('routines.get', { id: routine.id })).toMatchObject({
+      conversationId: next.conversationId,
+    });
+    expect(
+      core.state.storage.metadata<string[]>(`chief-artifact-grants:${next.conversationId}`),
+    ).toEqual(expect.arrayContaining(routine.inputArtifactIds));
+    expect(core.state.settings().mainConversationId).toBe(context.homeConversationId);
+  });
+
   it('运行中的完整任务树阻止重叠，完成后合并补跑最新一次', async () => {
     const { core, service, clock, save } = await fixture();
     const routine = await save();

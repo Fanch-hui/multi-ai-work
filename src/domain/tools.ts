@@ -46,6 +46,11 @@ export interface ProcessTools {
 }
 
 export interface ToolExecutionContext {
+  chiefHistory?(
+    action: 'search' | 'read',
+    args: Record<string, unknown>,
+    context: ToolExecutionContext,
+  ): unknown;
   saveWorkSkill?(args: Record<string, unknown>, context: ToolExecutionContext): Promise<unknown>;
   connectorDrafts?(
     action: 'create' | 'send' | 'get',

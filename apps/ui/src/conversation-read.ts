@@ -1,10 +1,15 @@
 import type { Message } from '../../../src/domain/types.js';
 
-export function readableBotMessageIds(messages: Message[], conversationId: string): string[] {
+export function readableBotMessageIds(
+  messages: Message[],
+  conversationId: string,
+  timeline = false,
+): string[] {
   return messages
     .filter(
       (message) =>
-        message.conversationId === conversationId &&
+        (message.conversationId === conversationId ||
+          (timeline && message.chiefTimelineSequence !== undefined)) &&
         message.authorType === 'bot' &&
         (message.content.trim().length > 0 || message.artifactIds.length > 0),
     )

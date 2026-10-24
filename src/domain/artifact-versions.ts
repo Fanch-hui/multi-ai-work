@@ -9,7 +9,11 @@ export function artifactVersionKey(
   let producer = ['artifact', artifact.id];
   if (botId) producer = ['bot', botId];
   else if (artifact.taskId) producer = ['task', artifact.taskId];
-  return JSON.stringify([artifact.conversationId, producer, artifact.workingPath || artifact.id]);
+  return JSON.stringify([
+    artifact.chiefContextId ?? artifact.conversationId,
+    producer,
+    artifact.workingPath || artifact.id,
+  ]);
 }
 
 export function latestArtifactVersions(

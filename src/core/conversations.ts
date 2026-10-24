@@ -7,6 +7,7 @@ import { TaskService, terminal } from './tasks.js';
 import { Scheduler } from './scheduler.js';
 import { artifactRequirement, taskRequirement } from './task-requirements.js';
 import { taskPlanRoot } from './task-plan-view.js';
+import { removeChiefConversation } from './chief-conversation-cleanup.js';
 
 export class ConversationService {
   constructor(
@@ -34,6 +35,7 @@ export class ConversationService {
 
   async archive(conversationId: string, archived: boolean): Promise<Conversation> {
     const room = this.room(conversationId);
+    if (archived) this.requireManageable(room);
     if (!!room.archived === archived) return room;
     return this.modify(room, async () => {
       if (archived) await this.cancelTasks(room.id);
@@ -46,10 +48,12 @@ export class ConversationService {
 
   async delete(conversationId: string): Promise<void> {
     const room = this.room(conversationId);
+    this.requireManageable(room);
     await this.modify(room, async () => {
       await this.cancelTasks(room.id);
       await this.state.artifactContents.retainConversation(room.id);
       this.state.storage.transaction(() => {
+        removeChiefConversation(this.state, room.id);
         this.deleteRecords(room.id);
         this.state.storage.delete('conversations', room.id);
         this.state.syncMainTeam();
@@ -88,6 +92,11 @@ export class ConversationService {
       this.state.storage.get<Conversation>('conversations', conversationId),
       '对话不存在',
     );
+  }
+
+  private requireManageable(room: Conversation) {
+    if (room.chiefRole === 'home' || room.id === this.state.settings().mainConversationId)
+      throw new Error('管家主入口需要保留，请在历史中管理其他对话。');
   }
 
   private async modify<T>(room: Conversation, action: () => Promise<T>): Promise<T> {

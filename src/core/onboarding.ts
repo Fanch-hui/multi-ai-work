@@ -31,7 +31,11 @@ export function completeOnboarding(state: State, team: TeamService, input: unkno
   const result = s.transaction(() => {
     const savedId = s.metadata<string>('onboarding-conversation');
     const saved = savedId && s.get<Conversation>('conversations', savedId);
-    if (saved && state.settings().onboardingStatus === 'completed') return saved;
+    if (saved && state.settings().onboardingStatus === 'completed')
+      return required(
+        s.get<Conversation>('conversations', state.settings().mainConversationId!),
+        '主对话不存在',
+      );
     const fields = z
       .object({
         name: z.string().trim().min(1).max(120),
@@ -64,29 +68,24 @@ export function completeOnboarding(state: State, team: TeamService, input: unkno
       s.get<Conversation>('conversations', state.settings().mainConversationId!),
       '主对话不存在',
     );
-    const room = s.messages(current.id).length
-      ? team.createChiefConversation(chief.name, {
-          workspaceId,
-          model: chief.model,
-          reasoning: chief.reasoning,
-        })
-      : s.put('conversations', {
-          ...current,
-          name: chief.name,
-          workspaceId,
-          model: chief.model,
-          reasoning: chief.reasoning,
-        });
-    s.appendMessage({
-      id: `welcome:${room.id}`,
-      conversationId: room.id,
-      authorType: 'bot',
-      authorBotId: chief.id,
-      content: `你好，我是${chief.name}，你的专属 AI 管家。\n\n你可以直接告诉我想完成什么，或附上一份资料。我会帮你理清目标、推进工作；需要多人协作时，组织合适的智能体，并把成果带回这里。\n\n试着说：“帮我整理这份资料，并给出下一步建议。” 你也可以先告诉我你的工作习惯。团队成员在侧栏的“智能体团队”中管理，完成的成果可以在“库”中找到。\n\n今天想先从哪件事开始？`,
-      artifactIds: [],
-      status: 'committed',
-      createdAt: new Date().toISOString(),
+    const room = s.put('conversations', {
+      ...current,
+      name: chief.name,
+      workspaceId,
+      model: chief.model,
+      reasoning: chief.reasoning,
     });
+    if (!s.getMessage(`welcome:${room.id}`))
+      s.appendMessage({
+        id: `welcome:${room.id}`,
+        conversationId: room.id,
+        authorType: 'bot',
+        authorBotId: chief.id,
+        content: `你好，我是${chief.name}，你的专属 AI 管家。\n\n你可以直接告诉我想完成什么，或附上一份资料。我会帮你理清目标、推进工作；需要多人协作时，组织合适的智能体，并把成果带回这里。\n\n试着说：“帮我整理这份资料，并给出下一步建议。” 你也可以先告诉我你的工作习惯。团队成员在侧栏的“我的团队”中管理，完成的成果可以在“库”中找到。\n\n今天想先从哪件事开始？`,
+        artifactIds: [],
+        status: 'committed',
+        createdAt: new Date().toISOString(),
+      });
     s.setMetadata('onboarding-conversation', room.id);
     s.setMetadata('settings', {
       ...state.settings(),

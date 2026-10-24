@@ -25,6 +25,7 @@ export interface SnapshotView {
   history?: { conversationId: string; nextBefore?: number };
 }
 export interface SnapshotDelta {
+  chief?: import('./chief-work.js').ChiefSnapshot;
   cursor: SnapshotCursor;
   reset?: boolean;
   messages: Message[];

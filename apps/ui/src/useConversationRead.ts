@@ -45,7 +45,7 @@ export function useConversationRead(
       return;
     const id = conversation.id;
     void receipts
-      .mark(id, readableBotMessageIds(messages, id), (params) =>
+      .mark(id, readableBotMessageIds(messages, id, conversation.chiefRole === 'home'), (params) =>
         mutate('conversations.read', params),
       )
       .then((changed) => {

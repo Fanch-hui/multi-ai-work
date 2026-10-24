@@ -1,5 +1,33 @@
 import type { Artifact, Conversation, Task } from '../domain/types.js';
+import type { ChiefContextPart, ChiefWorkContext } from '../domain/chief-work.js';
 import type { State } from './state.js';
+
+function chiefOwnsTask(state: State, room: Conversation, botId: string, task: Task): boolean {
+  if (
+    botId !== state.settings().mainBotId ||
+    room.purpose !== 'chief' ||
+    room.kind !== 'private' ||
+    task.botId !== botId
+  )
+    return false;
+  if (task.conversationId === room.id) return true;
+  const s = state.storage;
+  const source = s.get<Conversation>('conversations', task.conversationId);
+  if (source?.purpose !== 'chief' || source.kind !== 'private' || source.chiefId !== botId)
+    return false;
+  if ((s.metadata<string[]>(`chief-task-grants:${room.id}`) ?? []).includes(task.id)) return true;
+  const part = s.firstByField<ChiefContextPart>('chief_parts', 'conversationId', room.id);
+  const context = part && s.get<ChiefWorkContext>('chief_contexts', part.contextId);
+  if (!context || context.homeConversationId !== state.settings().mainConversationId) return false;
+  if (context.legacyTaskId === task.id && context.legacyConversationId === task.conversationId)
+    return true;
+  const sourcePart = s.firstByField<ChiefContextPart>(
+    'chief_parts',
+    'conversationId',
+    task.conversationId,
+  );
+  return sourcePart?.contextId === context.id;
+}
 
 export function scopedTask(
   state: State,
@@ -11,14 +39,15 @@ export function scopedTask(
     task = s.get<Task>('tasks', taskId);
   if (!task) return undefined;
   if (task.conversationId === room.id) return task;
+  if (chiefOwnsTask(state, room, botId, task)) return task;
   const group = s.get<Conversation>('conversations', task.conversationId);
   const source = group?.sourceTaskId ? s.get<Task>('tasks', group.sourceTaskId) : undefined;
   return botId === state.settings().mainBotId &&
     room.purpose === 'chief' &&
     group?.purpose === 'task' &&
-    group.sourceConversationId === room.id &&
-    source?.conversationId === room.id &&
-    source.botId === botId
+    !!source &&
+    source.conversationId === group.sourceConversationId &&
+    chiefOwnsTask(state, room, botId, source)
     ? task
     : undefined;
 }
@@ -31,19 +60,43 @@ export function returnTaskArtifacts(
   artifactIds: string[],
 ) {
   const s = state.storage;
+  if (task.conversationId !== room.id && chiefOwnsTask(state, room, botId, task)) {
+    const valid = artifactIds.filter((id) => {
+      const artifact = s.get<Artifact>('artifacts', id);
+      const owner = artifact?.taskId ? s.get<Task>('tasks', artifact.taskId) : undefined;
+      if (!owner || artifact?.conversationId !== owner.conversationId) return false;
+      if (owner.id === task.id) return true;
+      if (owner.parentId !== task.id) return false;
+      if (owner.conversationId === task.conversationId) return true;
+      const group = s.get<Conversation>('conversations', owner.conversationId);
+      return group?.sourceTaskId === task.id && group.sourceConversationId === task.conversationId;
+    });
+    const key = `chief-artifact-grants:${room.id}`;
+    s.setMetadata(key, [...new Set([...(s.metadata<string[]>(key) ?? []), ...valid])]);
+    return;
+  }
   const group = s.get<Conversation>('conversations', task.conversationId);
   if (
     botId !== state.settings().mainBotId ||
     room.purpose !== 'chief' ||
-    group?.sourceConversationId !== room.id ||
+    !group?.sourceConversationId ||
     !group.sourceTaskId
   )
     return;
   const source = s.get<Task>('tasks', group.sourceTaskId);
-  if (!source || source.conversationId !== room.id || source.botId !== botId) return;
+  if (
+    !source ||
+    source.conversationId !== group.sourceConversationId ||
+    !chiefOwnsTask(state, room, botId, source)
+  )
+    return;
   const valid = artifactIds.filter(
     (artifactId) => s.get<Artifact>('artifacts', artifactId)?.conversationId === group.id,
   );
   const key = `returned-artifacts:${source.id}`;
   s.setMetadata(key, [...new Set([...(s.metadata<string[]>(key) ?? []), ...valid])]);
+  if (source.conversationId !== room.id) {
+    const grantKey = `chief-artifact-grants:${room.id}`;
+    s.setMetadata(grantKey, [...new Set([...(s.metadata<string[]>(grantKey) ?? []), ...valid])]);
+  }
 }

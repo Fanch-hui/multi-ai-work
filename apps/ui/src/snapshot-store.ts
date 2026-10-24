@@ -1,4 +1,5 @@
 import type { Message, RunEvent, Snapshot } from '../../../src/domain/types.js';
+import { messageOrder } from './chief-work.js';
 import type {
   MessagePage,
   SnapshotCursor,
@@ -25,7 +26,7 @@ export function upsert<T extends { id: string }>(items: T[], updates: T[]): T[] 
   return [...values.values()];
 }
 const compareMessages = (a: Message, b: Message) =>
-  a.sequence - b.sequence || a.createdAt.localeCompare(b.createdAt);
+  messageOrder(a) - messageOrder(b) || a.createdAt.localeCompare(b.createdAt);
 function orderedMessages(items: Message[], updates: Message[]) {
   if (!updates.length) return items;
   const merged = upsert(items, updates);
@@ -124,7 +125,8 @@ export class TeamSnapshotStore {
     delta?: SnapshotDelta,
   ) {
     const sameEpoch = !delta || delta.cursor.epoch === this.cursor?.epoch;
-    const from = sameEpoch ? this.value.data?.messages[0]?.sequence : undefined;
+    const first = this.value.data?.messages[0];
+    const from = sameEpoch && first ? messageOrder(first) : undefined;
     const result = await this.request<SnapshotView>('state.view', { conversationId: room, from });
     if (generation !== this.selectionGeneration) return;
     this.cursor = result.cursor;
@@ -139,6 +141,7 @@ export class TeamSnapshotStore {
   private applyDelta(delta: SnapshotDelta) {
     const data = this.value.data!;
     const updates = {
+      chief: delta.chief ?? data.chief,
       messages: orderedMessages(data.messages, delta.messages),
       tasks: upsert(data.tasks, delta.tasks),
       runs: upsert(data.runs, delta.runs),

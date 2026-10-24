@@ -18,6 +18,10 @@ import { taskRequirement } from './task-requirements.js';
 import { memoryGuidance } from './memory-policy.js';
 import { runtimeContextMessage } from './run-runtime-context.js';
 import { taskOperationReceipts } from './task-operation-receipts.js';
+import { isChiefJob } from './chief-jobs.js';
+import { chiefPartPrompt } from './chief-contexts.js';
+import type { ChiefModelJob } from '../domain/chief-work.js';
+import { required } from './errors.js';
 
 function stableMemorySort(entries: readonly MemoryEntry[]): MemoryEntry[] {
   return [...entries].sort(
@@ -117,6 +121,13 @@ export function runPrompt(
   memoryUpdate?: string,
   managed = false,
 ) {
+  if (isChiefJob(task)) {
+    const job = required(
+      state.storage.metadata<ChiefModelJob>(`chief-model-job:${task.id}`),
+      '管家后台请求不存在',
+    );
+    return { ...job, contextInstructions: job.instructions };
+  }
   if (task.kind === 'question-decision') {
     const result = questionDecisionPrompt(state, task);
     return { ...result, contextInstructions: result.instructions };
@@ -149,7 +160,12 @@ export function runPrompt(
     nativeKnowledge,
     compatibilityKnowledge,
   );
-  const prompt = taskPrompt(state, task, bot, room, delta, memoryUpdate, arrangement.prompt);
+  const prompt = [
+    chiefPartPrompt(state, room),
+    taskPrompt(state, task, bot, room, delta, memoryUpdate, arrangement.prompt),
+  ]
+    .filter(Boolean)
+    .join('\n\n');
   const instructions = managed
     ? [
         bot.instructions,

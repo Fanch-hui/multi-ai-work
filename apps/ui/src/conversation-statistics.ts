@@ -95,13 +95,16 @@ function contextReading(events: RunEvent[], run?: Run) {
 }
 
 export function conversationStatistics(
-  data: Pick<Snapshot, 'tasks' | 'runs' | 'events'> & Partial<Pick<Snapshot, 'connections'>>,
+  data: Pick<Snapshot, 'tasks' | 'runs' | 'events'> &
+    Partial<Pick<Snapshot, 'connections' | 'chief'>>,
   conversation: Conversation,
 ) {
+  const work = data.chief?.contexts.find((context) => context.conversationId === conversation.id);
+  const conversationIds = new Set(work?.conversationIds ?? [conversation.id]);
   const tasks = data.tasks.filter(
     (task) =>
       !['memory-review', 'question-decision'].includes(task.kind ?? '') &&
-      task.conversationId === conversation.id,
+      conversationIds.has(task.conversationId),
   );
   const taskIds = new Set(tasks.map((task) => task.id));
   const runs = byTime(data.runs.filter((run) => taskIds.has(run.taskId)));
@@ -112,14 +115,18 @@ export function conversationStatistics(
   );
   const turns = rootTasks.filter((task) => runs.some((run) => run.taskId === task.id)).length;
   const latestRun = runs.at(-1);
+  const currentTaskIds = new Set(
+    tasks.filter((task) => task.conversationId === conversation.id).map((task) => task.id),
+  );
+  const contextRun = runs.filter((run) => currentTaskIds.has(run.taskId)).at(-1);
   return {
     turns,
     runs: runs.length,
     latestRun,
     ...requestStatistics(runs, events),
     usage: aggregateUsage(runs, events),
-    context: contextReading(events, latestRun),
-    missingReason: missingReason(latestRun, data.connections),
+    context: contextReading(events, contextRun),
+    missingReason: missingReason(contextRun, data.connections),
     ...rateStatistics(runs, data.connections),
   };
 }

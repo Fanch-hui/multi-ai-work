@@ -1,9 +1,10 @@
 import { composerDrafts } from './composer-drafts.js';
-import { useLayoutEffect, useMemo, useRef } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ArrowUpRight } from 'lucide-react';
-import type { Conversation, Snapshot, Task } from '../../../src/domain/types.js';
+import type { Conversation, Message, Snapshot, Task } from '../../../src/domain/types.js';
+import type { ChiefContextView } from '../../../src/domain/chief-work.js';
 import type { ConversationHistory, Mutate } from './store.js';
-import { Badge, cn, timeLabel } from './components.js';
+import { Badge, ErrorNote, cn, timeLabel } from './components.js';
 import Avatar, { UserAvatar } from './Avatar.js';
 import { ConversationAvatar } from './ConversationAvatar.js';
 import { Markdown } from './Markdown.js';
@@ -15,6 +16,10 @@ import { conversationMessages, recoveringTasks, workingMembers } from './message
 import { useScrollFollow } from './useScrollFollow.js';
 import { taskRecovery } from './task-activity.js';
 import { messageInputFeedbackIndex } from './task-input-feedback.js';
+import { chiefConversationIds, isChiefHistory, isChiefHome } from './chief-work.js';
+import { conversationRecordTasks } from './conversation-records.js';
+import { ChiefInputCards } from './ChiefInputCards.js';
+import { errorMessage } from './api.js';
 export function MessageFeed({
   data,
   history,
@@ -28,10 +33,34 @@ export function MessageFeed({
   mutate: Mutate;
   onSelectConversation: (id: string) => void;
 }) {
+  const [replying, setReplying] = useState(false);
+  const [replyError, setReplyError] = useState('');
   const { scrollRef, contentRef, pauseFollow } = useScrollFollow(conversation.id);
+  async function reply(message: Message) {
+    if (!isChiefHistory(data, conversation)) {
+      composerDrafts.edit(conversation.id, { replyToMessageId: message.id });
+      return;
+    }
+    setReplying(true);
+    setReplyError('');
+    try {
+      const context = await mutate<ChiefContextView>('chief.contexts.create', {
+        legacyConversationId: conversation.id,
+        title: conversation.name,
+        workspaceId: conversation.workspaceId,
+      });
+      const home = data.chief!.homeConversationId;
+      composerDrafts.edit(home, { replyToMessageId: message.id, targetContextId: context.id });
+      onSelectConversation(home);
+    } catch (cause) {
+      setReplyError(errorMessage(cause));
+    } finally {
+      setReplying(false);
+    }
+  }
   const messages = useMemo(
     () => conversationMessages(data, conversation),
-    [data.messages, conversation.id, conversation.kind],
+    [data.messages, data.chief, conversation.id, conversation.kind],
   );
   const anchor = useRef<{ messageId: string; offset: number; first?: string } | undefined>(
     undefined,
@@ -75,10 +104,20 @@ export function MessageFeed({
     return index;
   }, [data.tasks]);
   const feedback = useMemo(
-    () => messageInputFeedbackIndex(data, conversation.id),
-    [data.bots, data.tasks, data.taskInputs, data.messages, conversation.id],
+    () =>
+      new Map(
+        [...chiefConversationIds(data, conversation)].flatMap((id) => [
+          ...messageInputFeedbackIndex(data, id),
+        ]),
+      ),
+    [data.bots, data.tasks, data.taskInputs, data.messages, data.chief, conversation.id],
   );
   const main = conversation.purpose === 'chief';
+  const home = isChiefHome(data, conversation);
+  const conversationIds = useMemo(
+    () => chiefConversationIds(data, conversation),
+    [data.chief, conversation.id],
+  );
   const groups = useMemo(
     () =>
       main
@@ -86,35 +125,30 @@ export function MessageFeed({
             (item) =>
               item.purpose === 'task' &&
               !item.archived &&
-              item.sourceConversationId === conversation.id,
+              conversationIds.has(item.sourceConversationId ?? ''),
           )
         : [],
-    [data.conversations, main, conversation.id],
+    [data.conversations, main, conversationIds],
   );
   const taskIds = useMemo(
     () =>
       new Set(
-        data.tasks
-          .filter(
-            (item) =>
-              item.kind !== 'memory-review' &&
-              item.kind !== 'context-compaction' &&
-              item.conversationId === conversation.id,
-          )
+        conversationRecordTasks(data, conversation)
+          .filter((item) => !item.kind)
           .map((item) => item.id),
       ),
-    [data.tasks, conversation.id],
+    [data.tasks, data.conversations, data.chief, conversation.id],
   );
   const recovery = useMemo(
     () => recoveringTasks(data, conversation, messages),
-    [data.tasks, messages, conversation.id, conversation.kind],
+    [data.tasks, data.chief, messages, conversation.id, conversation.kind],
   );
   const working = useMemo(
     () => [
       ...workingMembers(data, conversation, messages),
       ...recovery.map((task) => ({ task, run: undefined })),
     ],
-    [data.tasks, data.runs, messages, conversation.id, recovery],
+    [data.tasks, data.runs, data.chief, messages, conversation.id, recovery],
   );
   const approvals = useMemo(
     () => data.approvals.filter((item) => taskIds.has(item.taskId) && item.status === 'pending'),
@@ -123,9 +157,11 @@ export function MessageFeed({
   const questions = useMemo(
     () =>
       (data.questions ?? []).filter(
-        (item) => item.conversationId === conversation.id && item.status === 'pending',
+        (item) =>
+          (conversationIds.has(item.conversationId) || (home && taskIds.has(item.taskId))) &&
+          item.status === 'pending',
       ),
-    [data.questions, conversation.id],
+    [data.questions, taskIds, conversationIds, home],
   );
   const getEmptyTitle = () => {
     if (main) {
@@ -177,6 +213,7 @@ export function MessageFeed({
           const continuation =
             message.authorType === 'bot' &&
             previous?.authorType === 'bot' &&
+            previous.chiefContextId === message.chiefContextId &&
             previous.authorBotId === message.authorBotId &&
             previous.runId === message.runId;
           const inputFeedback = user ? (feedback.get(message.id) ?? []) : [];
@@ -197,6 +234,16 @@ export function MessageFeed({
                   <Avatar bot={bot} name={bot?.name || '系统'} className="size-8" />
                 ))}
               <div className={cn('min-w-0', user ? 'max-w-[85%]' : 'flex-1')}>
+                {home &&
+                  message.chiefContextId &&
+                  message.chiefContextId !== previous?.chiefContextId && (
+                    <p className="mb-2 text-xs text-slate-400">
+                      {
+                        data.chief?.contexts.find((item) => item.id === message.chiefContextId)
+                          ?.title
+                      }
+                    </p>
+                  )}
                 {!user && (!continuation || message.status !== 'committed') && (
                   <div className="mb-2 flex items-center gap-2">
                     {!main && (
@@ -257,18 +304,22 @@ export function MessageFeed({
                   <button
                     type="button"
                     className="mt-1 text-xs text-slate-400 hover:text-blue-600"
-                    onClick={() =>
-                      composerDrafts.edit(conversation.id, { replyToMessageId: message.id })
-                    }
+                    disabled={replying}
+                    onClick={() => void reply(message)}
                   >
-                    回复此消息
+                    {isChiefHistory(data, conversation) ? '在管家回复此消息' : '回复此消息'}
                   </button>
                 )}
                 {message.artifactIds.length > 0 && (
                   <MessageArtifacts
                     ids={message.artifactIds}
                     user={user}
-                    conversation={conversation}
+                    conversation={
+                      home
+                        ? (data.conversations.find((room) => room.id === message.conversationId) ??
+                          conversation)
+                        : conversation
+                    }
                     data={data}
                     mutate={mutate}
                   />
@@ -291,6 +342,7 @@ export function MessageFeed({
             </article>
           );
         })}
+        <ErrorNote error={replyError} />
         {!!working.length && (
           <div
             className="grid gap-3"
@@ -300,12 +352,21 @@ export function MessageFeed({
               const bot = bots.get(task.botId);
               const label = agentActivity(task, run, data.events, false, data.processes);
               return (
-                <div className="flex min-w-0 items-center gap-3" key={task.botId}>
+                <div className="flex min-w-0 items-center gap-3" key={task.id}>
                   <Avatar bot={bot} name={bot?.name || '成员'} className="size-8" />
                   <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs">
                     <span className="truncate font-medium text-slate-600">
                       {bot?.name || '智能体'}
                     </span>
+                    {home && (
+                      <span className="truncate text-slate-400">
+                        {
+                          data.chief?.contexts.find((context) =>
+                            context.conversationIds.includes(task.conversationId),
+                          )?.title
+                        }
+                      </span>
+                    )}
                     <AgentActivity label={label} animated={!taskRecovery(task)} />
                   </div>
                 </div>
@@ -316,6 +377,7 @@ export function MessageFeed({
         {approvals.map((item) => (
           <ApprovalCard key={item.id} approval={item} data={data} mutate={mutate} />
         ))}
+        {home && <ChiefInputCards data={data} mutate={mutate} />}
         {!!questions.length && (
           <div className="grid min-w-0 grid-cols-1 gap-3">
             {questions.map((item) => (

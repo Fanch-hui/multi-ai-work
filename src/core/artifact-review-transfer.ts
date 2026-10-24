@@ -68,6 +68,7 @@ export function transferReviewInputs(state: State, room: Conversation, artifacts
         ...state.artifactObjects.publish(inputId, artifact.name, bytes),
         id: inputId,
         conversationId: room.id,
+        chiefContextId: room.chiefContextId,
         contentSource: undefined,
         seriesId,
         source: 'review-transfer',

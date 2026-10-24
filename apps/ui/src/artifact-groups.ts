@@ -8,6 +8,7 @@ import {
 export interface ArtifactGroup {
   id: string;
   title: string;
+  project?: string;
   updatedAt: string;
   artifacts: Artifact[];
   history?: Map<string, Artifact[]>;
@@ -16,12 +17,14 @@ export interface ArtifactGroup {
 interface GroupOrigin {
   id: string;
   title: string;
+  workspaceId?: string;
 }
 
 function groupOrigin(
   artifact: Artifact,
   tasks: Map<string, Task>,
   conversations: Map<string, Conversation>,
+  chief?: Snapshot['chief'],
 ): GroupOrigin {
   let task = artifact.taskId ? tasks.get(artifact.taskId) : undefined;
   let conversationId = task?.conversationId ?? artifact.conversationId;
@@ -49,8 +52,12 @@ function groupOrigin(
     conversationId = task.conversationId;
     room = conversations.get(conversationId);
   }
+  const context = chief?.contexts.find((item) => item.conversationIds.includes(conversationId));
+  if (context)
+    return { id: `work:${context.id}`, title: context.title, workspaceId: context.workspaceId };
   return {
     id: `conversation:${conversationId}`,
+    workspaceId: room?.workspaceId,
     title:
       room?.name ||
       originalRoom?.name ||
@@ -69,7 +76,8 @@ export function artifactProducer(
 }
 
 export function artifactGroups(
-  data: Pick<Snapshot, 'artifacts' | 'tasks' | 'conversations'> & Partial<Pick<Snapshot, 'bots'>>,
+  data: Pick<Snapshot, 'artifacts' | 'tasks' | 'conversations'> &
+    Partial<Pick<Snapshot, 'bots' | 'chief' | 'workspaces'>>,
   query = '',
 ): ArtifactGroup[] {
   const tasks = new Map(data.tasks.map((task) => [task.id, task]));
@@ -87,10 +95,16 @@ export function artifactGroups(
   }
   const search = query.trim().toLocaleLowerCase();
   for (const artifact of current) {
-    const { id, title } = groupOrigin(artifact, tasks, conversations);
+    const { id, title, workspaceId } = groupOrigin(artifact, tasks, conversations, data.chief);
     let group = groups.get(id);
     if (!group) {
-      group = { id, title, updatedAt: artifact.createdAt, artifacts: [] };
+      group = {
+        id,
+        title,
+        project: data.workspaces?.find((item) => item.id === workspaceId)?.name,
+        updatedAt: artifact.createdAt,
+        artifacts: [],
+      };
       groups.set(id, group);
     }
     group.artifacts.push(artifact);
@@ -113,7 +127,11 @@ export function artifactGroups(
   }
   const matchingGroups: ArtifactGroup[] = [];
   for (const group of groups.values()) {
-    if (search && !group.title.toLocaleLowerCase().includes(search)) {
+    if (
+      search &&
+      !group.title.toLocaleLowerCase().includes(search) &&
+      !group.project?.toLocaleLowerCase().includes(search)
+    ) {
       group.artifacts = group.artifacts.filter(
         (artifact) =>
           artifact.name.toLocaleLowerCase().includes(search) ||

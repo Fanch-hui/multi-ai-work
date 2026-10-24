@@ -331,7 +331,10 @@ describe('versioned UI snapshots', () => {
       id: room.id,
       limit: 1,
     })) as MessagePage;
-    expect(page.messages.map((item) => item.id)).toEqual(['whitespace']);
+    expect(page.messages.map((item) => item.id)).toEqual(['draft']);
+    expect(s.messagePage(room.id, undefined, 1).messages.map((item) => item.id)).toEqual([
+      'whitespace',
+    ]);
     const view = (await core.request('state.view', { conversationId: room.id })) as SnapshotView;
     expect(
       view.snapshot.bots.find((item) => item.id === core.state.settings().mainBotId)?.instructions,

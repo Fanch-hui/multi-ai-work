@@ -23,6 +23,14 @@ import { PendingWork } from './local-work/PendingWork.js';
 import { TaskWaitCard } from './local-work/TaskWaitCard.js';
 import { ComputerPanel } from './computer/ComputerPanel.js';
 import { WorkCards } from './work-chat/WorkCards.js';
+import { ChiefWorkSelector } from './ChiefWorkSelector.js';
+import { ChiefHistoryContinue } from './ChiefHistoryContinue.js';
+import {
+  chiefConversationIds,
+  focusedConversation,
+  isChiefHome,
+  isChiefHistory,
+} from './chief-work.js';
 export function Chat({
   data,
   conversation,
@@ -52,6 +60,12 @@ export function Chat({
   const [browserOpen, setBrowserOpen] = useState(false);
   const [pendingOpen, setPendingOpen] = useState(false);
   const [computerOpen, setComputerOpen] = useState(false);
+  const home = !!conversation && isChiefHome(data, conversation);
+  const historyOnly = !!conversation && isChiefHistory(data, conversation);
+  const execution = conversation ? focusedConversation(data, conversation) : undefined;
+  const workConversations = conversation
+    ? chiefConversationIds(data, conversation)
+    : new Set<string>();
   useEffect(() => {
     if (browserRequest) setBrowserOpen(true);
   }, [browserRequest]);
@@ -62,7 +76,7 @@ export function Chat({
         wait.status === 'pending' &&
         wait.kind !== 'browser-resource' &&
         wait.kind !== 'computer-resource' &&
-        wait.conversationId === conversation?.id,
+        workConversations.has(wait.conversationId),
     ) ?? [];
   const pendingWork =
     data.questions.filter((question) => question.status === 'pending').length +
@@ -79,17 +93,17 @@ export function Chat({
   const configured =
     !!connection &&
     (!main || isChiefProvider(connection.provider)) &&
-    !!(conversation?.model || chief?.model);
+    !!((!home && conversation?.model) || chief?.model);
   useEffect(() => {
     setNotificationConversation(
-      view === 'chat' && (!main || configured) ? conversation?.id : undefined,
+      view === 'chat' && (!main || configured || historyOnly) ? conversation?.id : undefined,
     );
     return () => setNotificationConversation();
-  }, [conversation?.id, view, main, configured]);
+  }, [conversation?.id, view, main, configured, historyOnly]);
   const reading = useConversationRead(
     conversation,
     data.messages,
-    view === 'chat' && (!main || configured),
+    view === 'chat' && (!main || configured || historyOnly),
     mutate,
   );
   const tasks = conversation ? conversationRecordTasks(data, conversation) : [];
@@ -103,8 +117,36 @@ export function Chat({
         <Empty title="准备你的团队" action={<Button onClick={configure}>连接与设置</Button>} />
       </div>
     );
-  const overlap = view === 'chat' && (!main || configured);
+  const overlap = view === 'chat' && (!main || configured || historyOnly);
   const plan = overlap ? currentTaskPlan(data, conversation) : undefined;
+  const renderComposer = () => {
+    if (historyOnly)
+      return (
+        <div className="px-6 max-sm:px-3">
+          <ChiefHistoryContinue
+            data={data}
+            conversation={conversation}
+            mutate={mutate}
+            onSelectConversation={onSelectConversation}
+          />
+        </div>
+      );
+    if (conversation.archived)
+      return (
+        <div className="px-6 py-4 text-center text-xs text-slate-400">
+          此会话已归档。恢复后可以继续对话。
+        </div>
+      );
+    return (
+      <Composer
+        key={conversation.id}
+        data={data}
+        conversation={conversation}
+        mutate={mutate}
+        configureChief={main ? configureChief : undefined}
+      />
+    );
+  };
   const renderConversation = () => {
     if (view === 'records') {
       return (
@@ -118,7 +160,7 @@ export function Chat({
         </div>
       );
     }
-    if (main && !configured) {
+    if (main && !configured && !historyOnly) {
       return (
         <div className="chat-content flex items-center justify-center px-6">
           <Empty
@@ -160,7 +202,7 @@ export function Chat({
           overlap={overlap}
           header={
             <ChatHeader
-              conversation={conversation}
+              conversation={home && chief ? { ...conversation, name: chief.name } : conversation}
               bots={data.bots}
               view={view}
               pending={pending}
@@ -202,12 +244,21 @@ export function Chat({
                     <WorkCards
                       key={conversation.id}
                       data={data}
-                      conversationId={conversation.id}
+                      conversationId={execution?.id ?? conversation.id}
                       mutate={mutate}
                       onSelectConversation={onSelectConversation}
                     />
                   </div>
                 </div>
+                {home && (
+                  <div className="chat-plan-dock px-6 pt-2 max-sm:px-3">
+                    <ChiefWorkSelector
+                      data={data}
+                      mutate={mutate}
+                      onSelectConversation={onSelectConversation}
+                    />
+                  </div>
+                )}
                 {plan && (
                   <div className="chat-plan-dock px-6 pt-2 max-sm:px-3">
                     <div className="mx-auto w-full max-w-4xl">
@@ -220,19 +271,7 @@ export function Chat({
                     </div>
                   </div>
                 )}
-                {conversation.archived ? (
-                  <div className="px-6 py-4 text-center text-xs text-slate-400">
-                    此会话已归档。恢复后可以继续对话。
-                  </div>
-                ) : (
-                  <Composer
-                    key={conversation.id}
-                    data={data}
-                    conversation={conversation}
-                    mutate={mutate}
-                    configureChief={main ? configureChief : undefined}
-                  />
-                )}
+                {renderComposer()}
               </>
             ) : undefined
           }
@@ -241,7 +280,7 @@ export function Chat({
         </ChatSurface>
         {browserOpen && (
           <WorkBrowser
-            conversationId={conversation.id}
+            conversationId={execution?.id ?? conversation.id}
             mutate={mutate}
             close={() => setBrowserOpen(false)}
           />

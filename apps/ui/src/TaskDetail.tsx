@@ -26,6 +26,7 @@ import { TaskWorkOverview } from './TaskWorkOverview.js';
 import { TaskActivityDetails } from './TaskActivityDetails.js';
 import { RequirementDetails } from './RequirementDetails.js';
 import { currentActivityLabel, stoppingTask } from './task-activity.js';
+import { chiefTaskContext } from './chief-work.js';
 export function ApprovalCard({
   approval,
   data,
@@ -38,6 +39,7 @@ export function ApprovalCard({
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const bot = data.bots.find((item) => item.id === approval.botId);
+  const context = chiefTaskContext(data, approval.taskId);
   async function resolve(approved: boolean) {
     setBusy(true);
     setError('');
@@ -54,6 +56,7 @@ export function ApprovalCard({
       <div className="mb-2 flex items-center gap-2 text-xs font-medium text-amber-800">
         <ShieldCheck size={14} />
         {bot?.name || '智能体'} 请求权限
+        {context && <span className="truncate font-normal">· {context.title}</span>}
       </div>
       <h3 className="text-pretty text-sm font-semibold text-slate-900">{approval.summary}</h3>
       <p className="mt-1 text-xs text-slate-500">{approval.toolName}</p>

@@ -15,6 +15,7 @@ import {
 import { conversationTaskPlans } from './task-plans.js';
 import { TaskWorkOverview } from './TaskWorkOverview.js';
 import { TaskPlanCard } from './TaskPlanCard.js';
+import { contextRecordTasks, isChiefHome } from './chief-work.js';
 
 export function ConversationRecords({
   data,
@@ -27,8 +28,17 @@ export function ConversationRecords({
 }) {
   const [selectedId, setSelected] = useState<string>();
   const [memberId, setMember] = useState<string>();
-  const tasks = conversationRecordTasks(data, conversation);
-  const plans = conversationTaskPlans(data, conversation);
+  const [contextId, setContext] = useState('current');
+  const home = isChiefHome(data, conversation);
+  const contexts = home ? (data.chief?.contexts ?? []) : [];
+  const context = contexts.find(
+    (item) => item.id === (contextId === 'current' ? data.chief?.focusContextId : contextId),
+  );
+  const allTasks = conversationRecordTasks(data, conversation);
+  const tasks = context ? contextRecordTasks(allTasks, context.conversationIds) : allTasks;
+  const plans = home
+    ? data.taskPlans.filter((plan) => tasks.some((task) => task.id === plan.taskId))
+    : conversationTaskPlans(data, conversation);
   const taskIds = new Set(tasks.map((task) => task.id));
   const processes = (data.processes ?? []).filter((process) => taskIds.has(process.taskId));
   const members = conversationMemberRecords(tasks, conversation.memberIds);
@@ -36,6 +46,29 @@ export function ConversationRecords({
   const member = members.find((item) => item.botId === (selected?.botId ?? memberId)) ?? members[0];
   const bot = data.bots.find((item) => item.id === member?.botId);
   const scopedData = { ...data, tasks, processes };
+  const contextFilter = home && (
+    <label className="flex items-center gap-3 text-xs text-slate-500">
+      工作事项
+      <select
+        className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+        aria-label="筛选工作记录的事项"
+        value={contextId}
+        onChange={(event) => {
+          setContext(event.target.value);
+          setSelected(undefined);
+          setMember(undefined);
+        }}
+      >
+        <option value="current">当前事项</option>
+        <option value="all">全部事项</option>
+        {contexts.map((item) => (
+          <option key={item.id} value={item.id}>
+            {item.title}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
   const history = !!plans.length && (
     <details className="min-w-0 border-b border-slate-100 pb-4">
       <summary className="cursor-pointer text-xs text-slate-500">
@@ -51,12 +84,14 @@ export function ConversationRecords({
   if (!member)
     return (
       <div className="mx-auto grid w-full min-w-0 max-w-3xl gap-5">
+        {contextFilter}
         {history}
         <Empty compact title="暂无工作记录" description="智能体的任务和操作会显示在这里。" />
       </div>
     );
   return (
     <div className="mx-auto grid w-full min-w-0 max-w-3xl grid-cols-1 gap-5">
+      {contextFilter}
       {history}
       <nav
         aria-label="按智能体查看记录"
@@ -178,6 +213,8 @@ function TaskRecord({
     if (task.kind === 'context-compaction') {
       return '上下文压缩';
     }
+    if (task.kind === 'chief-routing') return '事项识别';
+    if (task.kind === 'chief-context-maintenance') return '上下文整理';
     return '主管代答';
   };
   return (

@@ -11,7 +11,7 @@ import {
 export const chiefTools = chiefToolNames;
 export const chiefRole = '团队管家';
 export const chiefInstructions =
-  '你是用户在 multi-AI work 的专属管家，也是团队主管。温和、简洁、主动负责：理解目标与偏好，给出明确下一步并跟进到交付；新用户需要时用具体例子引导使用对话、资料、团队和成果库，避免重复介绍。简单任务直接使用已授权工具完成；复杂任务查看成员能力，只邀请相关成员，明确分工与交付要求。仅主管可委派，负责协调、核查实际成果并在来源主对话汇报。缺少关键信息用 ask_user；已明确的事直接推进，执行方式遵从用户设置。维护自己的及团队公共记忆，遵守会话与权限边界。未执行、失败或结果未知时如实说明，不虚构进展或后台能力。';
+  '你是用户在 multi-AI work 的专属管家，也是团队主管。温和、简洁、主动负责：理解目标与偏好，给出明确下一步并跟进到交付；新用户需要时用具体例子引导使用对话、资料、团队和成果库，避免重复介绍。简单任务直接使用已授权工具完成；复杂任务查看成员能力，只邀请相关成员，明确分工与交付要求。仅主管可委派，负责协调、核查实际成果并在来源主对话汇报。用户通过同一主入口管理多个事项，Core 已为当前工作选择独立上下文；提到旧工作或需要核对历史细节时，先用 recall_work 找到候选，再用 read_work_history 展开原文与成果，依据真实任务继续。缺少关键信息用 ask_user；已明确的事直接推进，执行方式遵从用户设置。维护自己的及团队公共记忆，遵守会话与权限边界。未执行、失败或结果未知时如实说明，不虚构进展或后台能力。';
 
 export function publicBot(bot: Bot, chiefId?: string): Bot {
   return bot.id === chiefId ? { ...bot, role: '', instructions: '' } : bot;
@@ -56,6 +56,15 @@ export function ensureMainTeam(storage: Storage, settings: Settings): Settings {
       };
       storage.put('bots', chief);
       storage.setMetadata('chief-management-v1', true);
+    }
+    if (!storage.metadata('chief-history-tools-v1')) {
+      chief = {
+        ...chief,
+        toolNames: [...new Set([...chief.toolNames, 'recall_work', 'read_work_history'])],
+        revision: chief.revision + 1,
+      };
+      storage.put('bots', chief);
+      storage.setMetadata('chief-history-tools-v1', true);
     }
     if (!storage.metadata('chief-memory-management-v2')) {
       chief = {
@@ -119,12 +128,21 @@ export function ensureMainTeam(storage: Storage, settings: Settings): Settings {
       ? storage.get<Conversation>('conversations', settings.mainConversationId)
       : undefined;
     const room =
-      current?.purpose === 'chief' && current.kind === 'private' && !current.archived
+      current?.purpose === 'chief' &&
+      current.kind === 'private' &&
+      !current.archived &&
+      (!current.chiefRole || current.chiefRole === 'home')
         ? current
-        : (storage
+        : storage
             .all<Conversation>('conversations')
-            .filter((item) => item.purpose === 'chief' && item.kind === 'private' && !item.archived)
-            .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? current);
+            .filter(
+              (item) =>
+                item.purpose === 'chief' &&
+                item.kind === 'private' &&
+                !item.archived &&
+                (!item.chiefRole || item.chiefRole === 'home'),
+            )
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
     const workspace =
       storage.get<Workspace>('workspaces', room?.workspaceId ?? '') ??
       storage.all<Workspace>('workspaces')[0];

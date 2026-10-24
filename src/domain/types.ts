@@ -115,6 +115,9 @@ export interface Bot {
   archived: boolean;
 }
 export interface Conversation {
+  chiefRole?: 'home' | 'work' | 'history' | 'routine' | 'router';
+  chiefHomeId?: string;
+  chiefContextId?: string;
   id: string;
   name: string;
   kind: 'private' | 'group';
@@ -138,6 +141,9 @@ export interface Workspace {
   writable: boolean;
 }
 export interface Message {
+  chiefTimelineSequence?: number;
+  chiefContextId?: string;
+  chiefInputId?: string;
   id: string;
   conversationId: string;
   sequence: number;
@@ -178,7 +184,7 @@ export interface SessionBinding {
   nativeSessionId?: string;
   lastDeliveredSequence: number;
   accountScope?: string;
-  purpose?: 'memory' | 'question-decision';
+  purpose?: 'memory' | 'question-decision' | 'chief-routing' | 'chief-context-maintenance';
   model?: string;
   reasoning?: string;
   identityHash?: string;
@@ -209,7 +215,12 @@ export interface Task {
   depth: number;
   createdAt: string;
   updatedAt: string;
-  kind?: 'memory-review' | 'question-decision' | 'context-compaction';
+  kind?:
+    | 'memory-review'
+    | 'question-decision'
+    | 'context-compaction'
+    | 'chief-routing'
+    | 'chief-context-maintenance';
   questionId?: string;
   queueReason?: TaskQueueReason;
   planId?: string;
@@ -282,6 +293,7 @@ export interface ImageMetadata {
   path: string;
 }
 export interface Artifact {
+  chiefContextId?: string;
   seriesId?: string;
   previousArtifactId?: string;
   objectHash?: string;
@@ -419,6 +431,7 @@ export interface Settings {
   defaultSearchConnectionId?: string;
 }
 export interface Snapshot {
+  chief?: import('./chief-work.js').ChiefSnapshot;
   connections: Connection[];
   bots: Bot[];
   conversations: Conversation[];

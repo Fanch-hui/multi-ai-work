@@ -52,7 +52,7 @@ describe('会话管理', () => {
     },
   );
 
-  it('归档会等待活动任务停止，保护主会话入口，恢复后可继续发送', async () => {
+  it('归档历史工作会等待活动任务停止，首页保持稳定，恢复后可继续发送', async () => {
     const { core, connection } = await setup(async (context) => {
       await new Promise((_, reject) =>
         context.signal.addEventListener('abort', () => reject(new Error('已取消')), { once: true }),
@@ -62,7 +62,10 @@ describe('会话管理', () => {
     await core.request('chief.configure', {
       input: { connectionId: connection.id, model: 'test' },
     });
-    const roomId = core.state.settings().mainConversationId!;
+    const homeId = core.state.settings().mainConversationId!;
+    const roomId = core.team.createChiefExecutionConversation('历史事项', {
+      chiefRole: 'work',
+    }).id;
     const sent = core.tasks.send({ conversationId: roomId, content: '等待取消' });
     await eventually(() => core.state.snapshot().runs.some((run) => run.status === 'running'));
     const conversations = new ConversationService(core.state, core.tasks, core.scheduler);
@@ -75,7 +78,7 @@ describe('会话管理', () => {
     expect(core.state.storage.get<Task>('tasks', sent.taskIds[0])?.status).toBe('cancelled');
     expect(core.state.snapshot().runs[0].status).toBe('cancelled');
     const nextId = core.state.settings().mainConversationId!;
-    expect(nextId).not.toBe(roomId);
+    expect(nextId).toBe(homeId);
     expect(core.state.storage.get<Conversation>('conversations', nextId)?.archived).not.toBe(true);
     expect(() => core.tasks.send({ conversationId: roomId, content: '归档后发送' })).toThrow(
       '归档',
@@ -209,14 +212,16 @@ describe('会话管理', () => {
     ).toEqual([chiefId, staying.id]);
   });
 
-  it('删除来源主对话保留独立群与群历史，解除跨会话指针', async () => {
+  it('删除历史工作会话保留独立群与群历史，解除跨会话指针', async () => {
     const { core, connection, bot } = await setup(async () => ({ text: '完成' }));
     core.scheduler.pause();
     await core.request('chief.configure', {
       input: { connectionId: connection.id, model: 'test' },
     });
+    const homeId = core.state.settings().mainConversationId!;
+    const work = core.team.createChiefExecutionConversation('历史工作', { chiefRole: 'work' });
     const source = core.tasks.create({
-      conversationId: core.state.settings().mainConversationId!,
+      conversationId: work.id,
       botId: core.state.settings().mainBotId!,
       goal: '主任务',
     });
@@ -237,6 +242,6 @@ describe('会话管理', () => {
     expect(room.sourceConversationId).toBeUndefined();
     expect(room.sourceTaskId).toBeUndefined();
     expect(core.state.storage.messages(room.id)[0].content).toBe('群内历史');
-    expect(core.state.settings().mainConversationId).not.toBe(source.conversationId);
+    expect(core.state.settings().mainConversationId).toBe(homeId);
   });
 });

@@ -8,6 +8,7 @@ import { State, id, now } from './state.js';
 import { TaskService, terminal } from './tasks.js';
 import { isChiefProvider } from '../domain/chief-provider.js';
 import { isReasoningSupported } from '../domain/model-reasoning.js';
+import { ChiefContextService } from './chief-contexts.js';
 
 const memberSchema = z
   .object({
@@ -73,11 +74,35 @@ export class TeamService {
     };
     s.transaction(() => {
       s.put('conversations', room);
-      if (options.selectAsMain !== false)
-        s.setMetadata('settings', { ...settings, mainConversationId: room.id });
+      new ChiefContextService(this.state).create({
+        title: room.name,
+        workspaceId,
+        conversationId: room.id,
+      });
     });
     this.state.changed();
-    return room;
+    return s.get<Conversation>('conversations', room.id)!;
+  }
+
+  createChiefExecutionConversation(
+    name: string,
+    options: {
+      workspaceId?: string;
+      routineId?: string;
+      chiefRole?: 'routine' | 'work' | 'router';
+    } = {},
+  ): Conversation {
+    const context = new ChiefContextService(this.state).create({
+      title: name,
+      workspaceId: options.workspaceId,
+      routineId: options.routineId,
+    });
+    const s = this.state.storage;
+    const room = s.get<Conversation>('conversations', context.conversationId)!;
+    const updated = { ...room, chiefRole: options.chiefRole ?? room.chiefRole };
+    s.put('conversations', updated);
+    this.state.changed();
+    return updated;
   }
 
   updateChiefConversation(
@@ -94,15 +119,9 @@ export class TeamService {
       throw new Error('只能修改主管主对话的模型设置');
     if (room.archived) throw new Error('对话已归档');
     const chief = required(s.get<Bot>('bots', room.chiefId!), '主智能体不存在');
-    const settings = this.conversationModel(chief, options, room.model ? room : chief);
-    if (
-      settings.model !== (room.model ?? chief.model) &&
-      s
-        .byField<Task>('tasks', 'conversationId', room.id)
-        .some((task) => task.kind !== 'memory-review' && !terminal(task.status))
-    )
-      throw new Error('请先停止当前工作，再修改对话设置');
+    const settings = this.conversationModel(chief, options, chief);
     const updated = { ...room, ...settings };
+    this.entities.saveBot({ ...chief, ...settings });
     s.put('conversations', updated);
     this.state.changed();
     return updated;
@@ -183,8 +202,8 @@ export class TeamService {
         chiefId,
         memberIds: [chiefId, ...members],
         workspaceId,
-        model: sourceRoom.model,
-        reasoning: sourceRoom.reasoning,
+        model: s.get<Bot>('bots', chiefId)?.model,
+        reasoning: s.get<Bot>('bots', chiefId)?.reasoning,
         sourceConversationId: sourceRoom.id,
         sourceTaskId: source.id,
         createdAt: now(),
@@ -211,7 +230,19 @@ export class TeamService {
       this.state.storage.get<Bot>('bots', this.state.settings().mainBotId!),
       '主智能体不存在',
     );
-    if (workspaceId) required(this.state.storage.get('workspaces', workspaceId), '工作目录不存在');
+    if (workspaceId) {
+      const s = this.state.storage;
+      required(s.get('workspaces', workspaceId), '工作目录不存在');
+      const room = required(
+        s.get<Conversation>('conversations', this.state.settings().mainConversationId!),
+        '主会话不存在',
+      );
+      if (
+        room.workspaceId !== workspaceId &&
+        s.byField<Task>('tasks', 'conversationId', room.id).some((task) => !terminal(task.status))
+      )
+        throw new Error('请先结束或停止当前事项，再调整其工作目录');
+    }
     const fields = z.record(z.string(), z.unknown()).parse(input);
     if (fields.reasoning === '') fields.reasoning = undefined;
     const bot = this.entities.saveBot({ ...current, ...fields, id: current.id });

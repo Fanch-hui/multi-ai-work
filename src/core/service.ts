@@ -53,9 +53,11 @@ import { BrowserService } from './work-browser.js';
 import { workToolContext } from './work-tool-context.js';
 import type { TaskWait } from '../domain/task-wait.js';
 import { WorkNotifications } from './work-notifications.js';
+import { ChiefSystem } from './chief-system.js';
 
 export type { HostRequest } from './artifact-requests.js';
 export class CoreService {
+  readonly chief: ChiefSystem;
   readonly state: State;
   readonly vault: Vault;
   readonly entities: EntityService;
@@ -144,6 +146,7 @@ export class CoreService {
       this.adapters,
     );
     this.scheduler = new Scheduler(this.state, this.tasks, this.executor, this.adapters);
+    this.chief = new ChiefSystem(this.state, this.tasks, (id) => this.scheduler.cancel(id));
     this.tools.controls = new TaskControlService(this.state, this.tasks, this.scheduler);
     this.questionDecisions = new QuestionDecisions(this.state, this.tasks);
     this.conversations = new ConversationService(this.state, this.tasks, this.scheduler);
@@ -200,6 +203,7 @@ export class CoreService {
       (method, params) => this.request(method, params),
     );
     this.tools.extensions = {
+      chiefHistory: this.chief.toolHistory.bind(this.chief),
       ...workToolContext(this.state, this.routines, this.reviews, this.browser, !!this.host),
       ...this.work.extensions(),
       connectorDrafts: (action, args, context) => this.connectors.execute(action, args, context),
@@ -212,6 +216,7 @@ export class CoreService {
     this.connectors.start();
     this.work.start();
     this.scheduler.start();
+    this.chief.start();
     this.memories.start();
     this.questionDecisions.start();
     this.state.artifactContents.start(
@@ -224,6 +229,7 @@ export class CoreService {
     this.routines.start(() => !this.maintenance && !this.admission.blocked);
   }
   async close() {
+    this.chief.close();
     this.routines.close();
     await this.work.stopInputs();
     await this.connectorOAuth.close();
@@ -264,6 +270,7 @@ export class CoreService {
   private async handleRequest(method: string, params: Record<string, unknown>): Promise<unknown> {
     if (this.maintenance && method !== 'state.snapshot')
       throw new Error('正在恢复备份，请稍后操作');
+    if (this.chief.handles(method, params)) return this.chief.request(method, params);
     if (method.startsWith('connectors.') || method.startsWith('connectorDrafts.'))
       return this.connectors.request(method, params);
     if (this.work.handles(method)) return this.work.request(method, params);

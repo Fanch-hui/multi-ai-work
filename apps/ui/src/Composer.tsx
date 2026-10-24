@@ -15,6 +15,7 @@ import { busyInputMembers } from './task-input-feedback.js';
 import { composerDrafts, composerSubmission, useComposerDraft } from './composer-drafts.js';
 import { modelLabel } from './model-label.js';
 import { MAX_MESSAGE_ATTACHMENTS } from '../../../src/domain/attachment-policy.js';
+import { focusedChiefContext, focusedConversation, isChiefHome } from './chief-work.js';
 export function Composer({
   data,
   conversation,
@@ -30,6 +31,8 @@ export function Composer({
   const { content, targets, error, sending: busy } = draft;
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [voiceTaskIds, setVoiceTaskIds] = useState<string[]>([]);
+  const [voiceInputId, setVoiceInputId] = useState<string>();
+  const [stopTaskIds, setStopTaskIds] = useState<string[]>([]);
   const { attachments, setAttachments, attaching, dragging, attach, onPaste, dragHandlers } =
     useAttachments(conversation.id, mutate);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -41,37 +44,43 @@ export function Composer({
     textarea.style.height = `${Math.min(192, Math.max(48, textarea.scrollHeight))}px`;
   }, [conversation.id, content]);
   const main = conversation.purpose === 'chief';
+  const home = isChiefHome(data, conversation);
+  const execution = focusedConversation(data, conversation);
+  const context = home ? focusedChiefContext(data) : undefined;
   const members = data.bots.filter(
     (item) => conversation.memberIds.includes(item.id) && !item.archived,
   );
   const bot = members.find((item) => item.id === conversation.chiefId) || members[0];
   const receivingMembers =
     !main && targets.length ? members.filter((member) => targets.includes(member.id)) : members;
-  const busyMembers = busyInputMembers(data, conversation, targets);
+  const busyMembers = busyInputMembers(data, execution, targets);
   const mixedTargets = busyMembers.length > 0 && busyMembers.length < receivingMembers.length;
-  const model = (bot?.id === conversation.chiefId ? conversation.model : undefined) || bot?.model;
+  const model =
+    (!home && bot?.id === conversation.chiefId ? conversation.model : undefined) || bot?.model;
   const displayModel = modelLabel(
     data.connections.find((item) => item.id === bot?.connectionId),
     model,
     '配置模型',
   );
   const reasoning =
-    bot?.id === conversation.chiefId && conversation.model
+    !home && bot?.id === conversation.chiefId && conversation.model
       ? conversation.reasoning
       : bot?.reasoning;
   const rootTasks = data.tasks.filter(
     (item) =>
-      item.kind !== 'memory-review' &&
-      item.conversationId === conversation.id &&
+      !item.kind &&
+      (context?.conversationIds ?? [conversation.id]).includes(item.conversationId) &&
       activeTask(item.status) &&
       !data.tasks.some(
         (parent) => parent.id === item.parentId && parent.conversationId === conversation.id,
       ),
   );
-  const voiceTasks = data.tasks.filter((task) => voiceTaskIds.includes(task.id));
+  const submittedVoice = data.chief?.inputs.find((input) => input.id === voiceInputId);
+  const voiceIds = submittedVoice?.taskIds.length ? submittedVoice.taskIds : voiceTaskIds;
+  const voiceTasks = data.tasks.filter((task) => voiceIds.includes(task.id));
   const voiceFinished =
     voiceTasks.length > 0 &&
-    voiceTasks.length === voiceTaskIds.length &&
+    voiceTasks.length === voiceIds.length &&
     voiceTasks.every((task) =>
       ['completed', 'failed', 'cancelled', 'interrupted'].includes(task.status),
     );
@@ -82,7 +91,8 @@ export function Composer({
     ? data.messages
         .filter(
           (message) =>
-            message.conversationId === conversation.id &&
+            (message.conversationId === conversation.id ||
+              (home && message.chiefTimelineSequence !== undefined)) &&
             message.authorType === 'bot' &&
             message.status === 'committed' &&
             message.runId &&
@@ -91,32 +101,46 @@ export function Composer({
         )
         .at(-1)
     : undefined;
-  const voiceFailure =
-    voiceFinished && !voiceReply
-      ? voiceTasks.find((task) => task.status !== 'completed')?.error ||
+  const getVoiceFailure = () => {
+    if (submittedVoice?.status === 'failed') return submittedVoice.error;
+    if (voiceFinished && !voiceReply)
+      return (
+        voiceTasks.find((task) => task.status !== 'completed')?.error ||
         '本次任务没有可朗读的回复，请继续输入'
-      : undefined;
+      );
+    return undefined;
+  };
+  const voiceFailure = getVoiceFailure();
   async function sendVoice(text: string) {
-    const result = await mutate<{ taskIds: string[] }>('conversations.send', {
-      conversationId: conversation.id,
-      content: text,
-      targetBotIds: targets.length ? targets : undefined,
-      requestId: crypto.randomUUID(),
-    });
+    const result = await mutate<{ taskIds: string[]; inputId?: string }>(
+      home ? 'chief.inputs.send' : 'conversations.send',
+      {
+        conversationId: conversation.id,
+        content: text,
+        targetBotIds: targets.length ? targets : undefined,
+        requestId: crypto.randomUUID(),
+        ...(home && draft.targetContextId ? { targetContextId: draft.targetContextId } : {}),
+      },
+    );
     setVoiceTaskIds(result.taskIds);
+    setVoiceInputId(result.inputId);
   }
   async function send(event: FormEvent) {
     event.preventDefault();
     const pending = composerDrafts.beginSend(conversation.id);
     if (!pending) return;
     try {
-      await mutate('conversations.send', composerSubmission(conversation, pending));
+      await mutate(
+        home ? 'chief.inputs.send' : 'conversations.send',
+        composerSubmission(conversation, pending),
+      );
       composerDrafts.finishSend(conversation.id, pending.requestId);
     } catch (cause) {
       composerDrafts.finishSend(conversation.id, pending.requestId, errorMessage(cause));
     }
   }
   const getMessagePlaceholder = () => {
+    if (home) return '交代新工作，补充要求，或继续之前的事项…';
     if (busyMembers.length) {
       if (mixedTargets) {
         return '给成员发消息，或补充当前任务…';
@@ -132,8 +156,23 @@ export function Composer({
     <div className="chat-composer-region px-6 pb-3 pt-3 max-sm:px-3">
       <form className="mx-auto w-full max-w-4xl" onSubmit={(event) => void send(event)}>
         <ErrorNote error={error} />
-        {draft.references?.length || draft.replyToMessageId || targets.length ? (
+        {draft.references?.length ||
+        draft.replyToMessageId ||
+        targets.length ||
+        draft.targetContextId ? (
           <div className="mb-2 flex flex-wrap gap-2 text-xs">
+            {draft.targetContextId && (
+              <button
+                type="button"
+                className="rounded-lg bg-blue-50 px-3 py-1 text-blue-700"
+                onClick={() => composerDrafts.edit(conversation.id, { targetContextId: undefined })}
+              >
+                发送到：
+                {data.chief?.contexts.find((item) => item.id === draft.targetContextId)?.title ||
+                  '已选择事项'}{' '}
+                ×
+              </button>
+            )}
             {draft.replyToMessageId && (
               <button
                 type="button"
@@ -262,7 +301,7 @@ export function Composer({
               }
             }}
           />
-          {!!busyMembers.length && (
+          {!home && !!busyMembers.length && (
             <p
               id={`task-input-hint-${conversation.id}`}
               className="mb-2 px-1 text-xs leading-5 text-slate-400"
@@ -310,14 +349,20 @@ export function Composer({
 
               {rootTasks.length > 0 && (
                 <Confirm
+                  key={context?.id ?? conversation.id}
                   title="停止当前工作？"
                   description="所有进行中的主任务和子任务将收到取消请求，已生成成果保留。"
                   actionLabel="停止"
                   onConfirm={() =>
-                    Promise.all(rootTasks.map((task) => mutate('tasks.cancel', { id: task.id })))
+                    Promise.all(stopTaskIds.map((id) => mutate('tasks.cancel', { id })))
                   }
                 >
-                  <Button type="button" variant="ghost" className="text-xs">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="text-xs"
+                    onClick={() => setStopTaskIds(rootTasks.map((task) => task.id))}
+                  >
                     <Square size={12} />
                     停止
                   </Button>
@@ -328,8 +373,8 @@ export function Composer({
               {configureChief ? (
                 <button
                   type="button"
-                  onClick={() => setSettingsOpen(true)}
-                  aria-label="配置此对话模型与推理强度"
+                  onClick={() => (home ? configureChief() : setSettingsOpen(true))}
+                  aria-label={home ? '配置管家模型与推理强度' : '配置此对话模型与推理强度'}
                   className="flex min-w-0 items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-slate-500 hover:bg-slate-50"
                 >
                   <span className="truncate">{displayModel}</span>
@@ -360,7 +405,7 @@ export function Composer({
           </div>
         </div>
         {conversation.kind === 'private' && (
-          <ConversationStats data={data} conversation={conversation} mutate={mutate} />
+          <ConversationStats data={data} conversation={execution} mutate={mutate} />
         )}
       </form>
       <ModalPresence show={settingsOpen && !!configureChief}>

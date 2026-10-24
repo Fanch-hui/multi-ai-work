@@ -1,6 +1,7 @@
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
+import { isChiefJob } from './chief-jobs.js';
 import type {
   Bot,
   Connection,
@@ -95,7 +96,7 @@ export class RunPreparation {
           getSecret: toolContext.getSecret,
         }
       : toolContext;
-    await this.tools.prepare(catalogContext, bot);
+    if (!isChiefJob(task)) await this.tools.prepare(catalogContext, bot);
     const managed = connection.provider === 'chatgpt' || connection.provider === 'custom';
     const { delivered, delta, memoryUpdate } = this.selectHistory(
       scope,
@@ -121,17 +122,18 @@ export class RunPreparation {
       { instructions, prompt, contextInstructions, runtimeContext },
     );
     if (managed && !task.kind) this.attachCheckpoint(scope, input, cutoff);
-    const context = managed
-      ? await prepareManagedContext(
-          input,
-          archive,
-          delivered,
-          this.state,
-          this.contextManager,
-          adapter,
-          manualCompaction,
-        )
-      : undefined;
+    const context =
+      managed && !isChiefJob(task)
+        ? await prepareManagedContext(
+            input,
+            archive,
+            delivered,
+            this.state,
+            this.contextManager,
+            adapter,
+            manualCompaction,
+          )
+        : undefined;
     return {
       input,
       summaryUsage: context?.usage ?? (() => undefined),
@@ -191,7 +193,7 @@ export class RunPreparation {
       ...(managed && !task.kind
         ? { getReasoningEffort: () => runReasoningEffort(this.state, bot, scope.room, connection) }
         : {}),
-      tools: this.tools.definitions(catalogContext, bot).sort((a, b) => {
+      tools: (isChiefJob(task) ? [] : this.tools.definitions(catalogContext, bot)).sort((a, b) => {
         if (!managed || a.name === b.name) return 0;
         if (a.name < b.name) return -1;
         return 1;
@@ -231,6 +233,7 @@ export class RunPreparation {
         this.state.changed('content');
       },
       executeTool: (name, args, callId) => {
+        if (isChiefJob(task)) throw new Error('上下文后台请求不执行工具');
         writer.flush();
         return this.tools.execute(name, args, callId, toolContext, bot);
       },

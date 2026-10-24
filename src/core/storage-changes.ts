@@ -6,6 +6,9 @@ export interface StorageChanges {
 
 export class StorageChangesBuffer {
   private changes: StorageChanges = { reset: false, entities: new Map() };
+  ids(table: string): string[] {
+    return [...(this.changes.entities.get(table) ?? [])];
+  }
   mark(table: string, id: string) {
     if (this.changes.reset) return;
     const ids = this.changes.entities.get(table) ?? new Set<string>();

@@ -1,18 +1,20 @@
 import type { Conversation, Message, Run, Snapshot, Task } from '../../../src/domain/types.js';
+import { chiefConversationIds, isChiefHome } from './chief-work.js';
 
-type FeedData = Pick<Snapshot, 'messages' | 'tasks' | 'runs'>;
+type FeedData = Pick<Snapshot, 'messages' | 'tasks' | 'runs'> & Partial<Pick<Snapshot, 'chief'>>;
 export interface WorkingMember {
   task: Task;
   run: Run;
 }
 
 export function conversationMessages(
-  data: Pick<Snapshot, 'messages'>,
+  data: Pick<Snapshot, 'messages'> & Partial<Pick<Snapshot, 'chief'>>,
   conversation: Conversation,
 ): Message[] {
   return data.messages.filter(
     (message) =>
-      message.conversationId === conversation.id &&
+      (message.conversationId === conversation.id ||
+        (isChiefHome(data, conversation) && message.chiefTimelineSequence !== undefined)) &&
       (conversation.kind !== 'group' || message.authorType !== 'system') &&
       (message.content.trim().length > 0 || message.artifactIds.length > 0),
   );
@@ -23,11 +25,12 @@ export function workingMembers(
   conversation: Conversation,
   messages: Message[],
 ): WorkingMember[] {
+  const conversationIds = chiefConversationIds(data, conversation);
   const tasks = new Map(
     data.tasks
       .filter(
         (task) =>
-          task.conversationId === conversation.id && !task.kind && task.status === 'running',
+          conversationIds.has(task.conversationId) && !task.kind && task.status === 'running',
       )
       .map((task) => [task.id, task]),
   );
@@ -38,7 +41,7 @@ export function workingMembers(
   for (const run of [...data.runs].sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
     const task = tasks.get(run.taskId);
     if (task && run.status === 'running' && !streamingRuns.has(run.id))
-      members.set(run.botId, { task, run });
+      members.set(`${run.botId}:${task.conversationId}`, { task, run });
   }
   return [...members.values()];
 }
@@ -49,12 +52,13 @@ export function recoveringTasks(
   messages: Message[],
 ): Task[] {
   if (conversation.kind !== 'private') return [];
+  const conversationIds = chiefConversationIds(data, conversation);
   const streamingRuns = new Set(
     messages.filter((message) => message.status === 'draft').map((message) => message.runId),
   );
   return data.tasks.filter(
     (task) =>
-      task.conversationId === conversation.id &&
+      conversationIds.has(task.conversationId) &&
       !task.kind &&
       task.status === 'recovering' &&
       !task.runIds.some((id) => streamingRuns.has(id)),

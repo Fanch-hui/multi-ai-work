@@ -7,6 +7,7 @@ import Avatar from './Avatar.js';
 import { Button, ErrorNote, inputClass, timeLabel } from './components.js';
 import { cn } from './classNames.js';
 import { ResolvedQuestionCard } from './ResolvedQuestionCard.js';
+import { chiefTaskContext } from './chief-work.js';
 
 export function UserQuestionCard({
   question,
@@ -27,6 +28,7 @@ export function UserQuestionCard({
   const [busy, setBusy] = useState(false);
   const [resolved, setResolved] = useState<'answered' | 'cancelled'>();
   const bot = data.bots.find((item) => item.id === question.botId);
+  const context = chiefTaskContext(data, question.taskId);
   const answerBot = data.bots.find(
     (item) => item.id === (question.answerBotId || data.settings.mainBotId),
   );
@@ -87,6 +89,7 @@ export function UserQuestionCard({
       <div className="mb-2 flex items-center gap-2">
         <Avatar bot={bot} name={bot?.name || '智能体'} className="size-5 rounded-md" />
         <span className="text-xs font-medium text-blue-800">{bot?.name || '智能体'} 提问</span>
+        {context && <span className="truncate text-xs text-blue-700">· {context.title}</span>}
         <span className="ml-auto text-xs text-slate-500">{timeLabel(question.createdAt)}</span>
       </div>
       <h3

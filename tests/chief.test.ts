@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Bot, Conversation, Task } from '../src/domain/types.js';
+import type { ChiefInput } from '../src/domain/chief-work.js';
 import { State } from '../src/core/state.js';
 import { eventually, setup } from './core-harness.js';
 
@@ -54,6 +55,11 @@ describe('主智能体与团队管理', () => {
     let child: Task | undefined;
     const { core, connection } = await setup(async (context) => {
       if (context.bot.id !== core.state.settings().mainBotId) return { text: '研究成果' };
+      if (context.binding.purpose === 'chief-routing') {
+        expect(context.tools).toEqual([]);
+        const input = JSON.parse(context.prompt) as { focusContextId: string };
+        return { text: JSON.stringify({ action: 'continue', contextId: input.focusContextId }) };
+      }
       if (context.binding.conversationId !== core.state.settings().mainConversationId) {
         if (!child) {
           const room = core.state.storage.get<Conversation>(
@@ -100,7 +106,14 @@ describe('主智能体与团队管理', () => {
       conversationId: core.state.settings().mainConversationId,
       content: '请创建研究员并安排调研',
       requestId: 'chief-work',
-    })) as { taskIds: string[] };
+    })) as { inputId: string };
+    await eventually(
+      () =>
+        core.state.storage.get<ChiefInput>('chief_inputs', sent.inputId)?.status === 'dispatched',
+    );
+    const routed = core.state.storage.get<ChiefInput>('chief_inputs', sent.inputId)!;
+    expect(routed.taskIds).toHaveLength(1);
+    const taskId = routed.taskIds[0];
     await eventually(() =>
       core.state.snapshot().approvals.some((item) => item.status === 'pending'),
     );
@@ -108,16 +121,18 @@ describe('主智能体与团队管理', () => {
     expect(approval.botId).toBe(chief.id);
     expect(approval.toolName).toBe('configure_bot');
     await core.request('approvals.resolve', { id: approval.id, approved: true });
-    await eventually(
-      () => core.state.storage.get<Task>('tasks', sent.taskIds[0])?.status === 'completed',
-    );
+    await eventually(() => core.state.storage.get<Task>('tasks', taskId)?.status === 'completed');
     expect(rounds).toBe(2);
     const groupTask = core.state.storage
       .all<Task>('tasks')
-      .find((task) => task.parentId === sent.taskIds[0])!;
+      .find((task) => task.parentId === taskId)!;
     expect(child?.parentId).toBe(groupTask.id);
     expect(core.state.storage.get<Task>('tasks', child!.id)?.result).toBe('研究成果');
-    expect(core.state.storage.all<Task>('tasks')).toHaveLength(3);
+    const tasks = core.state.storage.all<Task>('tasks');
+    expect(tasks.filter((task) => !task.kind)).toHaveLength(3);
+    expect(tasks.filter((task) => task.kind === 'chief-routing')).toEqual([
+      expect.objectContaining({ status: 'completed' }),
+    ]);
   });
 
   it('普通成员即使填写工具名也不能修改团队配置', async () => {

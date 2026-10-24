@@ -8,6 +8,7 @@ import {
 } from '../../../src/domain/attachment-policy.js';
 
 export interface ComposerDraft {
+  targetContextId?: string;
   references?: ConversationReferenceOption[];
   replyToMessageId?: string;
   content: string;
@@ -20,7 +21,7 @@ export interface ComposerDraft {
 }
 type DraftContent = Pick<
   ComposerDraft,
-  'content' | 'targets' | 'attachments' | 'references' | 'replyToMessageId'
+  'content' | 'targets' | 'attachments' | 'references' | 'replyToMessageId' | 'targetContextId'
 >;
 export interface DraftAttachmentReference {
   conversationId: string;
@@ -39,6 +40,7 @@ export function composerSubmission(conversation: Conversation, draft: ComposerDr
       ? { references: draft.references.map(({ kind, id }) => ({ kind, id })) }
       : {}),
     ...(draft.replyToMessageId ? { replyToMessageId: draft.replyToMessageId } : {}),
+    ...(draft.targetContextId ? { targetContextId: draft.targetContextId } : {}),
   };
 }
 
@@ -142,6 +144,7 @@ export class ComposerDraftStore {
             attachments: [],
             references: undefined,
             replyToMessageId: undefined,
+            targetContextId: undefined,
             requestId: crypto.randomUUID(),
             error: '',
           }

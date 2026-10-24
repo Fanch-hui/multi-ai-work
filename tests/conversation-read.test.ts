@@ -86,7 +86,7 @@ describe('conversation read receipts', () => {
     ).toBe(1);
     await expect(
       core.request('conversations.read', { id: room.id, messageIds: ['foreign'] }),
-    ).rejects.toThrow('当前会话');
+    ).rejects.toThrow('管家时间线');
     expect(
       core.state.snapshot().conversations.find((item) => item.id === 'other')?.unreadCount,
     ).toBe(1);
@@ -115,15 +115,24 @@ describe('conversation read receipts', () => {
 
   it('initializes earlier history once and removes the receipt when a conversation is deleted', async () => {
     const { core } = await setup(async () => ({ text: '完成' }));
-    const room = core.state.snapshot().conversations[0],
-      s = core.state.storage;
+    const s = core.state.storage;
+    const room = s.put('conversations', {
+      ...core.state.snapshot().conversations[0],
+      id: 'legacy-chief',
+      chiefRole: 'history' as const,
+      chiefContextId: undefined,
+    });
     s.appendMessage(message('history', room.id));
     s.setMetadata('conversation-reads-v1', false);
     initializeConversationReads(s);
-    expect(core.state.snapshot().conversations[0].unreadCount).toBe(0);
+    expect(
+      core.state.snapshot().conversations.find((item) => item.id === room.id)?.unreadCount,
+    ).toBe(0);
     s.appendMessage(message('new', room.id));
     initializeConversationReads(s);
-    expect(core.state.snapshot().conversations[0].unreadCount).toBe(1);
+    expect(
+      core.state.snapshot().conversations.find((item) => item.id === room.id)?.unreadCount,
+    ).toBe(1);
     await core.conversations.delete(room.id);
     expect(s.metadata(`conversation-read:${room.id}`)).toBeUndefined();
     expect(s.metadata(`message-sequence:${room.id}`)).toBeUndefined();

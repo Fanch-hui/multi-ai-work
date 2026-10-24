@@ -1,6 +1,10 @@
 import type Database from 'better-sqlite3';
 
 export const entityTables = [
+  'chief_contexts',
+  'chief_parts',
+  'chief_inputs',
+  'chief_timeline',
   'work_skill_drafts',
   'connector_drafts',
   'collaboration_requests',
@@ -44,7 +48,7 @@ export function migrateStorage(
   prepare: (sql: string) => Database.Statement,
 ) {
   const version = db.pragma('user_version', { simple: true }) as number;
-  if (version > 1) throw new Error('数据库来自较新版本，请使用对应版本的 multi-AI work。');
+  if (version > 2) throw new Error('数据库来自较新版本，请使用对应版本的 multi-AI work。');
   db.transaction(() => {
     for (const table of entityTables)
       db.exec(`CREATE TABLE IF NOT EXISTS ${table} (id TEXT PRIMARY KEY, payload TEXT NOT NULL)`);
@@ -70,6 +74,7 @@ export function migrateStorage(
         CREATE INDEX IF NOT EXISTS tasks_by_parent ON tasks(json_extract(payload, '$.parentId'));
         CREATE INDEX IF NOT EXISTS tasks_by_request ON tasks(json_extract(payload, '$.requestId'));
         CREATE INDEX IF NOT EXISTS tasks_by_conversation ON tasks(json_extract(payload, '$.conversationId'));
+        CREATE INDEX IF NOT EXISTS tasks_by_bot ON tasks(json_extract(payload, '$.botId'));
         CREATE INDEX IF NOT EXISTS tasks_by_plan ON tasks(json_extract(payload, '$.planId'));
         CREATE INDEX IF NOT EXISTS deliveries_by_task ON deliveries(json_extract(payload, '$.taskId'));
         CREATE INDEX IF NOT EXISTS runs_by_task ON runs(json_extract(payload, '$.taskId'));
@@ -85,7 +90,14 @@ export function migrateStorage(
         CREATE INDEX IF NOT EXISTS operations_by_run ON tool_operations(json_extract(payload, '$.runId'));
         CREATE INDEX IF NOT EXISTS revisions_by_memory ON memory_revisions(json_extract(payload, '$.memoryId'));
         CREATE VIRTUAL TABLE IF NOT EXISTS memory_search USING fts5(id UNINDEXED, content, tokenize='trigram');
-        PRAGMA user_version = 1;
+        CREATE INDEX IF NOT EXISTS chief_parts_by_context ON chief_parts(json_extract(payload, '$.contextId'));
+        CREATE INDEX IF NOT EXISTS chief_contexts_by_home ON chief_contexts(json_extract(payload, '$.homeConversationId'));
+        CREATE INDEX IF NOT EXISTS chief_inputs_by_home ON chief_inputs(json_extract(payload, '$.homeConversationId'));
+        CREATE INDEX IF NOT EXISTS chief_parts_by_conversation ON chief_parts(json_extract(payload, '$.conversationId'));
+        CREATE INDEX IF NOT EXISTS chief_inputs_by_request ON chief_inputs(json_extract(payload, '$.requestId'));
+        CREATE INDEX IF NOT EXISTS chief_timeline_by_home ON chief_timeline(
+          json_extract(payload, '$.homeConversationId'), json_extract(payload, '$.displaySequence'));
+        PRAGMA user_version = 2;
       `);
     const columns = prepare('PRAGMA table_info(messages)').all() as { name: string }[];
     if (!columns.some((column) => column.name === 'stream_sequence'))

@@ -4,6 +4,7 @@ import type { State } from './state.js';
 import { readConversation } from './conversation-read.js';
 import { required } from './errors.js';
 import { workEvents } from './work-events.js';
+import { ChiefTimelineService } from './chief-timeline.js';
 
 export class HistoryRequests {
   constructor(private state: State) {}
@@ -33,6 +34,11 @@ export class HistoryRequests {
         );
       case 'conversations.messages': {
         const room = required(s.get<Conversation>('conversations', objectId()), '对话不存在');
+        if (room.id === this.state.settings().mainConversationId)
+          return new ChiefTimelineService(this.state).page(
+            z.number().int().positive().optional().parse(params.before),
+            z.number().int().min(1).max(200).optional().parse(params.limit),
+          );
         return s.messagePage(
           room.id,
           z.number().int().positive().optional().parse(params.before),
@@ -47,11 +53,11 @@ export class HistoryRequests {
           .map((id) => s.getMessage(id))
           .filter(Boolean);
       case 'conversations.read': {
-        const changed = readConversation(
-          s,
-          objectId(),
-          z.array(z.string()).parse(params.messageIds),
-        );
+        const ids = z.array(z.string()).parse(params.messageIds);
+        const changed =
+          objectId() === this.state.settings().mainConversationId
+            ? new ChiefTimelineService(this.state).read(ids)
+            : readConversation(s, objectId(), ids);
         if (changed) {
           s.changes.mark('conversation_reads', objectId());
           this.state.changed('state', { incremental: true });

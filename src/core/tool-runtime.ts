@@ -44,6 +44,7 @@ export class ToolRuntime {
     | 'executeComputer'
     | 'requestCollaboration'
     | 'resolveCollaboration'
+    | 'chiefHistory'
   >;
   private writeLocks = new Map<string, Promise<unknown>>();
   private pending = new Map<string, Set<Promise<unknown>>>();

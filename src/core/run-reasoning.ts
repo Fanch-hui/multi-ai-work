@@ -18,7 +18,10 @@ export function runReasoningEffort(
     currentConnection?.revision !== connection.revision
   )
     return bot.reasoning;
-  const chief = currentRoom.chiefId === bot.id && !!currentRoom.model;
+  const chief =
+    currentRoom.chiefId === bot.id &&
+    !!currentRoom.model &&
+    !(currentRoom.kind === 'private' && currentRoom.chiefRole);
   const model = chief ? currentRoom.model : currentBot.model;
   if (model !== bot.model) return bot.reasoning;
   return chief ? currentRoom.reasoning : currentBot.reasoning;

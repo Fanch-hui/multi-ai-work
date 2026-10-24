@@ -187,6 +187,8 @@ export class TaskService {
   }
 
   send(input: {
+    chiefInputId?: string;
+    messageId?: string;
     references?: ConversationReference[];
     replyToMessageId?: string;
     conversationId: string;
@@ -198,16 +200,33 @@ export class TaskService {
     const s = this.state.storage;
     const room = required(s.get<Conversation>('conversations', input.conversationId), '对话不存在');
     this.requireActive(room.id);
+    const routed = input.chiefInputId
+      ? required(
+          s.get<import('../domain/chief-work.js').ChiefInput>('chief_inputs', input.chiefInputId),
+          '管家输入不存在',
+        )
+      : undefined;
+    if (
+      routed &&
+      (routed.contextId !== room.chiefContextId ||
+        room.chiefHomeId !== routed.homeConversationId ||
+        !['routing', 'pending'].includes(routed.status))
+    )
+      throw new Error('管家输入与目标事项不匹配');
     const artifactIds = [...new Set(input.artifactIds ?? [])];
     requireAttachmentCapacity(0, artifactIds.length);
     for (const artifactId of artifactIds) {
       const artifact = required(s.get<Artifact>('artifacts', artifactId), '资料不存在');
-      if (artifact.conversationId !== room.id) throw new Error('资料不在当前会话中');
+      if (artifact.conversationId !== room.id && !routed?.artifactIds.includes(artifactId))
+        throw new Error('资料不在当前会话中');
     }
     const content = input.content.trim() || (artifactIds.length ? '请阅读所附资料。' : '');
     if (!content) throw new Error('消息不能为空');
     const requestId = input.requestId ?? id();
-    const reply = replyMessage(this.state, room.id, input.replyToMessageId);
+    const reply =
+      routed && input.replyToMessageId === routed.replyToMessageId
+        ? s.getMessage(input.replyToMessageId ?? '')
+        : replyMessage(this.state, room.id, input.replyToMessageId);
     let directed = input.targetBotIds ?? [];
     if (!directed.length && reply?.authorBotId && room.memberIds.includes(reply.authorBotId))
       directed = [reply.authorBotId];
@@ -263,7 +282,7 @@ export class TaskService {
         s.put('conversations', { ...room, name: content.replace(/\s+/g, ' ').slice(0, 40) });
       }
       const message = s.appendMessage({
-        id: id(),
+        id: input.messageId ?? id(),
         conversationId: room.id,
         authorType: 'user',
         content,

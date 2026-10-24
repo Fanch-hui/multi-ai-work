@@ -25,6 +25,7 @@ import { createTaskPlanTools } from './task-plan.js';
 import { createTaskControlTools } from './task-control.js';
 import { createBrowserTools } from './work-browser.js';
 import { createOngoingWorkTools } from './ongoing-work.js';
+import { createChiefHistoryTools } from './chief-history.js';
 
 type Builtin = {
   description: string;
@@ -39,6 +40,7 @@ const argumentsSchema = z.record(z.string(), z.unknown());
 export function createBuiltins(mcp: McpConnections): Record<string, Builtin> {
   const network = new NetworkConcurrency();
   return {
+    ...createChiefHistoryTools(),
     ...createBrowserTools(),
     ...createWorkSkillTools(),
     ...createComputerTools(),

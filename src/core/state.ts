@@ -41,6 +41,9 @@ import { SnapshotCache } from './snapshot-cache.js';
 import { ArtifactContents } from './artifact-contents.js';
 import { migrateReplyArtifacts } from './reply-artifacts.js';
 import { ArtifactObjects } from './artifact-objects.js';
+import { migrateChiefWork } from './chief-migration.js';
+import { chiefSnapshot } from './chief-contexts.js';
+import { ChiefTimelineService } from './chief-timeline.js';
 
 export const now = () => new Date().toISOString();
 export const id = () => randomUUID();
@@ -106,6 +109,7 @@ export class State {
     migrateBotPermissions(this.storage, settings.mainBotId);
     initializeOnboarding(this.storage);
     initializeConversationReads(this.storage);
+    migrateChiefWork(this);
   }
   snapshot(messageProjection?: Message[]): Snapshot {
     const s = this.storage,
@@ -115,12 +119,20 @@ export class State {
     const runs = s.all<Run>('runs'),
       readActivity = taskActivityReader(s, tasks, runs);
     const privateSkillIds = presetSkillIds(this);
+    const timeline = new ChiefTimelineService(this);
+    timeline.sync(s.changes.ids('messages'));
+    const conversations = messageProjection
+      ? unreadConversationCounts(s)
+      : unreadConversations(s, messages);
     return {
+      chief: chiefSnapshot(this),
       connections: this.snapshotCache.all('connections'),
       bots: this.snapshotCache.all<Bot>('bots').map((bot) => publicBot(bot, settings.mainBotId)),
-      conversations: messageProjection
-        ? unreadConversationCounts(s)
-        : unreadConversations(s, messages),
+      conversations: conversations.map((room) =>
+        room.id === settings.mainConversationId
+          ? { ...room, unreadCount: timeline.unreadCount() }
+          : room,
+      ),
       workspaces: this.snapshotCache.all('workspaces'),
       messages,
       tasks: tasks.map((task) => this.taskSnapshot(task, readActivity)),
@@ -150,6 +162,7 @@ export class State {
     };
   }
   changed(kind: StateChange = 'state', options: { incremental?: boolean } = {}) {
+    new ChiefTimelineService(this).sync(this.storage.changes.ids('messages'));
     this.sync.changed(kind, options.incremental);
     for (const listener of this.listeners) listener(kind);
   }

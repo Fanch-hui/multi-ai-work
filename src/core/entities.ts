@@ -6,6 +6,7 @@ import type {
   Connection,
   Conversation,
   Skill,
+  Task,
   ToolConnection,
   Workspace,
 } from '../domain/types.js';
@@ -22,6 +23,7 @@ import { isChiefProvider } from '../domain/chief-provider.js';
 import { protectPresetEdit, validateBotSkills } from './market/bot-policy.js';
 import { defaultContextWindow } from '../domain/context-settings.js';
 import { httpSearchConfiguration } from '../domain/tool-connection.js';
+import { terminal } from '../domain/task-status.js';
 
 const name = z.string().trim().min(1).max(120);
 const connectionSchema = z.object({
@@ -173,13 +175,22 @@ export class EntityService {
       throw new Error('回复预留须小于上下文窗口');
     const botId = parsed.id ?? id();
     const old = this.state.storage.get<Bot>('bots', botId);
+    const chief = botId === this.state.settings().mainBotId;
+    if (
+      chief &&
+      old &&
+      (old.model !== parsed.model || old.connectionId !== parsed.connectionId) &&
+      this.state.storage
+        .byField<Task>('tasks', 'botId', botId)
+        .some((task) => !terminal(task.status))
+    )
+      throw new Error('请先结束或停止管家的工作，再更换模型或连接');
     protectPresetEdit(this.state, old, parsed);
     validateBotSkills(this.state, parsed);
     assertSkillAssignment(this.state, parsed.skillIds, [
       ...(old?.skillIds ?? []),
       ...presetSkillIds,
     ]);
-    const chief = botId === this.state.settings().mainBotId;
     const toolNames = [
       ...new Set(parsed.toolNames ?? old?.toolNames ?? fullToolNames(chief)),
     ].filter((name) => chief || !chiefOnlyTools.includes(name));

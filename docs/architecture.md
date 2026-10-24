@@ -4,7 +4,10 @@
 
 ```mermaid
 flowchart TD
-  User[用户消息] --> Task[TaskService 保存消息与任务输入]
+  User[用户消息] --> Entry{管家固定入口}
+  Entry -->|是| Routing[ChiefRoutingService 保存输入并选择事项]
+  Entry -->|群聊或成员私聊| Task[TaskService 保存消息与任务输入]
+  Routing --> Task
   Task --> Scheduler[Scheduler 判断排队与准入]
   Scheduler --> Executor[Executor 管理一次运行]
   Executor --> Preparation[RunPreparation 准备请求与回调]
@@ -22,6 +25,30 @@ flowchart TD
 应用请求从 `CoreService.request` 进入。维护准入检查之后，请求按领域分发到连接、团队、历史、成果或现有业务服务。`CoreService` 同时是依赖装配和启动、关闭、备份恢复编排的入口。
 
 一次用户消息可能创建任务，也可能成为正在执行任务的补充输入。任务运行成功后，若仍有未接收输入或成员结果，任务会重新排队或等待成员。`Run` 保存一次执行的结果，`Task` 保存整个任务的进度，两者各自表达不同的生命周期。
+
+## 管家主入口与工作事项
+
+`settings.mainConversationId` 是固定可见主入口。每个 `ChiefWorkContext` 保存事项名称与当前 `ChiefContextPart`；工作段关联真实执行 `Conversation`，继续使用其工作区、消息、任务、绑定和权限。不同事项可以并发，同一事项沿现有任务补充输入规则串行接续。管家统一读取 Bot 的模型、推理强度和上下文配置，模型或连接变更须等待管家任务结束。
+
+| 服务 | 权威状态与职责 |
+| --- | --- |
+| `ChiefRoutingService` | `ChiefInput` 接收、幂等、归属判断、澄清、重试、取消和派发 |
+| `ChiefContextService` | 事项、工作段及当前焦点；实际进度读取 Task |
+| `ChiefTimelineService` | `ChiefTimelineEntry` 的稳定显示顺序、消息引用与已读投影 |
+| `ChiefHistoryService` | 管家直属历史检索、原消息锚点及确切来源授权 |
+| `ChiefMaintenanceService` | 上下文压力判断、压缩或分段、来源校验与交接 |
+
+`chief.inputs.send` 先在事务中保存输入和时间线引用，立即展示用户消息。明确事项、回复引用和明确接续语直接解析；其他请求用独立后台任务判断续接、新建或澄清。请求只携带有界候选资料，工具列表为空，返回的事项、项目和历史来源 ID 由 Core 校验。路由使用独立内部会话，受现有账号及全局调度限制。多个待输入按提交顺序处理，单条澄清释放后续输入；派发时在同一事务中创建正式消息并绑定原时间线条目，清除输入中的临时正文。
+
+焦点记录手动选择的修订号。路由依据提交时焦点与修订号决定是否更新焦点；后台进展及完成通知只进入时间线。附件向派发的实际会话授予确切 ID；跨事项历史召回和任务成果查询也只保存实际返回的任务或成果授权。普通成员及群继续遵循原有来源绑定。
+
+时间线只保存原消息或待派发输入的引用，原消息 ID、会话 ID 和序号保留。页面按独立显示序号分页，流式更新沿原消息 ID 合并；已读确认按真实来源分组保存。原会话分页继续服务历史、群聊和私聊。快照与增量携带 `chief` 目录、焦点和待输入，消息投影附带事项与显示序号。
+
+迁移在调度恢复前选择普通管家主入口，保留其消息为时间线基线；其他旧对话作为历史保留。活动旧任务沿用原会话及绑定并接入事项，新输出进入统一时间线。已完成旧任务首次继续时创建关联事项与执行会话，带入相关原文、成果及历史任务引用。例行工作保留专用内部会话，汇报统一进入主入口。迁移版本和映射持久保存，重复迁移保持稳定。
+
+SQLite 存储兼容版本为 2，新备份格式为 3。新备份保存事项、段、输入和时间线关系，旧备份恢复后执行同样迁移；尚未派发的恢复输入保留正文，等待用户重试。历史全文索引采用 FTS5 trigram、短词匹配和相关性排序，后台分批重建，查询先限定获准的管家直属历史。`recall_work` 返回候选，`read_work_history` 按原消息锚点展开原文及成果。
+
+上下文达到配置阈值后，活动任务继续沿现有完整工具边界压缩。事项收尾后，维护任务判断压缩续做或切换新段。切段前检查任务树、待输入、问答、审批、命令和待对账操作；摘要包含目标、约束、进度、决定、待办、成果及历史位置，并保存近期用户原文引用。来源指纹再次校验成功后原子创建新段，更新当前指针。整理期间输入持久等待，维护锁释放时通知路由接续。工作段与 `SessionBinding.generation` 分别表示工作接续和配置兼容性。
 
 ## 调度与执行的阅读顺序
 
@@ -63,7 +90,7 @@ Scheduler 按现有优先级安排前台任务、主管代答和记忆整理，�
 
 最终回复通过 `reply-artifacts.ts` 自动附加尚未发表的最新交付文件，同任务已通过 `post_message` 发出的文件沿用原消息；显式重发仍保留。启动与备份恢复时校正历史最终回复的重复附件关联，原文件和消息正文保留。
 
-库与自动交付共用 `latestArtifactVersions`，按实际产出会话、智能体和工作路径选择最新文件。同一会话连续修改文件时，库只列最新版本；不同会话或产出者的文件分别保留，历史版本仍在存储中。
+库与自动交付共用 `latestArtifactVersions`，显式版本系列优先，其余按事项、智能体和工作路径选择最新文件；旧成果沿用原会话归属。同事项跨段修改连续显示，库按事项分组并标注项目，历史版本折叠保留。真实产出者、任务、成果 ID 和正文持续保存。
 
 聊天中的 AI 附件、工作记录的成果列表和库统一通过 `isDeliverableArtifact` 筛选最终交付。用户上传的资料保留在自己的消息中，工具全文、文档预览页等过程文件供内部读取。库将内容不同的历史交付版本折叠在当前成果下。
 
@@ -121,6 +148,7 @@ Release 草稿上传复用已校验安装包，并查询包源提交 SHA 对应�
 
 | 变更 | 优先测试 |
 | --- | --- |
+| 管家输入、迁移、历史、分段与展示 | [chief-routing](../tests/chief-routing.test.ts)、[chief-contracts](../tests/chief-contracts.test.ts)、[chief-history](../tests/chief-history.test.ts)、[chief-maintenance](../tests/chief-maintenance.test.ts)、[chief-maintenance-routing](../tests/chief-maintenance-routing.test.ts)、[chief-compat](../tests/chief-compat.test.ts)、[chief-work-ui](../tests/chief-work-ui.test.ts) |
 | 调度、启动恢复、补充输入 | [scheduler](../tests/scheduler.test.ts)、[scheduler-recovery](../tests/scheduler-recovery.test.ts)、[task-input-admission](../tests/task-input-admission.test.ts)、[core-user-input](../tests/core-user-input.test.ts) |
 | 执行结果、草稿、提问与停止 | [execution-lifecycle](../tests/execution-lifecycle.test.ts)、[run-publication](../tests/run-publication.test.ts)、[core-questions](../tests/core-questions.test.ts)、[task-controls](../tests/task-controls.test.ts) |
 | 文件交付、历史附件与库版本 | [reply-artifacts](../tests/reply-artifacts.test.ts)、[artifact-groups](../tests/artifact-groups.test.ts)、[artifact-delete](../tests/artifact-delete.test.ts) |

@@ -9,6 +9,9 @@ export function accessibleArtifacts(
 ): Artifact[] {
   const s = state.storage;
   const returned = new Set<string>();
+  if (room.purpose === 'chief' && room.kind === 'private' && botId === state.settings().mainBotId)
+    for (const artifactId of s.metadata<string[]>(`chief-artifact-grants:${room.id}`) ?? [])
+      returned.add(artifactId);
   if (room.kind === 'group' && room.memberIds.includes(botId)) {
     for (const message of s.messages(room.id).filter((item) => item.status === 'committed'))
       for (const artifactId of message.artifactIds) returned.add(artifactId);

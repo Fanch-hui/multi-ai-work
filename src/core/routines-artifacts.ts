@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { rm } from 'node:fs/promises';
-import type { Artifact } from '../domain/types.js';
+import type { Artifact, Conversation } from '../domain/types.js';
 import { required } from './errors.js';
 import { id, now, type State } from './state.js';
 
@@ -28,6 +28,8 @@ export async function prepareRoutineInputs(state: State, artifactIds: string[]) 
           ...shared,
           id: newId,
           conversationId,
+          chiefContextId: state.storage.get<Conversation>('conversations', conversationId)
+            ?.chiefContextId,
           contentSource: undefined,
           image: undefined,
           seriesId: undefined,

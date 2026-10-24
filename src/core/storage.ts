@@ -29,7 +29,10 @@ const indexedFields = {
   memoryId: '$.memoryId',
   requestId: '$.requestId',
   taskId: '$.taskId',
+  botId: '$.botId',
   conversationId: '$.conversationId',
+  homeConversationId: '$.homeConversationId',
+  contextId: '$.contextId',
   planId: '$.planId',
 } as const;
 

@@ -9,6 +9,7 @@ import type { TeamService } from './team.js';
 import { routineInputSchema, routineReferences, validateRoutineInput } from './routines-input.js';
 import { latestRoutineRun, nextRoutineRun } from './routines-time.js';
 import { prepareRoutineInputs } from './routines-artifacts.js';
+import { currentRoutineContext, grantRoutineContextInputs } from './routines-context.js';
 
 const key = (value: string) => createHash('sha256').update(value).digest('hex');
 
@@ -23,7 +24,10 @@ export class RoutineService {
   ) {}
 
   request(method: string, params: Record<string, unknown> = {}): unknown {
-    if (method === 'routines.list') return this.state.storage.all<Routine>('routines');
+    if (method === 'routines.list')
+      return this.state.storage
+        .all<Routine>('routines')
+        .map((routine) => currentRoutineContext(this.state, routine));
     if (method === 'routines.save') return this.save(params.input);
     const routine = this.get(z.string().min(1).parse(params.id));
     if (method === 'routines.get') return routine;
@@ -63,10 +67,10 @@ export class RoutineService {
     for (const routine of this.state.storage.all<Routine>('routines')) {
       if (!routine.enabled || (!routine.nextRunAt && !routine.pendingAt)) continue;
       try {
-        this.tickRoutine(routine, current);
+        this.tickRoutine(currentRoutineContext(this.state, routine), current);
       } catch (error) {
         this.state.storage.put('routines', {
-          ...this.get(routine.id),
+          ...required(this.state.storage.get<Routine>('routines', routine.id), '例行工作不存在'),
           enabled: false,
           error: error instanceof Error ? error.message : String(error),
           updatedAt: current,
@@ -91,7 +95,10 @@ export class RoutineService {
   }
 
   private get(routineId: string) {
-    return required(this.state.storage.get<Routine>('routines', routineId), '例行工作不存在');
+    return currentRoutineContext(
+      this.state,
+      required(this.state.storage.get<Routine>('routines', routineId), '例行工作不存在'),
+    );
   }
 
   private occurrences(routineId: string) {
@@ -104,6 +111,7 @@ export class RoutineService {
     const fields = routineInputSchema.parse(input);
     validateRoutineInput(this.state, fields);
     const previous = fields.id ? this.get(fields.id) : undefined;
+    const routineId = previous?.id ?? id();
     if (
       previous &&
       (previous.botId !== fields.botId || previous.workspaceId !== fields.workspaceId)
@@ -116,10 +124,10 @@ export class RoutineService {
         if (previous && this.get(previous.id).revision !== previous.revision)
           throw new Error('例行工作已更新，请刷新后重试');
         validateRoutineInput(this.state, fields);
-        const conversationId = previous?.conversationId ?? this.createRoom(fields);
+        const conversationId = previous?.conversationId ?? this.createRoom(fields, routineId);
         const routine: Routine = {
           ...fields,
-          id: previous?.id ?? id(),
+          id: routineId,
           conversationId,
           inputArtifactIds: inputs.save(conversationId),
           revision: (previous?.revision ?? 0) + 1,
@@ -139,11 +147,12 @@ export class RoutineService {
     }
   }
 
-  private createRoom(input: z.infer<typeof routineInputSchema>) {
+  private createRoom(input: z.infer<typeof routineInputSchema>, routineId: string) {
     if (input.botId === this.state.settings().mainBotId)
-      return this.team.createChiefConversation(input.name, {
+      return this.team.createChiefExecutionConversation(input.name, {
         workspaceId: input.workspaceId,
-        selectAsMain: false,
+        routineId,
+        chiefRole: 'routine',
       }).id;
     const room: Conversation = {
       id: id(),
@@ -269,6 +278,12 @@ export class RoutineService {
   ) {
     const existing = this.state.storage.get<RoutineOccurrence>('routine_occurrences', occurrenceId);
     if (existing) return existing;
+    grantRoutineContextInputs(this.state, routine);
+    if (
+      this.state.storage.get<Routine>('routines', routine.id)?.conversationId !==
+      routine.conversationId
+    )
+      this.state.storage.put('routines', routine);
     const task = this.tasks.create({
       conversationId: routine.conversationId,
       botId: routine.botId,

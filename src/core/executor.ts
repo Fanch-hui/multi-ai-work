@@ -165,10 +165,12 @@ export class Executor {
       s.get<Connection>('connections', bot.connectionId),
       '请先为智能体配置连接',
     );
+    const sharedChief = room.kind === 'private' && room.purpose === 'chief' && !!room.chiefRole;
     bot = {
       ...bot,
-      model: room.chiefId === bot.id ? (room.model ?? bot.model) : bot.model,
-      reasoning: room.chiefId === bot.id && room.model ? room.reasoning : bot.reasoning,
+      model: !sharedChief && room.chiefId === bot.id ? (room.model ?? bot.model) : bot.model,
+      reasoning:
+        !sharedChief && room.chiefId === bot.id && room.model ? room.reasoning : bot.reasoning,
     };
     if (!bot.model) throw new Error('请先为智能体选择模型');
     const workspace = required(s.get<Workspace>('workspaces', room.workspaceId), '工作目录不存在');
@@ -176,9 +178,11 @@ export class Executor {
       this.adapters.find((item) => item.kind === connection.provider),
       '连接类型不支持',
     );
-    let purpose: 'memory' | 'question-decision' | undefined;
+    let purpose: import('../domain/types.js').SessionBinding['purpose'];
     if (task.kind === 'memory-review') purpose = 'memory';
     else if (task.kind === 'question-decision') purpose = 'question-decision';
+    else if (task.kind === 'chief-routing' || task.kind === 'chief-context-maintenance')
+      purpose = task.kind;
     const binding = sessionBinding(
       this.state,
       bot,
@@ -186,7 +190,10 @@ export class Executor {
       connection,
       workspace,
       purpose,
-      task.questionId,
+      task.questionId ??
+        (task.kind === 'chief-routing' || task.kind === 'chief-context-maintenance'
+          ? task.id
+          : undefined),
     );
     const saved = loadManagedProgress(s, task, binding);
     const run: Run = {

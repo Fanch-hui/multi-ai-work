@@ -168,7 +168,7 @@ describe('Core 常用工具', () => {
     );
   });
 
-  it('来源 Chief 能核查任务群回传成果，其他主对话不能读取', async () => {
+  it('来源事项能核查任务群回传成果，独立事项保持资料隔离', async () => {
     let worker!: Bot, group!: { conversation: Conversation; task: Task };
     let mainRounds = 0,
       groupRounds = 0,
@@ -225,9 +225,11 @@ describe('Core 常用工具', () => {
       true,
     );
     const { accessibleArtifacts } = await import('../src/core/tool-access.js');
-    const other = (await core.request('chief.conversations.create', {
-      name: '另一主对话',
-    })) as Conversation;
+    const independent = core.chief.contexts.create({ title: '独立事项' });
+    const other = core.state.storage.get<Conversation>(
+      'conversations',
+      independent.conversationId,
+    )!;
     expect(
       accessibleArtifacts(core.state, other, core.state.settings().mainBotId!).some(
         (item) => item.id === artifactId,

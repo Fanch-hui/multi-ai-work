@@ -12,6 +12,8 @@ import type { StorageChanges } from './storage-changes.js';
 import { taskActivityReader } from './task-activity.js';
 import { unreadConversationCounts } from './conversation-read.js';
 import { taskPlanView } from './task-plan-view.js';
+import { ChiefTimelineService } from './chief-timeline.js';
+import { chiefSnapshot } from './chief-contexts.js';
 
 interface Change extends StorageChanges {
   version: number;
@@ -25,6 +27,10 @@ const supported = new Set([
   'events',
   'text_events',
   'provider_archive',
+  'chief_contexts',
+  'chief_parts',
+  'chief_inputs',
+  'chief_timeline',
 ]);
 const businessSupported = new Set([...supported, 'deliveries', 'task_plans', 'conversation_reads']);
 export const publicProcess = (item: ProcessRecord): ProcessRecord => ({
@@ -70,9 +76,12 @@ export class SnapshotSync {
   view(conversationId?: string, from?: number): SnapshotView {
     let page: MessagePage | undefined;
     if (conversationId) {
-      page = from
-        ? this.state.storage.messageRange(conversationId, from)
-        : this.state.storage.messagePage(conversationId);
+      if (conversationId === this.state.settings().mainConversationId)
+        page = new ChiefTimelineService(this.state).page(undefined, 50, from);
+      else
+        page = from
+          ? this.state.storage.messageRange(conversationId, from)
+          : this.state.storage.messagePage(conversationId);
     }
     return {
       snapshot: this.state.snapshot(page?.messages ?? []),
@@ -109,7 +118,13 @@ export class SnapshotSync {
     const changedMessages = ids('messages')
       .map((id) => s.getMessage(id))
       .filter((item): item is Message => !!item);
-    result.messages = changedMessages.filter((item) => item.conversationId === conversationId);
+    result.messages =
+      conversationId === this.state.settings().mainConversationId
+        ? new ChiefTimelineService(this.state).changes([
+            ...ids('messages'),
+            ...ids('chief_timeline'),
+          ])
+        : changedMessages.filter((item) => item.conversationId === conversationId);
     const runs = ids('runs')
       .map((id) => s.get<Run>('runs', id))
       .filter((item): item is Run => !!item);
@@ -131,6 +146,11 @@ export class SnapshotSync {
     const tasks = [...taskIds]
       .map((id) => s.get<Task>('tasks', id))
       .filter((item): item is Task => !!item);
+    if (
+      changedTaskIds.size ||
+      ['chief_contexts', 'chief_parts', 'chief_inputs'].some((table) => ids(table).length)
+    )
+      result.chief = chiefSnapshot(this.state);
     const taskRuns = tasks
       .map((task) => task.runIds.at(-1))
       .filter((id): id is string => !!id)
@@ -159,6 +179,17 @@ export class SnapshotSync {
         ]),
       ];
       if (rooms.length) result.conversationUpdates = unreadConversationCounts(s, rooms);
+      if (rooms.length && conversationId === this.state.settings().mainConversationId) {
+        const home = s.get<import('../domain/types.js').Conversation>(
+          'conversations',
+          conversationId!,
+        );
+        if (home)
+          result.conversationUpdates = [
+            ...(result.conversationUpdates ?? []).filter((item) => item.id !== home.id),
+            { ...home, unreadCount: new ChiefTimelineService(this.state).unreadCount() },
+          ];
+      }
       this.businessUpdates(
         result,
         tasks.filter((task) => changedTaskIds.has(task.id)),

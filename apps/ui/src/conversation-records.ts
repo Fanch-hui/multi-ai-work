@@ -2,6 +2,7 @@ import type { Conversation, ProcessRecord, Snapshot, Task } from '../../../src/d
 export { taskRecordActions, toolActionTitle } from './run-work-actions.js';
 export type { RecordedAction } from './run-work-actions.js';
 import { currentActivityLabel, recoveryAttemptTime } from './task-activity.js';
+import { chiefConversationIds } from './chief-work.js';
 
 const activeStatuses = new Set([
   'recovering',
@@ -33,11 +34,12 @@ const processLabels: Record<string, string> = {
 };
 
 export function conversationRecordTasks(
-  data: Pick<Snapshot, 'tasks' | 'conversations'>,
+  data: Pick<Snapshot, 'tasks' | 'conversations'> & Partial<Pick<Snapshot, 'chief'>>,
   conversation: Conversation,
 ): Task[] {
+  const ids = chiefConversationIds(data, conversation);
   const included = new Set(
-    data.tasks.filter((task) => task.conversationId === conversation.id).map((task) => task.id),
+    data.tasks.filter((task) => ids.has(task.conversationId)).map((task) => task.id),
   );
   const tasks = new Map(data.tasks.map((task) => [task.id, task]));
   const rooms = new Map(data.conversations.map((room) => [room.id, room]));

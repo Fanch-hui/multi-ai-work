@@ -103,7 +103,7 @@ export function MainSidebar({
             className="size-10 shrink-0 border-black/6 bg-white/70 p-0"
             onClick={onCreate}
             disabled={!data}
-            aria-label="呼叫管家，创建主对话"
+            aria-label="打开管家对话"
             title="呼叫管家"
           >
             <Phone size={16} />

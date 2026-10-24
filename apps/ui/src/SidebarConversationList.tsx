@@ -16,6 +16,11 @@ type ListProps = {
 export function SidebarConversationList(props: ListProps) {
   const { data, archived, query } = props;
   const conversations = (data?.conversations ?? [])
+    .map((item) =>
+      item.id === data?.chief?.homeConversationId
+        ? { ...item, name: data.bots.find((bot) => bot.id === item.chiefId)?.name ?? item.name }
+        : item,
+    )
     .filter(
       (item) =>
         !!item.archived === archived &&
@@ -26,8 +31,20 @@ export function SidebarConversationList(props: ListProps) {
   const sections = [
     {
       id: 'chief',
-      label: archived ? '已归档主对话' : '主对话',
-      items: conversations.filter((item) => item.purpose === 'chief'),
+      label: archived ? '已归档主对话' : '管家',
+      items: conversations.filter(
+        (item) =>
+          item.purpose === 'chief' && (!data?.chief || item.id === data.chief.homeConversationId),
+      ),
+    },
+    {
+      id: 'history',
+      label: '历史',
+      items: (data?.conversations ?? []).filter(
+        (item) =>
+          item.chiefRole === 'history' &&
+          item.name.toLocaleLowerCase().includes(query.toLocaleLowerCase()),
+      ),
     },
     {
       id: 'groups',
@@ -43,12 +60,13 @@ export function SidebarConversationList(props: ListProps) {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-2" aria-label="会话列表">
       {sections
-        .filter((section) => section.id !== 'private' || section.items.length)
+        .filter((section) => !['private', 'history'].includes(section.id) || section.items.length)
         .map((section) => (
           <ConversationSection
             key={section.id}
             label={section.label}
             items={section.items}
+            initiallyCollapsed={section.id === 'history'}
             {...props}
           />
         ))}
@@ -62,9 +80,10 @@ export function SidebarConversationList(props: ListProps) {
 function ConversationSection({
   label,
   items,
+  initiallyCollapsed,
   ...props
-}: ListProps & { label: string; items: Conversation[] }) {
-  const [collapsed, setCollapsed] = useState(false);
+}: ListProps & { label: string; items: Conversation[]; initiallyCollapsed?: boolean }) {
+  const [collapsed, setCollapsed] = useState(!!initiallyCollapsed);
   const [expanded, setExpanded] = useState(false);
   const visibleItems = props.query || expanded ? items : items.slice(0, 5);
   const selectedItem = items.find((item) => item.id === props.selectedId);

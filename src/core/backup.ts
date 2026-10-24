@@ -23,9 +23,10 @@ import {
 } from './backup-resources.js';
 import { rebuildMemorySearch } from './memory-storage.js';
 import { readArtifactBytes } from './artifact-content-source.js';
+import { restoreChiefInput } from './chief-backup.js';
 
 interface BackupManifest {
-  version: 1 | 2;
+  version: 1 | 2 | 3;
   artifacts: { id: string; file: string }[];
   databaseSha256?: string;
   resources?: BackupResource[];
@@ -90,7 +91,7 @@ export class BackupService {
     await writeFile(
       join(directory, 'manifest.json'),
       JSON.stringify(
-        { version: 2, createdAt: now(), databaseSha256, artifacts: records, resources },
+        { version: 3, createdAt: now(), databaseSha256, artifacts: records, resources },
         null,
         2,
       ),
@@ -112,14 +113,14 @@ export class BackupService {
       await readFile(await backupFile(root, 'manifest.json'), 'utf8'),
     ) as BackupManifest;
     if (
-      ![1, 2].includes(manifest.version) ||
+      ![1, 2, 3].includes(manifest.version) ||
       !Array.isArray(manifest.artifacts) ||
-      (manifest.version === 2 && !Array.isArray(manifest.resources))
+      (manifest.version >= 2 && !Array.isArray(manifest.resources))
     )
       throw new Error('备份格式不支持');
     const databasePath = await backupFile(root, 'team.sqlite');
     if (
-      manifest.version === 2 &&
+      manifest.version >= 2 &&
       createHash('sha256')
         .update(await readFile(databasePath))
         .digest('hex') !== manifest.databaseSha256
@@ -131,7 +132,7 @@ export class BackupService {
     const paths = new Map<string, string>();
     const hostId = this.state.storage.metadata('oauth.hostId');
     try {
-      if (source.pragma('user_version', { simple: true }) !== 1)
+      if (![1, 2].includes(source.pragma('user_version', { simple: true }) as number))
         throw new Error('备份数据库版本不兼容');
       const resources = await restoreBackupResources(
         root,
@@ -182,6 +183,10 @@ export class BackupService {
           }
           const optional =
             [
+              'chief_contexts',
+              'chief_parts',
+              'chief_inputs',
+              'chief_timeline',
               'routines',
               'routine_occurrences',
               'artifact_reviews',
@@ -201,6 +206,7 @@ export class BackupService {
               'preset_installations',
               'task_plans',
             ].includes(table) &&
+            (manifest.version < 3 || !table.startsWith('chief_')) &&
             !source.prepare('SELECT 1 FROM sqlite_master WHERE name = ?').get(table);
           const rows = optional
             ? []
@@ -249,6 +255,7 @@ export class BackupService {
     resources: RestoredResources,
   ): string {
     const value = JSON.parse(payload);
+    if (table === 'chief_inputs') return JSON.stringify(restoreChiefInput(value));
     if (table === 'artifacts') {
       delete value.image;
       const artifact = value as Artifact;

@@ -6,6 +6,19 @@ import type { ToolExecutionContext } from '../domain/tools.js';
 import { id, now, type State } from './state.js';
 import { artifactSeries } from './artifact-review-series.js';
 
+function chiefContextId(state: State, source: Conversation): string | undefined {
+  let room: Conversation | undefined = source;
+  const seen = new Set<string>();
+  while (room && !seen.has(room.id)) {
+    if (room.chiefContextId) return room.chiefContextId;
+    seen.add(room.id);
+    room = room.sourceConversationId
+      ? state.storage.get<Conversation>('conversations', room.sourceConversationId)
+      : undefined;
+  }
+  return undefined;
+}
+
 export function registerTaskArtifact(
   state: State,
   input: Parameters<ToolExecutionContext['registerArtifact']>[0],
@@ -57,6 +70,7 @@ export function registerTaskArtifact(
     taskId: task.id,
     botId: bot.id,
     conversationId: room.id,
+    chiefContextId: chiefContextId(state, room),
     createdAt: now(),
     requirementVersion,
     seriesId: series.seriesId,

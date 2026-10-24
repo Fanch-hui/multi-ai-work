@@ -7,7 +7,6 @@ import { Chat } from './Chat.js';
 import { MainSidebar, type Page } from './MainSidebar.js';
 import { BotEditor } from './BotEditor.js';
 import { ConversationEditor } from './ConversationEditor.js';
-import { ChiefConversationEditor } from './ChiefConversationEditor.js';
 import { Onboarding } from './Onboarding.js';
 import { isChiefProvider } from '../../../src/domain/chief-provider.js';
 import { ModalPresence } from './ModalPresence.js';
@@ -36,9 +35,9 @@ export function App() {
   );
   const [configureChief, setConfigureChief] = useState(false);
   const [create, setCreate] = useState(false);
-  const [createMain, setCreateMain] = useState(false);
   const [careerTrigger, setCareerTrigger] = useState(false);
   const [onboardingActive, setOnboardingActive] = useState(false);
+  const [navigationError, setNavigationError] = useState('');
   const mainBot = data?.bots.find((bot) => bot.id === data.settings.mainBotId);
   const chiefConnection = data?.connections.find((item) => item.id === mainBot?.connectionId);
   const chiefConfigured =
@@ -52,11 +51,9 @@ export function App() {
   useEffect(
     () =>
       subscribeNavigation((id) => {
-        setSelected(id);
-        setPage('chat');
-        setBrowserRequest(undefined);
+        openConversation(id);
       }),
-    [],
+    [data?.conversations, data?.chief],
   );
   useEffect(() => {
     selectConversation(conversation?.id);
@@ -67,6 +64,24 @@ export function App() {
     localStorage.setItem('sidebar-collapsed', String(next));
   }
   function openConversation(id: string, openBrowser = false) {
+    const room = data?.conversations.find((item) => item.id === id);
+    if (room?.chiefContextId && ['work', 'routine'].includes(room.chiefRole ?? '') && data?.chief) {
+      const home = data.chief.homeConversationId;
+      void mutate('chief.contexts.activate', { id: room.chiefContextId })
+        .then(() => {
+          setNavigationError('');
+          setBrowserRequest(
+            openBrowser ? { conversationId: home, revision: Date.now() } : undefined,
+          );
+          setSelected(home);
+          setPage('chat');
+        })
+        .catch((cause) =>
+          setNavigationError(cause instanceof Error ? cause.message : String(cause)),
+        );
+      return;
+    }
+    setNavigationError('');
     setBrowserRequest(openBrowser ? { conversationId: id, revision: Date.now() } : undefined);
     setSelected(id);
     setPage('chat');
@@ -202,18 +217,20 @@ export function App() {
         collapsed={collapsed}
         onPage={setPage}
         onSelect={openConversation}
-        onCreate={() => setCreateMain(true)}
+        onCreate={() =>
+          data?.settings.mainConversationId && openConversation(data.settings.mainConversationId)
+        }
         onCreateGroup={() => setCreate(true)}
         mutate={mutate}
         onCollapse={toggleSidebar}
       />
       <div className="app-content flex min-w-0 flex-1 flex-col">
-        {error && data && (
+        {(error || navigationError) && data && (
           <div
             role="alert"
             className="flex shrink-0 items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-6 py-3 text-sm text-amber-800"
           >
-            <p>{error}</p>
+            <p>{error || navigationError}</p>
             <Button onClick={() => void refresh()}>
               <RefreshCw size={14} />
               重新连接
@@ -238,17 +255,6 @@ export function App() {
             mutate={mutate}
             close={() => setConfigureChief(false)}
             configureConnection={() => setPage('settings')}
-          />
-        )}
-      </ModalPresence>
-      <ModalPresence show={createMain && !!data}>
-        {data && (
-          <ChiefConversationEditor
-            data={data}
-            mutate={mutate}
-            close={() => setCreateMain(false)}
-            created={openConversation}
-            configureChief={() => setConfigureChief(true)}
           />
         )}
       </ModalPresence>

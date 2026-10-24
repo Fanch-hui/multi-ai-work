@@ -4,7 +4,7 @@ import { State } from '../src/core/state.js';
 import { eventually, setup } from './core-harness.js';
 
 describe('主管主对话与任务群', () => {
-  it('新主对话保存所选工作目录与模型，任务群继承主管会话配置而不公开系统目标', async () => {
+  it('事项保存所选工作目录，任务群继承统一管家模型而不公开系统目标', async () => {
     const { core, connection, bot } = await setup(async () => ({ text: '完成' }));
     core.scheduler.pause();
     core.state.storage.put('connections', {
@@ -16,7 +16,7 @@ describe('主管主对话与任务群', () => {
       ],
     });
     await core.request('chief.configure', {
-      input: { connectionId: connection.id, model: 'test' },
+      input: { connectionId: connection.id, model: 'alternate', reasoning: 'high' },
     });
     const workspace = await core.entities.addWorkspace({
       name: '本轮目录',
@@ -193,7 +193,7 @@ describe('主管主对话与任务群', () => {
     expect(core.state.storage.messages(group!.conversation.id).at(-1)?.authorType).toBe('user');
   });
 
-  it('新主对话保持旧历史与独立模型会话绑定，迁移保留旧团队群', async () => {
+  it('固定主入口保留旧历史，工作项使用独立绑定，迁移保留旧团队群', async () => {
     const { core, root, connection, bot } = await setup(async () => ({ text: '主管回复' }));
     await core.request('chief.configure', {
       input: { connectionId: connection.id, model: 'test' },
@@ -206,7 +206,14 @@ describe('主管主对话与任务群', () => {
     const next = (await core.request('chief.conversations.create', {
       name: '新主对话',
     })) as Conversation;
-    const second = core.tasks.send({ conversationId: next.id, content: '新主对话' });
+    expect(next.id).toBe(oldId);
+    const context = core.chief.contexts
+      .list()
+      .find((item) => item.id === core.chief.contexts.focus().contextId)!;
+    const second = (await core.request('chief.inputs.send', {
+      targetContextId: context.id,
+      content: '新事项',
+    })) as { taskIds: string[] };
     await eventually(
       () => core.state.storage.get<Task>('tasks', second.taskIds[0])?.status === 'completed',
     );
@@ -214,9 +221,11 @@ describe('主管主对话与任务群', () => {
       core.state.storage
         .all<SessionBinding>('session_bindings')
         .map((binding) => binding.conversationId),
-    ).toEqual([oldId, next.id]);
+    ).toEqual([oldId, context.conversationId]);
     expect(
-      core.state.storage.messages(next.id).some((message) => message.content === '旧主对话'),
+      core.state.storage
+        .messages(context.conversationId)
+        .some((message) => message.content === '旧主对话'),
     ).toBe(false);
     const member = bot('历史成员');
     const legacy = core.entities.createConversation({
