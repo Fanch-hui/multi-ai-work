@@ -9,6 +9,7 @@ import type {
   Skill,
   Task,
   ToolConnection,
+  Workspace,
 } from '../domain/types.js';
 import type { PresetInstallation } from '../domain/market.js';
 import { State, id, now } from './state.js';
@@ -23,10 +24,12 @@ import {
 } from './backup-resources.js';
 import { rebuildMemorySearch } from './memory-storage.js';
 import { readArtifactBytes } from './artifact-content-source.js';
-import { restoreChiefInput } from './chief-backup.js';
+import { restoreChiefInput, restoreChiefMetadata } from './chief-backup.js';
+import { backupDefaultWorkspace, restoreWorkingPath } from './backup-workspaces.js';
+import { ensureDefaultWorkspace } from './chief-continuity-migration.js';
 
 interface BackupManifest {
-  version: 1 | 2 | 3;
+  version: 1 | 2 | 3 | 4;
   artifacts: { id: string; file: string }[];
   databaseSha256?: string;
   resources?: BackupResource[];
@@ -91,7 +94,7 @@ export class BackupService {
     await writeFile(
       join(directory, 'manifest.json'),
       JSON.stringify(
-        { version: 3, createdAt: now(), databaseSha256, artifacts: records, resources },
+        { version: 4, createdAt: now(), databaseSha256, artifacts: records, resources },
         null,
         2,
       ),
@@ -113,7 +116,7 @@ export class BackupService {
       await readFile(await backupFile(root, 'manifest.json'), 'utf8'),
     ) as BackupManifest;
     if (
-      ![1, 2, 3].includes(manifest.version) ||
+      ![1, 2, 3, 4].includes(manifest.version) ||
       !Array.isArray(manifest.artifacts) ||
       (manifest.version >= 2 && !Array.isArray(manifest.resources))
     )
@@ -132,8 +135,9 @@ export class BackupService {
     const paths = new Map<string, string>();
     const hostId = this.state.storage.metadata('oauth.hostId');
     try {
-      if (![1, 2].includes(source.pragma('user_version', { simple: true }) as number))
+      if (![1, 2, 3].includes(source.pragma('user_version', { simple: true }) as number))
         throw new Error('备份数据库版本不兼容');
+      const defaultWorkspace = backupDefaultWorkspace(source);
       const resources = await restoreBackupResources(
         root,
         restoreDirectory,
@@ -217,6 +221,8 @@ export class BackupService {
           db.exec(`DELETE FROM ${table}`);
           if (table === 'managed_progress_deltas') continue;
           for (const row of rows) {
+            if (table === 'metadata')
+              row.value = restoreChiefMetadata(row.key as string, row.value as string);
             if (table === 'messages' && hasStreamCursor) {
               const projected = projectStreamMessage(source, {
                 payload: row.payload as string,
@@ -226,13 +232,18 @@ export class BackupService {
               row.stream_sequence = projected.sequence;
             }
             if (typeof row.payload === 'string')
-              row.payload = this.sanitize(table, row.payload, paths, resources);
+              row.payload = this.sanitize(table, row.payload, paths, resources, defaultWorkspace);
             db.prepare(
               `INSERT INTO ${table} (${columns.join(',')}) VALUES (${columns.map(() => '?').join(',')})`,
             ).run(...Object.values(row));
           }
         }
         rebuildMemorySearch(this.state.storage);
+        ensureDefaultWorkspace(this.state.storage, this.state.dataDirectory);
+        this.state.storage.setMetadata(
+          'chief-restored-report-tasks',
+          this.state.storage.all<Task>('tasks').map((task) => task.id),
+        );
         db.prepare(
           "DELETE FROM metadata WHERE key LIKE 'history:%' OR key LIKE 'history-validity:%' OR key LIKE 'results:%'",
         ).run();
@@ -253,6 +264,7 @@ export class BackupService {
     payload: string,
     paths: Map<string, string>,
     resources: RestoredResources,
+    defaultWorkspace?: Workspace,
   ): string {
     const value = JSON.parse(payload);
     if (table === 'chief_inputs') return JSON.stringify(restoreChiefInput(value));
@@ -262,9 +274,18 @@ export class BackupService {
       const path = paths.get(artifact.id);
       if (!path) throw new Error('备份缺少成果文件');
       artifact.path = path;
-      artifact.workingPath = undefined;
+      artifact.workingPath = restoreWorkingPath(
+        artifact.workingPath,
+        defaultWorkspace,
+        this.state.dataDirectory,
+      );
       delete artifact.objectHash;
       delete artifact.contentSource;
+    }
+    if (table === 'workspaces' && value.id === defaultWorkspace?.id) {
+      value.path = join(this.state.dataDirectory, 'workspace');
+      value.enabled = true;
+      value.writable = true;
     }
     if (table === 'connections') {
       const connection = value as Connection;

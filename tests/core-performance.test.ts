@@ -133,6 +133,6 @@ describe('stream notifications and indexed task queries', () => {
         .all('selected') as { detail: string }[];
       expect(plans.some((plan) => plan.detail.includes('USING INDEX'))).toBe(true);
     }
-    expect(storage.db.pragma('user_version', { simple: true })).toBe(2);
+    expect(storage.db.pragma('user_version', { simple: true })).toBe(3);
   });
 });

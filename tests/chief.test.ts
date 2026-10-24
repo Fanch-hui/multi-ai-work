@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Bot, Conversation, Task } from '../src/domain/types.js';
+import type { Bot, Connection, Conversation, Task } from '../src/domain/types.js';
 import type { ChiefInput } from '../src/domain/chief-work.js';
 import { State } from '../src/core/state.js';
 import { eventually, setup } from './core-harness.js';
@@ -50,89 +50,117 @@ describe('主智能体与团队管理', () => {
     reopened.storage.close();
   });
 
-  it('主智能体经批准创建成员，立即派发任务并汇总', async () => {
-    let rounds = 0;
+  it('主管批准后台工作后创建成员与任务群，结果回到连续主对话', async () => {
+    let mainRounds = 0;
+    let workRounds = 0;
     let child: Task | undefined;
+    let work: { workId: string; taskId: string; conversationId: string } | undefined;
     const { core, connection } = await setup(async (context) => {
       if (context.bot.id !== core.state.settings().mainBotId) return { text: '研究成果' };
-      if (context.binding.purpose === 'chief-routing') {
-        expect(context.tools).toEqual([]);
-        const input = JSON.parse(context.prompt) as { focusContextId: string };
-        return { text: JSON.stringify({ action: 'continue', contextId: input.focusContextId }) };
-      }
-      if (context.binding.conversationId !== core.state.settings().mainConversationId) {
-        if (!child) {
-          const room = core.state.storage.get<Conversation>(
-            'conversations',
-            context.binding.conversationId,
-          )!;
-          child = (await context.executeTool(
-            'delegate_task',
-            { botId: room.memberIds[1], goal: '调研', expectedOutput: '说明' },
-            'delegate',
-          )) as Task;
-          return { text: '已安排' };
+      const room = core.state.storage.get<Conversation>(
+        'conversations',
+        context.binding.conversationId,
+      )!;
+      if (room.chiefRole === 'main') {
+        if (++mainRounds === 1) {
+          work = (await context.executeTool(
+            'start_work',
+            { goal: '创建研究员并安排调研' },
+            'start-research',
+          )) as typeof work;
+          return { text: '调研工作已安排' };
         }
-        expect(context.prompt).toContain('研究成果');
-        return { text: '任务群汇总' };
+        if (context.prompt.includes('调研工作汇总')) return { text: '已交付调研结果' };
+        expect(context.prompt).toContain('waiting_approval');
+        return { text: '研究员配置正在等待批准' };
       }
-      if (++rounds === 1) {
-        const catalog = (await context.executeTool('list_bots', {}, 'catalog')) as {
-          connections: { id: string }[];
-        };
-        expect(catalog.connections[0].id).toBe(connection.id);
-        const member = (await context.executeTool(
-          'configure_bot',
-          { name: '研究员', role: '调研', connectionId: connection.id, model: 'test' },
-          'configure',
-        )) as Bot;
-        await context.executeTool(
-          'create_task_group',
-          { name: '调研', goal: '调研', memberIds: [member.id] },
-          'create-group',
-        );
-        return { text: '已创建调研群' };
+      if (room.chiefRole === 'work') {
+        if (++workRounds === 1) {
+          const catalog = (await context.executeTool('list_bots', {}, 'catalog')) as {
+            connections: { id: string }[];
+          };
+          expect(catalog.connections[0].id).toBe(connection.id);
+          const member = (await context.executeTool(
+            'configure_bot',
+            { name: '研究员', role: '调研', connectionId: connection.id, model: 'test' },
+            'configure',
+          )) as Bot;
+          await context.executeTool(
+            'create_task_group',
+            { name: '调研', goal: '调研', memberIds: [member.id] },
+            'create-group',
+          );
+          return { text: '已创建调研群' };
+        }
+        expect(context.prompt).toContain('任务群汇总');
+        return { text: '调研工作汇总' };
       }
-      expect(context.prompt).toContain('任务群汇总');
-      return { text: '汇总完成' };
+      if (!child) {
+        child = (await context.executeTool(
+          'delegate_task',
+          { botId: room.memberIds[1], goal: '调研', expectedOutput: '说明' },
+          'delegate',
+        )) as Task;
+        return { text: '已安排成员调研' };
+      }
+      expect(context.prompt).toContain('研究成果');
+      return { text: '任务群汇总' };
     });
-    const chief = core.state
-      .snapshot()
-      .bots.find((bot) => bot.id === core.state.settings().mainBotId)!;
+    core.state.storage.put('connections', {
+      ...core.state.storage.get<Connection>('connections', connection.id)!,
+      concurrency: 3,
+    });
     await core.request('chief.configure', {
-      input: { connectionId: connection.id, model: 'test', approvalMode: 'ask' },
+      input: { connectionId: connection.id, model: 'test', approvalMode: 'ask', memoryMode: 'off' },
     });
     const sent = (await core.request('conversations.send', {
       conversationId: core.state.settings().mainConversationId,
       content: '请创建研究员并安排调研',
       requestId: 'chief-work',
     })) as { inputId: string };
-    await eventually(
-      () =>
-        core.state.storage.get<ChiefInput>('chief_inputs', sent.inputId)?.status === 'dispatched',
-    );
-    const routed = core.state.storage.get<ChiefInput>('chief_inputs', sent.inputId)!;
-    expect(routed.taskIds).toHaveLength(1);
-    const taskId = routed.taskIds[0];
     await eventually(() =>
       core.state.snapshot().approvals.some((item) => item.status === 'pending'),
     );
-    const approval = core.state.snapshot().approvals.find((item) => item.status === 'pending')!;
-    expect(approval.botId).toBe(chief.id);
-    expect(approval.toolName).toBe('configure_bot');
+    const startApproval = core.state
+      .snapshot()
+      .approvals.find((item) => item.status === 'pending')!;
+    expect(startApproval.toolName).toBe('start_work');
+    await core.request('approvals.resolve', { id: startApproval.id, approved: true });
+    await eventually(() =>
+      core.state
+        .snapshot()
+        .approvals.some((item) => item.status === 'pending' && item.toolName === 'configure_bot'),
+    );
+    const approval = core.state
+      .snapshot()
+      .approvals.find((item) => item.status === 'pending' && item.toolName === 'configure_bot')!;
+    expect(approval.botId).toBe(core.state.settings().mainBotId);
+    const primary = core.state.storage.get<ChiefInput>('chief_inputs', sent.inputId)!;
+    expect(core.state.storage.get<Task>('tasks', primary.taskIds[0])?.status).toBe('completed');
+    expect(core.state.storage.get<Task>('tasks', work!.taskId)?.parentId).toBeUndefined();
+    await eventually(() =>
+      core.chief.timeline
+        .page()
+        .messages.some((message) => message.content === '研究员配置正在等待批准'),
+    );
     await core.request('approvals.resolve', { id: approval.id, approved: true });
-    await eventually(() => core.state.storage.get<Task>('tasks', taskId)?.status === 'completed');
-    expect(rounds).toBe(2);
+    await eventually(
+      () =>
+        core.chief.timeline.page().messages.some((message) => message.content === '已交付调研结果'),
+      5000,
+    );
+    expect(mainRounds).toBe(3);
+    expect(workRounds).toBe(2);
     const groupTask = core.state.storage
       .all<Task>('tasks')
-      .find((task) => task.parentId === taskId)!;
+      .find((task) => task.parentId === work!.taskId)!;
     expect(child?.parentId).toBe(groupTask.id);
     expect(core.state.storage.get<Task>('tasks', child!.id)?.result).toBe('研究成果');
-    const tasks = core.state.storage.all<Task>('tasks');
-    expect(tasks.filter((task) => !task.kind)).toHaveLength(3);
-    expect(tasks.filter((task) => task.kind === 'chief-routing')).toEqual([
-      expect.objectContaining({ status: 'completed' }),
-    ]);
+    expect(core.state.storage.get<Task>('tasks', work!.taskId)?.status).toBe('completed');
+    expect(core.state.storage.all<Task>('tasks').filter((task) => !task.kind)).toHaveLength(6);
+    expect(
+      core.state.storage.all<Task>('tasks').filter((task) => task.kind === 'chief-routing'),
+    ).toEqual([]);
   });
 
   it('普通成员即使填写工具名也不能修改团队配置', async () => {

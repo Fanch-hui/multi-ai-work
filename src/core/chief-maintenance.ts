@@ -91,6 +91,7 @@ export class ChiefMaintenanceService {
   }
 
   private check(view: ChiefContextView) {
+    if (view.kind === 'history') return;
     const s = this.state.storage;
     const previous = s.metadata<MaintenanceRecord>(recordKey(view.id));
     const source = maintenanceSource(this.state, view, previous?.compactionId);

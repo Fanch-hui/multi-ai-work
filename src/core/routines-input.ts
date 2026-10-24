@@ -22,6 +22,7 @@ export function routineReferences(state: State, routine: Pick<Routine, 'botId' |
     state.storage.get<Workspace>('workspaces', routine.workspaceId),
     '例行工作工作区不存在',
   );
+  if (workspace.enabled === false) throw new Error('例行工作工作区授权已撤销');
   try {
     if (!statSync(workspace.path).isDirectory()) throw new Error();
   } catch {

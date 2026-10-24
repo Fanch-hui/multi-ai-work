@@ -150,7 +150,7 @@ describe('统一管家的历史兼容', () => {
     });
     const backup = (await core.request('backup.create')) as { path: string };
     const manifest = JSON.parse(await readFile(join(backup.path, 'manifest.json'), 'utf8'));
-    expect(manifest.version).toBe(3);
+    expect(manifest.version).toBe(4);
     await core.request('backup.restore', { path: backup.path });
     expect(core.state.storage.get<ChiefInput>('chief_inputs', input.id)).toMatchObject({
       status: 'failed',

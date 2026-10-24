@@ -147,6 +147,7 @@ export class CoreService {
     );
     this.scheduler = new Scheduler(this.state, this.tasks, this.executor, this.adapters);
     this.chief = new ChiefSystem(this.state, this.tasks, (id) => this.scheduler.cancel(id));
+    this.entities.workspaceBusy = (id) => this.tools.workspaceBusy(id);
     this.tools.controls = new TaskControlService(this.state, this.tasks, this.scheduler);
     this.questionDecisions = new QuestionDecisions(this.state, this.tasks);
     this.conversations = new ConversationService(this.state, this.tasks, this.scheduler);
@@ -203,6 +204,8 @@ export class CoreService {
       (method, params) => this.request(method, params),
     );
     this.tools.extensions = {
+      startWork: this.chief.work.start.bind(this.chief.work),
+      listWork: this.chief.work.list.bind(this.chief.work),
       chiefHistory: this.chief.toolHistory.bind(this.chief),
       ...workToolContext(this.state, this.routines, this.reviews, this.browser, !!this.host),
       ...this.work.extensions(),
@@ -545,6 +548,8 @@ export class CoreService {
     switch (method) {
       case 'workspaces.add':
         return this.entities.addWorkspace(params);
+      case 'workspaces.update':
+        return this.entities.updateWorkspace(params);
       case 'tools.save':
         return this.connectors.request('connectors.save', params);
       case 'tools.probe':

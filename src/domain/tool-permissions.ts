@@ -32,6 +32,8 @@ export const memberToolNames = [
 export const taskPlanToolNames = ['set_task_plan', 'get_task_plan', 'update_plan_step'];
 export const taskControlToolNames = ['send_task_input', 'stop_task', 'reconcile_task'];
 export const chiefToolNames = [
+  'start_work',
+  'list_work',
   'recall_work',
   'read_work_history',
   ...memberToolNames,
@@ -51,6 +53,8 @@ export const chiefToolNames = [
   'resolve_collaboration',
 ];
 export const chiefOnlyTools = [
+  'start_work',
+  'list_work',
   'recall_work',
   'read_work_history',
   'manage_routines',

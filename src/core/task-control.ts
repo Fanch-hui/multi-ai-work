@@ -51,10 +51,10 @@ export class TaskControlService {
       sendTaskInput: async (input) => {
         const target = this.target(context, input);
         if (target.id === context.task.id || target.kind || terminal(target.status))
-          throw new Error('请向仍在执行的成员任务补充要求');
-        await this.approve(context, 'send_task_input', `引导成员任务：${target.id}`, input);
+          throw new Error('请向仍在执行的工作补充要求');
+        await this.approve(context, 'send_task_input', `补充任务要求：${target.id}`, input);
         const current = required(this.state.storage.get<Task>('tasks', target.id), '任务不存在');
-        if (terminal(current.status)) throw new Error('成员任务已结束，请查询结果后安排新任务');
+        if (terminal(current.status)) throw new Error('任务已结束，请查询结果后安排新任务');
         const artifactIds = [...new Set(input.artifactIds ?? [])];
         if (artifactIds.some((artifactId) => !context.findArtifact(artifactId)))
           throw new Error('任务输入资料未授权');
@@ -73,6 +73,12 @@ export class TaskControlService {
               ],
             });
         }
+        if (group?.chiefRole === 'work' && group.chiefId === context.botId) {
+          const grants = `chief-artifact-grants:${group.id}`;
+          this.state.storage.setMetadata(grants, [
+            ...new Set([...(this.state.storage.metadata<string[]>(grants) ?? []), ...artifactIds]),
+          ]);
+        }
         const message = this.state.storage.appendMessage({
           id: id(),
           conversationId: target.conversationId,
@@ -82,6 +88,10 @@ export class TaskControlService {
           artifactIds,
           status: 'committed',
           createdAt: now(),
+        });
+        this.state.storage.setMetadata(`chief-work-source:${message.id}`, {
+          sourceTaskId: context.task.id,
+          sourceMessageIds: context.task.sourceMessageId ? [context.task.sourceMessageId] : [],
         });
         this.tasks.appendInput(current, message);
         return {

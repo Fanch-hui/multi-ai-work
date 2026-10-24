@@ -7,6 +7,8 @@ import type {
 import type { State } from './state.js';
 import { required } from './errors.js';
 import { authorizedSkills } from './skills.js';
+import { chiefConversationScope } from './chief-conversation-scope.js';
+import type { ChiefInput, ChiefTimelineEntry } from '../domain/chief-work.js';
 
 export function referenceOptions(
   state: State,
@@ -24,6 +26,7 @@ export function referenceOptions(
   });
   if (!bots.length) return [];
   const skills = bots.map((bot) => authorizedSkills(state, bot));
+  const related = chiefConversationScope(state, room);
   const options: ConversationReferenceOption[] = skills[0]
     .filter((skill) => skills.every((list) => list.some((item) => item.id === skill.id)))
     .map((skill) => ({
@@ -66,7 +69,7 @@ export function referenceOptions(
         (item) =>
           !item.archived &&
           item.kind === 'group' &&
-          (item.id === room.id || item.sourceConversationId === room.id),
+          (item.id === room.id || item.sourceConversationId === room.id || related.has(item.id)),
       )
       .map((item) => ({
         kind: 'conversation' as const,
@@ -108,6 +111,25 @@ export function replyMessage(
   if (message.conversationId !== roomId || message.status === 'draft')
     throw new Error('请选择当前会话已发表的消息');
   return message;
+}
+
+export function inputReplyMessage(state: State, message: Message): Message | undefined {
+  if (!message.replyToMessageId) return;
+  const s = state.storage;
+  const reply = s.getMessage(message.replyToMessageId);
+  if (!reply) return;
+  if (reply.conversationId === message.conversationId) return reply;
+  const entry = s.get<ChiefTimelineEntry>('chief_timeline', message.id);
+  const input = entry?.inputId ? s.get<ChiefInput>('chief_inputs', entry.inputId) : undefined;
+  const room = s.get<Conversation>('conversations', message.conversationId);
+  if (
+    input?.messageId === message.id &&
+    input.replyToMessageId === reply.id &&
+    input.homeConversationId === room?.chiefHomeId &&
+    room?.chiefRole === 'main' &&
+    room.chiefId === state.settings().mainBotId
+  )
+    return reply;
 }
 
 export function referencePrompt(message: Message, reply?: Message) {

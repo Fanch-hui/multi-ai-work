@@ -41,14 +41,18 @@ describe('conversation read receipts', () => {
         message(`${room.id}:empty`, room.id, { content: '', status: 'draft' }),
       );
     }
-    expect(core.state.snapshot().conversations.map((room) => room.unreadCount)).toEqual([1, 1, 1]);
+    const counts = (state: State) =>
+      rooms.map(
+        (room) => state.snapshot().conversations.find((item) => item.id === room.id)?.unreadCount,
+      );
+    expect(counts(core.state)).toEqual([1, 1, 1]);
     await core.request('conversations.read', { id: main.id, messageIds: [`${main.id}:reply`] });
     expect(
       core.state.snapshot().conversations.find((room) => room.id === main.id)?.unreadCount,
     ).toBe(0);
     const restarted = new State(root);
     try {
-      expect(restarted.snapshot().conversations.map((room) => room.unreadCount)).toEqual([0, 1, 1]);
+      expect(counts(restarted)).toEqual([0, 1, 1]);
     } finally {
       restarted.storage.close();
     }

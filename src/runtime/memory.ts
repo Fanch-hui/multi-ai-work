@@ -34,6 +34,7 @@ export interface MemorySearchQuery {
 }
 
 export interface MemoryStore {
+  resolveConversationId?(botId: string, conversationId: string): string;
   list(): MemoryEntry[];
   save(entry: MemoryEntry): void;
   findDuplicate?(
@@ -79,6 +80,7 @@ export class MemoryService {
   authorizedEntries(
     identity: Pick<MemoryIdentity, 'botId' | 'conversationId'>,
   ): Map<string, MemoryEntry> {
+    identity = this.identityScope(identity);
     const matches = this.store.search
       ? this.store
           .search({ botId: identity.botId, conversationId: identity.conversationId })
@@ -92,6 +94,7 @@ export class MemoryService {
   }
 
   recall(identity: MemoryIdentity, query: string, limit = 8, topic?: string): MemoryEntry[] {
+    identity = this.identityScope(identity);
     if (limit <= 0) return [];
     const trimmed = query.trim();
     const normalizedTopic = topic?.trim().toLocaleLowerCase();
@@ -134,6 +137,7 @@ export class MemoryService {
     input: string | MemoryRecallInput,
     options?: { recordActiveRead?: boolean; scopeKey?: string },
   ): unknown {
+    identity = this.identityScope(identity);
     if (typeof input === 'string') {
       const entries = this.recall(identity, input);
       if (options?.recordActiveRead && entries.length) {
@@ -203,6 +207,7 @@ export class MemoryService {
       scopeKey?: string;
     } = {},
   ): MemorySelection {
+    identity = this.identityScope(identity);
     const terms = extractQueryTerms(options.query ?? '');
     const ftsRanks = new Map<string, number>();
     let authorizedList: MemoryEntry[];
@@ -329,6 +334,7 @@ export class MemoryService {
       tags?: string[];
     },
   ): MemoryEntry {
+    input = this.identityScope(input);
     const content = normalizeMemoryContent(input.content);
     if (!content) throw new Error('记忆内容不能为空');
     const now = new Date().toISOString();
@@ -410,6 +416,18 @@ export class MemoryService {
         createHash('sha256').update(normalizeMemoryContent(item.content)).digest('hex');
       return hash === contentHash;
     });
+  }
+
+  private identityScope<T extends Pick<MemoryIdentity, 'botId' | 'conversationId'>>(
+    identity: T,
+  ): T {
+    const conversationId = this.store.resolveConversationId?.(
+      identity.botId,
+      identity.conversationId,
+    );
+    return conversationId && conversationId !== identity.conversationId
+      ? { ...identity, conversationId }
+      : identity;
   }
 
   private sanitizeSourceIds(entry: MemoryEntry, conversationId: string): MemoryEntry {

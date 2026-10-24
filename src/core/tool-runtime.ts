@@ -32,6 +32,18 @@ import { ToolOperationJournal, type ToolCall } from './tool-operation-journal.js
 import { ContextReferences } from './context-references.js';
 import { ToolContextFactory } from './tool-context.js';
 import { TaskWaitService } from './task-waits.js';
+import { overlappingWorkspaces, resolveToolWorkspace } from './workspace-authorization.js';
+
+const mainBackgroundTools = new Set([
+  'write_artifact',
+  'write_file',
+  'edit_file',
+  'delete_file',
+  'run_command',
+  'render_document',
+  'create_task_group',
+  'delegate_task',
+]);
 
 export class ToolRuntime {
   extensions?: Pick<
@@ -45,6 +57,8 @@ export class ToolRuntime {
     | 'requestCollaboration'
     | 'resolveCollaboration'
     | 'chiefHistory'
+    | 'startWork'
+    | 'listWork'
   >;
   private writeLocks = new Map<string, Promise<unknown>>();
   private pending = new Map<string, Set<Promise<unknown>>>();
@@ -79,6 +93,14 @@ export class ToolRuntime {
       this.processes,
       this.questions,
       this.plans,
+    );
+  }
+
+  workspaceBusy(workspaceId: string) {
+    return (
+      [...this.writeLocks.keys()].some((key) =>
+        overlappingWorkspaces(this.state, key, workspaceId),
+      ) || this.processes.hasActive(workspaceId)
     );
   }
 
@@ -162,6 +184,7 @@ export class ToolRuntime {
               enabledQoderServices(bot).includes('SecurityScan')) ||
             (tool.name.startsWith('mcp__') && bot.toolNames.includes('call_mcp')) ||
             (tool.name === 'manage_memory' && bot.memoryMode !== 'off')) &&
+          (context.conversation.chiefRole !== 'main' || !mainBackgroundTools.has(tool.name)) &&
           (context.task.kind !== 'memory-review' || tool.name === 'manage_memory') &&
           (!chiefOnlyTools.includes(tool.name) ||
             (bot.id === this.state.settings().mainBotId &&
@@ -192,16 +215,21 @@ export class ToolRuntime {
 
   private currentContext(context: ToolExecutionContext, bot: Bot): ToolExecutionContext {
     const s = this.state.storage;
+    const room =
+      s.get<Conversation>('conversations', context.conversation.id) ?? context.conversation;
+    const workspace = s.get<Workspace>('workspaces', context.workspace.id);
+    const scopedWorkspaces = workspace ? [workspace] : [];
     return {
       ...context,
-      conversation:
-        s.get<Conversation>('conversations', context.conversation.id) ?? context.conversation,
+      conversation: room,
       workspace: {
-        ...context.workspace,
-        writable:
-          context.workspace.writable &&
-          !!s.get<Workspace>('workspaces', context.workspace.id)?.writable,
+        ...(workspace ?? context.workspace),
+        writable: !!workspace?.writable && workspace.enabled !== false,
       },
+      authorizedWorkspaces:
+        bot.id === this.state.settings().mainBotId && room.chiefId === bot.id
+          ? s.all<Workspace>('workspaces').filter((item) => item.enabled !== false)
+          : scopedWorkspaces,
       toolConnections: s
         .all<ToolConnection>('tool_connections')
         .filter((item) => item.enabled && bot.toolConnectionIds?.includes(item.id)),
@@ -313,6 +341,8 @@ export class ToolRuntime {
     )
       throw new Error('MCP 搜索需要外部工具权限及连接授权');
     if (!availableNames.has(name)) throw new Error(`当前未授权工具：${name}`);
+    args = { ...args };
+    context = resolveToolWorkspace(name, args, context);
     timing.record('authorizationMs', performance.now() - authorizationStart);
     return {
       call: { name, requestedName, botId: bot.id, args, callId, context, timing },
@@ -325,7 +355,11 @@ export class ToolRuntime {
       context.signal.throwIfAborted();
       const latestBot = this.state.storage.get<Bot>('bots', botId);
       if (!latestBot || latestBot.archived) throw new Error(`当前未授权工具：${name}`);
-      const latestContext = this.currentContext(context, latestBot);
+      const latestContext = resolveToolWorkspace(
+        name,
+        { ...args, workspaceId: context.workspace.id },
+        this.currentContext(context, latestBot),
+      );
       if (
         [
           'write_artifact',
@@ -370,6 +404,7 @@ export class ToolRuntime {
     const execute = () => {
       if (writesWorkspace) timing.record('workspaceQueueMs', performance.now() - queuedAt);
       if (this.waiting(context.runId)) throw new Error('本轮正在等待人工处理，此调用未执行');
+      if (writesWorkspace) this.assertCallAuthorized(call);
       const executionContext: ToolExecutionContext = {
         ...context,
         callId,
@@ -452,7 +487,11 @@ export class ToolRuntime {
     return release;
   }
   private async withWriteLock(key: string, action: () => Promise<unknown>, signal: AbortSignal) {
-    const previous = this.writeLocks.get(key) ?? Promise.resolve();
+    const previous = Promise.allSettled(
+      [...this.writeLocks.entries()]
+        .filter(([workspaceId]) => overlappingWorkspaces(this.state, workspaceId, key))
+        .map(([, operation]) => operation),
+    );
     const current = previous
       .catch(() => {})
       .then(() => {

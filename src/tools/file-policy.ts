@@ -7,6 +7,7 @@ import {
   resolveCanonicalRoot,
   validateExistingWorkspaceCandidate,
   workspacePath,
+  workspaceForPath,
 } from './paths.js';
 
 export { resolveCanonicalRoot, validateExistingWorkspaceCandidate };
@@ -81,6 +82,7 @@ export async function filePath(
   rootReal?: string,
 ): Promise<string> {
   if (sensitivePath(input)) throw new Error('工具不访问凭据文件或目录');
+  context = workspaceForPath(input, context);
   const root = rootReal ?? (await resolveCanonicalRoot(context.workspace.path));
   const target = await workspacePath(input, context, create, root);
   if (sensitivePath(path.relative(root, target))) throw new Error('工具不访问凭据文件或目录');

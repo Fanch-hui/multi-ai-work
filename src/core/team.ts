@@ -58,7 +58,8 @@ export class TeamService {
       '主会话不存在',
     );
     const workspaceId = options.workspaceId ?? previous.workspaceId;
-    required(s.get('workspaces', workspaceId), '工作目录不存在');
+    const workspace = required(s.get<Workspace>('workspaces', workspaceId), '工作目录不存在');
+    if (workspace.enabled === false) throw new Error('工作目录授权已撤销');
     const { model, reasoning } = this.conversationModel(chief, options, chief);
     const room: Conversation = {
       id: id(),
@@ -93,6 +94,7 @@ export class TeamService {
     } = {},
   ): Conversation {
     const context = new ChiefContextService(this.state).create({
+      kind: 'work',
       title: name,
       workspaceId: options.workspaceId,
       routineId: options.routineId,
@@ -172,6 +174,8 @@ export class TeamService {
     if (sourceRoom.archived) throw new Error('来源主对话已归档');
     if (source.botId !== chiefId || sourceRoom.kind !== 'private' || sourceRoom.purpose !== 'chief')
       throw new Error('只有主对话的主管可创建任务群');
+    if (sourceRoom.chiefRole === 'main')
+      throw new Error('请通过 start_work 安排独立工作后创建任务群');
     const fields = groupSchema.parse(input),
       members = [...new Set(fields.memberIds)].filter((botId) => botId !== chiefId).sort();
     if (!members.length) throw new Error('请选择相关成员加入任务群');
@@ -290,7 +294,9 @@ export class TeamService {
       workspaces: this.state.storage.all<Workspace>('workspaces').map((workspace) => ({
         id: workspace.id,
         name: workspace.name,
+        path: workspace.path,
         writable: workspace.writable,
+        enabled: workspace.enabled !== false,
       })),
       connections: this.state.storage.all<Connection>('connections').map((connection) => ({
         id: connection.id,

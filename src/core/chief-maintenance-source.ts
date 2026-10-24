@@ -47,6 +47,7 @@ function contextTasks(state: State, view: ChiefContextView) {
 function unresolvedInput(input: ChiefInput, view: ChiefContextView) {
   if (input.homeConversationId !== view.homeConversationId) return false;
   if (['dispatched', 'failed', 'cancelled'].includes(input.status)) return false;
+  if (view.kind === 'main') return true;
   const target = input.contextId ?? input.targetContextId;
   if (target) return target === view.id;
   if (input.newContext) return false;

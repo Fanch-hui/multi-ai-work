@@ -86,6 +86,7 @@ async function visiblePath(
       context.workspace.path,
       target,
     );
+    context.resolveWorkspace?.(undefined, canonical);
     if (sensitivePath(path.relative(root, canonical))) return undefined;
     return canonical;
   } catch {

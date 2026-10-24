@@ -76,6 +76,7 @@ const toolSchema = z.object({
 });
 
 export class EntityService {
+  workspaceBusy?: (workspaceId: string) => boolean;
   constructor(
     private state: State,
     private vault: Vault,
@@ -250,10 +251,38 @@ export class EntityService {
     const existing = this.state.storage
       .all<Workspace>('workspaces')
       .find((item) => item.path === path);
-    const workspace: Workspace = { ...parsed, path, id: existing?.id ?? id() };
+    if (existing) return this.updateWorkspace({ ...parsed, id: existing.id, enabled: true });
+    const workspace: Workspace = { ...parsed, path, enabled: true, id: id() };
     this.state.storage.put('workspaces', workspace);
     this.state.changed();
     return workspace;
+  }
+  updateWorkspace(input: unknown): Workspace {
+    const parsed = z
+      .object({
+        id: z.string(),
+        name: name.optional(),
+        writable: z.boolean().optional(),
+        enabled: z.boolean().optional(),
+      })
+      .parse(input);
+    const current = required(
+      this.state.storage.get<Workspace>('workspaces', parsed.id),
+      '工作目录不存在',
+    );
+    const next = { ...current, ...parsed };
+    if (
+      next.id === this.state.settings().defaultWorkspaceId &&
+      (!next.writable || next.enabled === false)
+    )
+      throw new Error('工作成果目录需保持可读写');
+    const tightens =
+      (current.writable && !next.writable) || (current.enabled !== false && next.enabled === false);
+    if (tightens && this.workspaceBusy?.(next.id))
+      throw new Error('工作目录正在使用，请先完成或停止命令及写入操作');
+    this.state.storage.put('workspaces', next);
+    this.state.changed();
+    return next;
   }
   async saveTool(input: unknown): Promise<ToolConnection> {
     const parsed = toolSchema.parse(input);

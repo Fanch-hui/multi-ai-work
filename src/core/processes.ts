@@ -5,6 +5,7 @@ import { workspacePath } from '../tools/paths.js';
 import { commandTimeout, startCommand } from '../tools/process-runner.js';
 import { id, now, type State } from './state.js';
 import { waitOperation } from './wait-operation.js';
+import { overlappingWorkspaces } from './workspace-authorization.js';
 
 type LogChunk = { stream: 'stdout' | 'stderr'; text: string; offset: number };
 type StoredProcess = ProcessRecord & { log?: LogChunk[]; logStart?: number; logEnd?: number };
@@ -65,7 +66,8 @@ export class ProcessService {
 
   hasActive(workspaceId?: string) {
     return [...this.active.values()].some(
-      (item) => !workspaceId || item.record.workspaceId === workspaceId,
+      (item) =>
+        !workspaceId || overlappingWorkspaces(this.state, item.record.workspaceId, workspaceId),
     );
   }
   hasActiveRun(runId: string) {
@@ -75,8 +77,8 @@ export class ProcessService {
   async waitForWorkspace(workspaceId: string, runId: string, signal: AbortSignal) {
     while (this.hasActive(workspaceId)) {
       signal.throwIfAborted();
-      const running = [...this.active.values()].filter(
-        (item) => item.record.workspaceId === workspaceId,
+      const running = [...this.active.values()].filter((item) =>
+        overlappingWorkspaces(this.state, item.record.workspaceId, workspaceId),
       );
       if (running.some((item) => item.record.runId === runId))
         throw new Error('当前任务有活跃命令，请先完成或停止该命令');
@@ -134,8 +136,7 @@ export class ProcessService {
       !room.archived &&
       room.chiefId === chiefId &&
       room.memberIds.includes(chiefId) &&
-      context.task.conversationId === room.id &&
-      room.workspaceId === context.workspace.id
+      context.task.conversationId === room.id
     );
   }
 

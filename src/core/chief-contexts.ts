@@ -13,6 +13,9 @@ import { required } from './errors.js';
 import { accessibleArtifacts } from './tool-access.js';
 
 export interface ChiefContextInput {
+  kind?: ChiefWorkContext['kind'];
+  sourceTaskId?: string;
+  sourceMessageIds?: string[];
   title?: string;
   workspaceId?: string;
   legacyConversationId?: string;
@@ -25,6 +28,47 @@ export class ChiefContextService {
   constructor(private state: State) {}
   get homeId() {
     return this.state.settings().mainConversationId!;
+  }
+  main() {
+    return this.current(this.ensureMain().id);
+  }
+  ensureMain(): ChiefContextView {
+    const s = this.state.storage;
+    const key = `chief-main-context:${this.homeId}`;
+    const saved = s.metadata<string>(key);
+    const existing = this.list().find((item) => item.id === saved && item.kind === 'main');
+    if (existing) return existing;
+    return s.transaction(() => {
+      const main = this.create({
+        kind: 'main',
+        title: '管家主对话',
+        workspaceId: this.state.settings().defaultWorkspaceId,
+      });
+      const timeline = s.byField<import('../domain/chief-work.js').ChiefTimelineEntry>(
+        'chief_timeline',
+        'homeConversationId',
+        this.homeId,
+      );
+      const originals = timeline.length
+        ? timeline
+            .sort((a, b) => a.displaySequence - b.displaySequence)
+            .flatMap((entry) => {
+              const message = s.getMessage(entry.messageId);
+              return message?.status === 'committed' ? [message] : [];
+            })
+        : s.messages(this.homeId).filter((message) => message.status === 'committed');
+      const recent = originals.filter((message) => message.authorType !== 'system').slice(-24);
+      const part = this.current(main.id).part;
+      s.put('chief_parts', {
+        ...part,
+        handoff: recent.length
+          ? '继续同一管家主对话。以下原文来自此前的统一时间线，按显示顺序排列；用户的追问和补充自然接续。更早内容可通过历史检索展开。'
+          : undefined,
+        sourceMessageIds: recent.map((message) => message.id),
+      });
+      s.setMetadata(key, main.id);
+      return main;
+    });
   }
   current(contextId: string) {
     const s = this.state.storage;
@@ -118,7 +162,11 @@ export class ChiefContextService {
       : undefined;
     if (legacyTask && legacyTask.conversationId !== legacy?.id)
       throw new Error('历史任务不属于该对话');
-    const workspaceId = input.workspaceId ?? legacy?.workspaceId ?? home.workspaceId;
+    const workspaceId =
+      input.workspaceId ??
+      legacy?.workspaceId ??
+      this.state.settings().defaultWorkspaceId ??
+      home.workspaceId;
     required(s.get<Workspace>('workspaces', workspaceId), '工作目录不存在');
     const title =
       (input.title ?? legacyTask?.goal ?? legacy?.name ?? '新事项').trim().slice(0, 120) ||
@@ -142,7 +190,7 @@ export class ChiefContextService {
         id: randomUUID(),
         contextId,
         conversationId: room.id,
-        sourceMessageIds: [],
+        sourceMessageIds: input.sourceMessageIds ?? [],
         sourceArtifactIds: [],
         createdAt,
       };
@@ -178,6 +226,7 @@ export class ChiefContextService {
           : `继续历史对话：${legacy.name}`;
       }
       let chiefRole: Conversation['chiefRole'] = input.routineId ? 'routine' : 'work';
+      if (input.kind === 'main') chiefRole = 'main';
       if (room.id === this.homeId) chiefRole = 'home';
       s.put('conversations', {
         ...room,
@@ -192,6 +241,9 @@ export class ChiefContextService {
           s.put('artifacts', { ...artifact, chiefContextId: contextId });
       }
       s.put<ChiefWorkContext>('chief_contexts', {
+        kind: input.kind,
+        sourceTaskId: input.sourceTaskId,
+        sourceMessageIds: input.sourceMessageIds,
         id: contextId,
         homeConversationId: this.homeId,
         title,
@@ -221,6 +273,9 @@ export class ChiefContextService {
           .some((task) => rooms.has(task.conversationId) && !task.kind && !terminal(task.status))
       )
         throw new Error('事项仍有未结束任务');
+      let chiefRole: Conversation['chiefRole'] = 'work';
+      if (context.kind === 'main') chiefRole = 'main';
+      else if (room.chiefRole === 'routine') chiefRole = 'routine';
       const fresh: Conversation = {
         id: randomUUID(),
         name: context.title,
@@ -229,7 +284,7 @@ export class ChiefContextService {
         memberIds: room.memberIds,
         chiefId: room.chiefId,
         workspaceId: room.workspaceId,
-        chiefRole: room.chiefRole === 'routine' ? 'routine' : 'work',
+        chiefRole,
         chiefHomeId: this.homeId,
         chiefContextId: contextId,
         createdAt: new Date().toISOString(),
@@ -267,14 +322,22 @@ export function chiefSnapshot(state: State): ChiefSnapshot {
   const contexts = new ChiefContextService(state);
   return {
     homeConversationId: contexts.homeId,
-    focusContextId: contexts.focus().contextId,
+    mainContextId: state.storage.metadata<string>(`chief-main-context:${contexts.homeId}`),
+    focusContextId:
+      state.storage.metadata<string>(`chief-main-context:${contexts.homeId}`) ??
+      contexts.focus().contextId,
     contexts: contexts.list(),
     inputs: state.storage
       .byField<ChiefInput>('chief_inputs', 'homeConversationId', contexts.homeId)
       .filter(
         (input) =>
           input.homeConversationId === contexts.homeId &&
-          !['dispatched', 'cancelled'].includes(input.status),
+          input.status !== 'cancelled' &&
+          (input.status !== 'dispatched' ||
+            input.taskIds.some((taskId) => {
+              const task = state.storage.get<Task>('tasks', taskId);
+              return task && ['failed', 'interrupted', 'cancelled'].includes(task.status);
+            })),
       ),
   };
 }

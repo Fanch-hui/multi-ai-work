@@ -19,6 +19,7 @@ import { TaskPlanService } from './task-plans.js';
 import { TaskInputService } from './task-inputs.js';
 import { receivingTasks } from './task-input-records.js';
 import { latestProgressRun } from './managed-progress.js';
+import { retryChiefHistory } from './chief-work-retry.js';
 import { requireAttachmentCapacity } from '../domain/attachment-policy.js';
 
 import { childTaskRetryBlocker, terminal } from '../domain/task-status.js';
@@ -368,6 +369,7 @@ export class TaskService {
         })),
       );
       this.state.storage.setMetadata(`coordination:${old.id}`, 0);
+      this.releaseRestoredReport(old.id);
       return this.update(old, {
         status: 'queued',
         error: undefined,
@@ -384,6 +386,8 @@ export class TaskService {
     const blocker = childTaskRetryBlocker(children);
     if (blocker?.reason === 'reconciliation') throw new Error('请先核查成员任务的外部操作');
     if (blocker) throw new Error('请等待成员任务停止');
+    const historical = retryChiefHistory(this.state, this, old, room);
+    if (historical) return historical;
     if (children.length)
       this.state.storage.setMetadata(
         `results:${old.id}`,
@@ -398,6 +402,7 @@ export class TaskService {
         })),
       );
     this.state.storage.setMetadata(`coordination:${old.id}`, 0);
+    this.releaseRestoredReport(old.id);
     return this.update(old, {
       status: 'queued',
       error: undefined,
@@ -406,6 +411,15 @@ export class TaskService {
       recovery: undefined,
       resumeFromRunId: latestProgressRun(this.state.storage, old),
     });
+  }
+
+  private releaseRestoredReport(taskId: string) {
+    const restored = this.state.storage.metadata<string[]>('chief-restored-report-tasks');
+    if (restored?.includes(taskId))
+      this.state.storage.setMetadata(
+        'chief-restored-report-tasks',
+        restored.filter((id) => id !== taskId),
+      );
   }
 
   settleParents() {

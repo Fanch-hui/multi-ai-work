@@ -30,6 +30,8 @@ import { artifactRequirement } from './task-requirements.js';
 import type { TaskControlService } from './task-control.js';
 import { assertUserMemorySources } from './memory-policy.js';
 import { registerTaskArtifact } from './artifact-registration.js';
+import { workspaceResolver } from './workspace-authorization.js';
+import { memoryConversationId } from './chief-memory-scope.js';
 
 export class ToolContextFactory {
   private observations = new Map<string, Map<string, string>>();
@@ -66,6 +68,11 @@ export class ToolContextFactory {
       botId: bot.id,
       conversation: room,
       workspace,
+      authorizedWorkspaces:
+        bot.id === this.state.settings().mainBotId && room.chiefId === bot.id
+          ? s.all<Workspace>('workspaces').filter((item) => item.enabled !== false)
+          : [workspace],
+      resolveWorkspace: workspaceResolver(this.state, bot.id, room),
       signal,
       requestApproval: (name, summary, args) =>
         this.approvals.request(run, name, summary, args, signal),
@@ -117,7 +124,17 @@ export class ToolContextFactory {
           }
         : {}),
       registerArtifact: (input) => {
-        return registerTaskArtifact(this.state, input, task, bot, room, run);
+        const project = input.workingPath
+          ? context.resolveWorkspace!(input.workspaceId, input.workingPath)
+          : context.workspace;
+        return registerTaskArtifact(
+          this.state,
+          { ...input, workspaceId: project.id },
+          task,
+          bot,
+          room,
+          run,
+        );
       },
       postMessage: (content, artifacts, conversationId) =>
         this.tasks.post(room.id, bot.id, run.id, content, artifacts, conversationId).id,
@@ -189,7 +206,7 @@ export class ToolContextFactory {
       proposeMemory: (content, scope, sourceIds, metadata) => {
         if (bot.memoryMode === 'off') throw new Error('当前智能体已关闭记忆');
         if (scope === 'shared') throw new Error('请先保存当前会话记忆，再由管家设置共享范围');
-        assertUserMemorySources(this.state, sourceIds, [room.id]);
+        assertUserMemorySources(this.state, sourceIds, [memoryConversationId(s, bot.id, room.id)]);
         const memory = this.memory.propose({
           botId: bot.id,
           conversationId: room.id,

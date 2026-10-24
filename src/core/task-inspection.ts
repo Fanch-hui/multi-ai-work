@@ -1,7 +1,8 @@
-import type { Bot, Conversation, Run, Task } from '../domain/types.js';
+import type { Bot, Run, Task } from '../domain/types.js';
 import type { State } from './state.js';
 import { artifactRequirement } from './task-requirements.js';
 import type { Artifact, TaskInput } from '../domain/types.js';
+import { isBoundTaskDescendant } from './task-access.js';
 
 export function inspectTask(state: State, task: Task) {
   const s = state.storage;
@@ -17,16 +18,22 @@ export function inspectTask(state: State, task: Task) {
       }
     );
   };
-  const children = s.all<Task>('tasks').filter((child) => {
-    if (child.parentId !== task.id) return false;
-    if (child.conversationId === task.conversationId) return true;
-    const room = s.get<Conversation>('conversations', child.conversationId);
-    return room?.sourceConversationId === task.conversationId && room.sourceTaskId === task.id;
-  });
+  const children = s
+    .byField<Task>('tasks', 'parentId', task.id)
+    .filter((child) => isBoundTaskDescendant(state, task, child));
+  const descendants = [...children];
+  const seen = new Set([task.id, ...children.map((child) => child.id)]);
+  for (let index = 0; index < descendants.length; index++) {
+    for (const child of s.byField<Task>('tasks', 'parentId', descendants[index].id)) {
+      if (seen.has(child.id) || !isBoundTaskDescendant(state, task, child)) continue;
+      seen.add(child.id);
+      descendants.push(child);
+    }
+  }
   const visibleArtifactIds = (ids: string[]) =>
     ids.filter((artifactId) => !!s.get<Artifact>('artifacts', artifactId));
   const artifacts = visibleArtifactIds([
-    ...new Set([...task.artifactIds, ...children.flatMap((child) => child.artifactIds)]),
+    ...new Set([...task.artifactIds, ...descendants.flatMap((child) => child.artifactIds)]),
   ]);
   const inputs = s
     .all<TaskInput>('deliveries')

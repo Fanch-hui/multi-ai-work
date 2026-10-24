@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3';
+import { assertChiefUpgradeReady } from './chief-upgrade-preflight.js';
 
 export const entityTables = [
   'chief_contexts',
@@ -48,7 +49,8 @@ export function migrateStorage(
   prepare: (sql: string) => Database.Statement,
 ) {
   const version = db.pragma('user_version', { simple: true }) as number;
-  if (version > 2) throw new Error('数据库来自较新版本，请使用对应版本的 multi-AI work。');
+  if (version > 3) throw new Error('数据库来自较新版本，请使用对应版本的 multi-AI work。');
+  if (version > 0 && version < 3) assertChiefUpgradeReady(db);
   db.transaction(() => {
     for (const table of entityTables)
       db.exec(`CREATE TABLE IF NOT EXISTS ${table} (id TEXT PRIMARY KEY, payload TEXT NOT NULL)`);
@@ -97,7 +99,7 @@ export function migrateStorage(
         CREATE INDEX IF NOT EXISTS chief_inputs_by_request ON chief_inputs(json_extract(payload, '$.requestId'));
         CREATE INDEX IF NOT EXISTS chief_timeline_by_home ON chief_timeline(
           json_extract(payload, '$.homeConversationId'), json_extract(payload, '$.displaySequence'));
-        PRAGMA user_version = 2;
+        PRAGMA user_version = 3;
       `);
     const columns = prepare('PRAGMA table_info(messages)').all() as { name: string }[];
     if (!columns.some((column) => column.name === 'stream_sequence'))

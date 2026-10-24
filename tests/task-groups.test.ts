@@ -221,10 +221,10 @@ describe('主管主对话与任务群', () => {
       core.state.storage
         .all<SessionBinding>('session_bindings')
         .map((binding) => binding.conversationId),
-    ).toEqual([oldId, context.conversationId]);
+    ).toEqual([oldId, core.chief.contexts.main().room.id]);
     expect(
       core.state.storage
-        .messages(context.conversationId)
+        .messages(core.chief.contexts.main().room.id)
         .some((message) => message.content === '旧主对话'),
     ).toBe(false);
     const member = bot('历史成员');

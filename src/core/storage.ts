@@ -48,7 +48,12 @@ export class Storage {
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('foreign_keys = ON');
     this.db.pragma('busy_timeout = 5000');
-    migrateStorage(this.db, (sql) => this.prepare(sql));
+    try {
+      migrateStorage(this.db, (sql) => this.prepare(sql));
+    } catch (error) {
+      this.db.close();
+      throw error;
+    }
     this.messageStream = new MessageStream(this);
     this.messageStream.recover();
   }

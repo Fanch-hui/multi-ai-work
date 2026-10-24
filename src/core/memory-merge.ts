@@ -17,6 +17,7 @@ import { State, id, now } from './state.js';
 import { required } from './errors.js';
 import { assertUserMemorySources } from './memory-policy.js';
 import { listMemoryRevisions } from './memory-storage.js';
+import { memoryMessageAuthorized } from './chief-memory-scope.js';
 
 export interface MemoryBatchMeta {
   taskId: string;
@@ -331,7 +332,7 @@ export function getMemoryHistory(state: State, memoryId: string, conversationId?
   const entry = required(s.get<MemoryEntry>('memory_entries', memoryId), '记忆不存在');
   const filterSources = (sourceIds: string[]) => {
     if (!conversationId) return sourceIds;
-    return sourceIds.filter((msgId) => s.getMessage(msgId)?.conversationId === conversationId);
+    return sourceIds.filter((msgId) => memoryMessageAuthorized(s, msgId, [conversationId]));
   };
   const revisions = listMemoryRevisions(s, memoryId).map((rev) => ({
     ...rev,

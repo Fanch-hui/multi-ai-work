@@ -115,7 +115,7 @@ export interface Bot {
   archived: boolean;
 }
 export interface Conversation {
-  chiefRole?: 'home' | 'work' | 'history' | 'routine' | 'router';
+  chiefRole?: 'home' | 'main' | 'work' | 'history' | 'routine' | 'router';
   chiefHomeId?: string;
   chiefContextId?: string;
   id: string;
@@ -135,6 +135,7 @@ export interface Conversation {
   unreadCount?: number;
 }
 export interface Workspace {
+  enabled?: boolean;
   id: string;
   name: string;
   path: string;
@@ -293,6 +294,7 @@ export interface ImageMetadata {
   path: string;
 }
 export interface Artifact {
+  workspaceId?: string;
   chiefContextId?: string;
   seriesId?: string;
   previousArtifactId?: string;
@@ -419,6 +421,7 @@ export interface Skill {
   presetOnly?: boolean;
 }
 export interface Settings {
+  defaultWorkspaceId?: string;
   onboardingStatus?: 'pending' | 'skipped' | 'completed';
   maxActiveRuns: number;
   maxChildren: number;

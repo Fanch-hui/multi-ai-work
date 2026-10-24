@@ -109,7 +109,7 @@ describe('user attachment limits', () => {
     );
     expect(
       core.state.storage
-        .messages(conversationId)
+        .messages(core.chief.contexts.main().room.id)
         .filter((message) => message.authorType === 'user'),
     ).toEqual([
       expect.objectContaining({ id: sent.messageId, artifactIds: artifactIds.slice(0, 10) }),

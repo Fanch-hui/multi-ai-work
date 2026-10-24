@@ -19,6 +19,7 @@ const settingKeys = [
   'userAvatar',
   'mainBotId',
   'mainConversationId',
+  'defaultWorkspaceId',
   'defaultSearchConnectionId',
   'onboardingStatus',
 ];

@@ -45,7 +45,11 @@ export class ChiefTimelineService {
     if (message.authorType === 'system' || (!message.content.trim() && !message.artifactIds.length))
       return;
     const room = this.state.storage.get<Conversation>('conversations', message.conversationId);
-    if (room?.chiefHomeId !== this.homeId || room.chiefRole === 'router' || room.kind !== 'private')
+    if (
+      room?.chiefHomeId !== this.homeId ||
+      !['home', 'main'].includes(room.chiefRole ?? '') ||
+      room.kind !== 'private'
+    )
       return;
     if (
       room.id !== this.homeId &&

@@ -298,6 +298,7 @@ export class RoutineService {
         automatic: source === 'schedule',
       },
     });
+    this.state.storage.setMetadata(`chief-work-managed-task:${task.id}`, true);
     const occurrence: RoutineOccurrence = {
       id: occurrenceId,
       routineId: routine.id,

@@ -15,11 +15,32 @@ import { publicError } from './errors.js';
 import { questionChief } from './question-policy.js';
 import { recoverSchedulerState } from './scheduler-recovery.js';
 
-function priority(task: Task): number {
+function priority(task: Task, state: State): number {
+  if (isMainTask(task, state)) return task.requestId.startsWith('chief-report:') ? 0 : -1;
   if (task.kind === 'memory-review') return 3;
   if (task.kind === 'question-decision') return 1;
   if (isAutomatic(task)) return 2;
   return 0;
+}
+
+function isMainTask(task: Task, state: State) {
+  if (task.kind || task.botId !== state.settings().mainBotId) return false;
+  const room = state.storage.get<Conversation>('conversations', task.conversationId);
+  return room?.chiefRole === 'main';
+}
+
+function isChiefWork(task: Task, state: State) {
+  const s = state.storage;
+  const room = s.get<Conversation>('conversations', task.conversationId);
+  if (room?.chiefRole === 'work' && room.chiefHomeId === state.settings().mainConversationId)
+    return true;
+  const source =
+    room?.sourceConversationId && s.get<Conversation>('conversations', room.sourceConversationId);
+  return (
+    source &&
+    source.chiefRole === 'work' &&
+    source.chiefHomeId === state.settings().mainConversationId
+  );
 }
 
 function isAutomatic(task: Task) {
@@ -95,6 +116,27 @@ export class Scheduler {
     if (active.filter((item) => item.account === account).length >= this.accountLimit(account))
       return 'account_limit';
     if (active.length >= this.state.settings().maxActiveRuns) return 'global_limit';
+    if (isChiefWork(task, this.state)) {
+      const globalLimit = this.state.settings().maxActiveRuns;
+      if (
+        globalLimit > 1 &&
+        active.length >= globalLimit - 1 &&
+        !active.some((item) => isMainTask(item.task, this.state))
+      )
+        return 'global_limit';
+      const chief = s.get<Bot>('bots', this.state.settings().mainBotId!);
+      const connection = chief && s.get<Connection>('connections', chief.connectionId);
+      const chiefAccount = connection?.accountScope ?? connection?.id;
+      const accountLimit = this.accountLimit(account);
+      if (
+        account === chiefAccount &&
+        accountLimit > 1 &&
+        active.filter((item) => item.account === account).length >= accountLimit - 1 &&
+        !active.some((item) => item.account === account && isMainTask(item.task, this.state))
+      )
+        return 'account_limit';
+    }
+
     if (isAutomatic(task)) {
       const limit = Math.min(2, Math.max(1, this.state.settings().maxActiveRuns - 1));
       const background = active.filter((item) => isAutomatic(item.task)).length;
@@ -154,7 +196,7 @@ export class Scheduler {
       (task) => task.recovery && Date.parse(task.recovery.nextAttemptAt) <= Date.now(),
     );
     return [...due, ...s.byField<Task>('tasks', 'status', 'queued')].sort(
-      (a, b) => priority(a) - priority(b),
+      (a, b) => priority(a, this.state) - priority(b, this.state),
     );
   }
 

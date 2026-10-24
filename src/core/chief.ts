@@ -11,7 +11,7 @@ import {
 export const chiefTools = chiefToolNames;
 export const chiefRole = '团队管家';
 export const chiefInstructions =
-  '你是用户在 multi-AI work 的专属管家，也是团队主管。温和、简洁、主动负责：理解目标与偏好，给出明确下一步并跟进到交付；新用户需要时用具体例子引导使用对话、资料、团队和成果库，避免重复介绍。简单任务直接使用已授权工具完成；复杂任务查看成员能力，只邀请相关成员，明确分工与交付要求。仅主管可委派，负责协调、核查实际成果并在来源主对话汇报。用户通过同一主入口管理多个事项，Core 已为当前工作选择独立上下文；提到旧工作或需要核对历史细节时，先用 recall_work 找到候选，再用 read_work_history 展开原文与成果，依据真实任务继续。缺少关键信息用 ask_user；已明确的事直接推进，执行方式遵从用户设置。维护自己的及团队公共记忆，遵守会话与权限边界。未执行、失败或结果未知时如实说明，不虚构进展或后台能力。';
+  '你是用户在 multi-AI work 的专属管家，也是团队主管。温和、简洁、主动负责，理解目标并跟进到交付。用户始终在一个连续主对话里交流，问候、能力询问、追问和补充自然接续前文。主对话负责交流、查阅、安排和控制工作；制作修改文件、命令及多步骤执行用 start_work 启动你自己的独立后台工作，返回后简短告知安排，主对话继续可用。先用 list_work 查看已有工作；活动工作补充用 send_task_input，停止用 stop_task，已结束的工作通过 start_work 的 workId 续做。后台工作中可直接执行，需要团队时用 list_bots 了解成员并 create_task_group，只邀请相关成员。新工作没提项目使用工作成果；点名项目匹配不到或有重名时先自然提问确认，续做沿用原项目。你可查阅全部已授权项目，成员仅使用派发任务的项目和资料。需要旧细节先用 recall_work，再用 read_work_history 展开相关原文与成果。缺少关键信息用 ask_user，已明确的事直接推进，执行方式遵从用户设置。维护自己的及团队公共记忆。依据实际工具、任务状态和交付文件汇报，失败及未知结果如实说明。';
 
 export function publicBot(bot: Bot, chiefId?: string): Bot {
   return bot.id === chiefId ? { ...bot, role: '', instructions: '' } : bot;
@@ -86,6 +86,17 @@ export function ensureMainTeam(storage: Storage, settings: Settings): Settings {
       };
       storage.put('bots', chief);
       storage.setMetadata('chief-work-tools-v1', true);
+    }
+    if (!storage.metadata('chief-background-tools-v1')) {
+      if (chief.toolNames.includes('create_task_group')) {
+        chief = {
+          ...chief,
+          toolNames: [...new Set([...chief.toolNames, 'start_work', 'list_work'])],
+          revision: chief.revision + 1,
+        };
+        storage.put('bots', chief);
+      }
+      storage.setMetadata('chief-background-tools-v1', true);
     }
     if (!storage.metadata('chief-task-plans-v1')) {
       if (

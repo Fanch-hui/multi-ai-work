@@ -1,6 +1,9 @@
 import type { Message } from './types.js';
 
 export interface ChiefWorkContext {
+  kind?: 'main' | 'work' | 'history';
+  sourceTaskId?: string;
+  sourceMessageIds?: string[];
   id: string;
   homeConversationId: string;
   title: string;
@@ -66,9 +69,21 @@ export interface ChiefContextView extends ChiefWorkContext {
 
 export interface ChiefSnapshot {
   homeConversationId: string;
+  mainContextId?: string;
   focusContextId?: string;
   contexts: ChiefContextView[];
   inputs: ChiefInput[];
+}
+
+export interface ChiefWorkInput {
+  title?: string;
+  goal: string;
+  expectedOutput?: string;
+  workspaceId?: string;
+  project?: string;
+  artifactIds?: string[];
+  sourceMessageIds?: string[];
+  workId?: string;
 }
 
 export interface ChiefTimelinePage {

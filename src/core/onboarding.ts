@@ -6,6 +6,7 @@ import type { State } from './state.js';
 import type { TeamService } from './team.js';
 import type { Storage } from './storage.js';
 import { required } from './errors.js';
+import { avatarSchema } from './avatars.js';
 
 export function initializeOnboarding(storage: Storage) {
   const settings = storage.metadata<Settings>('settings')!;
@@ -39,15 +40,20 @@ export function completeOnboarding(state: State, team: TeamService, input: unkno
     const fields = z
       .object({
         name: z.string().trim().min(1).max(120),
+        avatar: avatarSchema.optional(),
         connectionId: z.string(),
         model: z.string().trim().min(1),
         reasoning: z.string().optional(),
-        workspaceId: z.string(),
+        workspaceId: z.string().optional(),
         contextWindow: z.number().int().min(1024).optional(),
         compactionThreshold: z.number().int().min(10).max(95).optional(),
       })
       .parse(input);
-    const { workspaceId, ...config } = fields;
+    const { workspaceId: selectedWorkspaceId, ...config } = fields;
+    const workspaceId = required(
+      selectedWorkspaceId ?? state.settings().defaultWorkspaceId,
+      '默认工作目录不存在',
+    );
     const connection = required(
       s.get<Connection>('connections', config.connectionId),
       '连接不存在',

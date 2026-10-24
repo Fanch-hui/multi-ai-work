@@ -51,7 +51,7 @@ describe('工具结果缓存回收后的资料保留', () => {
         created = await backup.create();
       expect(await readFile(join(created.path, 'artifacts', original.id), 'utf8')).toBe(content);
       expect(JSON.parse(await readFile(join(created.path, 'manifest.json'), 'utf8')).version).toBe(
-        3,
+        4,
       );
 
       await backup.restore(created.path);

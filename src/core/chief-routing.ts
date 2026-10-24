@@ -1,6 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { z } from 'zod';
-import type { ChiefInput, ChiefRouteDecision, ChiefTimelineEntry } from '../domain/chief-work.js';
+import type { ChiefInput } from '../domain/chief-work.js';
 import type { Artifact, Conversation, Task } from '../domain/types.js';
 import type { ConversationReference } from '../domain/conversation-reference.js';
 import type { State } from './state.js';
@@ -9,8 +8,6 @@ import type { ChiefJobs } from './chief-jobs.js';
 import type { ChiefHistoryService } from './chief-history.js';
 import { ChiefContextService } from './chief-contexts.js';
 import { ChiefTimelineService } from './chief-timeline.js';
-import { chiefRoutingPrompt } from './chief-routing-prompt.js';
-import { terminal } from '../domain/task-status.js';
 import { requireAttachmentCapacity } from '../domain/attachment-policy.js';
 import { required } from './errors.js';
 
@@ -24,28 +21,19 @@ export interface ChiefSendInput {
   replyToMessageId?: string;
   references?: ConversationReference[];
 }
-const decisionSchema = z.object({
-  action: z.enum(['continue', 'new', 'clarify']),
-  contextId: z.string().optional(),
-  workspaceId: z.string().optional(),
-  legacyConversationId: z.string().optional(),
-  legacyTaskId: z.string().optional(),
-  title: z.string().max(120).optional(),
-  question: z.string().max(500).optional(),
-  candidateContextIds: z.array(z.string()).max(8).optional(),
-});
 
 export class ChiefRoutingService {
   private unsubscribe?: () => void;
   private scheduled = false;
   private stopped = true;
+  private pumping = false;
   constructor(
     private state: State,
     private tasks: TaskService,
     readonly contexts: ChiefContextService,
-    private jobs: ChiefJobs,
-    private history: ChiefHistoryService,
-    private cancelTask: (id: string) => Promise<unknown>,
+    _jobs?: ChiefJobs,
+    _history?: ChiefHistoryService,
+    private cancelTask?: (id: string) => Promise<unknown>,
   ) {}
   start() {
     this.stopped = false;
@@ -65,14 +53,19 @@ export class ChiefRoutingService {
     const target = fields.targetContextId
       ? this.contexts.current(fields.targetContextId)
       : undefined;
+    const reply = fields.replyToMessageId ? this.replySource(fields.replyToMessageId) : undefined;
     if (fields.workspaceId) required(s.get('workspaces', fields.workspaceId), '项目不存在');
     for (const id of artifactIds) {
       const artifact = required(s.get<Artifact>('artifacts', id), '资料不存在');
-      const allowed = [this.contexts.homeId, target?.room.id, target?.context.legacyConversationId];
+      const allowed = [
+        this.contexts.homeId,
+        target?.room.id,
+        target?.context.legacyConversationId,
+        reply?.id,
+      ];
       if (!allowed.includes(artifact.conversationId))
         throw new Error('附件不在当前管家草稿或指定历史中');
     }
-    if (fields.replyToMessageId) this.replyContext(fields.replyToMessageId);
     const requestId = fields.requestId ?? randomUUID();
     const fingerprint = createHash('sha256')
       .update(JSON.stringify({ ...fields, content, artifactIds, requestId: undefined }))
@@ -82,7 +75,7 @@ export class ChiefRoutingService {
       if (previous.fingerprint !== fingerprint) throw new Error('消息请求 ID 与内容不匹配');
       return { inputId: previous.id, messageId: previous.messageId, taskIds: previous.taskIds };
     }
-    const focus = this.contexts.focus();
+    const main = this.contexts.ensureMain();
     const input: ChiefInput = {
       ...fields,
       id: randomUUID(),
@@ -92,8 +85,7 @@ export class ChiefRoutingService {
       fingerprint,
       content,
       artifactIds,
-      focusContextId: focus.contextId,
-      focusRevision: focus.revision,
+      focusContextId: main.id,
       status: 'pending',
       taskIds: [],
       createdAt: new Date().toISOString(),
@@ -104,7 +96,7 @@ export class ChiefRoutingService {
     });
     this.pump();
     this.state.changed();
-    const saved = s.get<ChiefInput>('chief_inputs', input.id)!;
+    const saved = this.input(input.id);
     return { inputId: saved.id, messageId: saved.messageId, taskIds: saved.taskIds };
   }
   resolve(
@@ -112,13 +104,12 @@ export class ChiefRoutingService {
     fields: { contextId?: string; workspaceId?: string; newContext?: boolean; answer?: string },
   ) {
     const input = this.input(id);
-    if (input.status !== 'clarification') throw new Error('该输入没有待处理的归属问题');
+    if (input.status !== 'clarification') throw new Error('该输入没有待处理的问题');
     if (fields.contextId) this.contexts.current(fields.contextId);
     this.state.storage.put('chief_inputs', {
       ...input,
-      targetContextId: fields.contextId,
+      targetContextId: fields.contextId ?? input.targetContextId,
       workspaceId: fields.workspaceId ?? input.workspaceId,
-      newContext: fields.newContext,
       clarificationAnswer: fields.answer,
       status: 'pending',
       routingTaskId: undefined,
@@ -130,6 +121,24 @@ export class ChiefRoutingService {
   }
   retry(id: string) {
     const input = this.input(id);
+    if (input.status === 'dispatched') {
+      const failed = input.taskIds
+        .map((taskId) => this.state.storage.get<Task>('tasks', taskId))
+        .filter(
+          (task): task is Task =>
+            !!task && ['failed', 'cancelled', 'interrupted'].includes(task.status),
+        );
+      if (!failed.length) throw new Error('该消息没有可重试的任务');
+      this.state.storage.transaction(() => {
+        const replacements = new Map(failed.map((task) => [task.id, this.tasks.retry(task.id).id]));
+        this.state.storage.put('chief_inputs', {
+          ...input,
+          taskIds: input.taskIds.map((taskId) => replacements.get(taskId) ?? taskId),
+        });
+      });
+      this.state.changed();
+      return { ok: true };
+    }
     if (input.status !== 'failed') throw new Error('只有失败的输入可重试');
     this.state.storage.put('chief_inputs', {
       ...input,
@@ -146,7 +155,7 @@ export class ChiefRoutingService {
     if (input.status === 'dispatched') throw new Error('输入已派发，请在对应任务中停止');
     this.state.storage.put('chief_inputs', { ...input, status: 'cancelled' });
     this.state.changed();
-    if (input.routingTaskId) await this.cancelTask(input.routingTaskId);
+    if (input.routingTaskId) await this.cancelTask?.(input.routingTaskId);
     return { cancelled: true };
   }
   private input(id: string) {
@@ -166,113 +175,39 @@ export class ChiefRoutingService {
     });
   }
   private pump() {
-    const inputs = this.state.storage.byField<ChiefInput>(
-      'chief_inputs',
-      'homeConversationId',
-      this.contexts.homeId,
-    );
-    for (const input of inputs.filter((input) => input.status === 'routing')) {
-      const job = input.routingTaskId && this.state.storage.get<Task>('tasks', input.routingTaskId);
-      if (!job || !terminal(job.status)) return;
-      try {
-        if (job.status !== 'completed') throw new Error(job.error ?? '事项识别已中断，请重试');
-        const json = job.result?.match(/\{[\s\S]*\}/)?.[0];
-        const decision = decisionSchema.parse(JSON.parse(json ?? ''));
-        this.apply(input, decision);
-      } catch (error) {
-        this.fail(input, error);
-      }
-    }
-    for (const input of inputs.filter((input) => input.status === 'pending')) {
-      this.process(this.input(input.id));
-      if (this.input(input.id).status === 'routing') break;
-    }
-  }
-  private process(input: ChiefInput) {
+    if (this.pumping) return;
+    this.pumping = true;
     try {
-      if (input.targetContextId) return this.dispatch(input, input.targetContextId);
-      if (input.newContext)
-        return this.apply(input, {
-          action: 'new',
-          title: input.content?.slice(0, 40),
-          workspaceId: input.workspaceId,
-        });
-      if (input.replyToMessageId) {
-        const source = this.replyContext(input.replyToMessageId);
-        if (source.contextId) return this.dispatch(input, source.contextId);
-        return this.apply(input, { action: 'new', legacyConversationId: source.room.id });
+      const s = this.state.storage;
+      const pending = s
+        .byField<ChiefInput>('chief_inputs', 'homeConversationId', this.contexts.homeId)
+        .filter((input) => input.status === 'pending')
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      for (const input of pending) {
+        try {
+          if (!this.dispatch(input)) break;
+        } catch (error) {
+          s.put('chief_inputs', {
+            ...this.input(input.id),
+            status: 'failed',
+            error: error instanceof Error ? error.message : '消息发送失败',
+          });
+          this.state.changed();
+        }
       }
-      if (
-        input.focusContextId &&
-        /^(继续|好的|好|可以|按这个做|继续吧|接着做|就这样做)[。！!\s]*$/.test(input.content ?? '')
-      )
-        return this.dispatch(input, input.focusContextId);
-      const attempt = (input.attempt ?? 0) + 1;
-      const job = this.jobs.queue(
-        'chief-routing',
-        chiefRoutingPrompt(this.state, this.contexts, this.history, input),
-        `chief-route:${input.id}:${attempt}`,
-      );
-      this.state.storage.put('chief_inputs', {
-        ...input,
-        status: 'routing',
-        routingTaskId: job.id,
-        attempt,
-      });
-      this.state.changed();
-    } catch (error) {
-      this.fail(input, error);
+    } finally {
+      this.pumping = false;
     }
   }
-  private apply(input: ChiefInput, decision: ChiefRouteDecision) {
-    if (decision.action === 'clarify') {
-      const candidates = decision.candidateContextIds ?? [];
-      for (const id of candidates) this.contexts.current(id);
-      this.state.storage.put('chief_inputs', {
-        ...input,
-        status: 'clarification',
-        question: decision.question ?? '这条消息对应哪个事项？',
-        candidateContextIds: candidates,
-      });
-      this.state.changed();
-      return;
-    }
-    if (decision.action === 'continue')
-      return this.dispatch(input, required(decision.contextId, '缺少目标事项'));
-    if (decision.legacyConversationId && !input.replyToMessageId) {
-      const hits =
-        this.state.storage.metadata<{ conversationId: string; taskId?: string }[]>(
-          `chief-route-history:${input.id}`,
-        ) ?? [];
-      if (
-        !hits.some(
-          (hit) =>
-            hit.conversationId === decision.legacyConversationId &&
-            (!decision.legacyTaskId || hit.taskId === decision.legacyTaskId),
-        )
-      )
-        throw new Error('历史任务不在本次候选中');
-    }
-    const focus = this.contexts.list().find((item) => item.id === input.focusContextId);
-    this.state.storage.transaction(() => {
-      const context = this.contexts.create({
-        title: decision.title ?? input.content?.slice(0, 40),
-        workspaceId: input.workspaceId ?? decision.workspaceId ?? focus?.workspaceId,
-        legacyConversationId: decision.legacyConversationId,
-        legacyTaskId: decision.legacyTaskId,
-      });
-      this.dispatch(input, context.id);
-    });
-  }
-  private dispatch(input: ChiefInput, contextId: string) {
+  private dispatch(input: ChiefInput) {
     const s = this.state.storage;
-    const maintenance = s.metadata<{ status?: string }>(`chief-maintenance:${contextId}`);
-    if (maintenance && ['judging', 'compacting'].includes(maintenance.status ?? '')) return;
+    const { context, room, part } = this.contexts.main();
+    const maintenance = s.metadata<{ status?: string }>(`chief-maintenance:${context.id}`);
+    if (maintenance && ['judging', 'compacting'].includes(maintenance.status ?? '')) return false;
     s.transaction(() => {
-      const { room, part } = this.contexts.current(contextId);
       const current = this.input(input.id);
-      if (!['pending', 'routing'].includes(current.status)) return;
-      s.put('chief_inputs', { ...current, contextId, status: 'routing' });
+      if (current.status !== 'pending') return;
+      s.put('chief_inputs', { ...current, contextId: context.id, status: 'routing' });
       const key = `chief-artifact-grants:${room.id}`;
       s.setMetadata(key, [
         ...new Set([
@@ -283,7 +218,9 @@ export class ChiefRoutingService {
       ]);
       const result = this.tasks.send({
         conversationId: room.id,
-        content: input.content!,
+        content: input.clarificationAnswer
+          ? `${input.content}\n${input.clarificationAnswer}`
+          : input.content!,
         artifactIds: input.artifactIds,
         requestId: `chief-input:${input.id}`,
         messageId: input.messageId,
@@ -293,31 +230,21 @@ export class ChiefRoutingService {
       });
       s.put('chief_inputs', {
         ...current,
-        contextId,
+        contextId: context.id,
         status: 'dispatched',
         taskIds: result.taskIds,
         content: undefined,
         error: undefined,
       });
-      const focus = this.contexts.focus();
-      const sequence = s.get<ChiefTimelineEntry>(
-        'chief_timeline',
-        input.messageId,
-      )!.displaySequence;
-      if (focus.revision === (input.focusRevision ?? 0) && sequence >= focus.inputSequence)
-        s.setMetadata(`chief-focus:${this.contexts.homeId}`, {
-          contextId,
-          revision: focus.revision,
-          inputSequence: sequence,
-        });
     });
     this.state.changed();
+    return true;
   }
-  private replyContext(messageId: string) {
-    const s = this.state.storage;
-    const message = required(s.getMessage(messageId), '引用消息不存在');
+  private replySource(messageId: string) {
+    const message = required(this.state.storage.getMessage(messageId), '引用消息不存在');
+    if (message.status === 'draft') throw new Error('请选择已发表的消息');
     const room = required(
-      s.get<Conversation>('conversations', message.conversationId),
+      this.state.storage.get<Conversation>('conversations', message.conversationId),
       '引用对话不存在',
     );
     if (
@@ -327,17 +254,6 @@ export class ChiefRoutingService {
       room.chiefRole === 'router'
     )
       throw new Error('引用不属于管家历史');
-    const contextId = this.contexts
-      .list()
-      .find((item) => item.conversationIds.includes(room.id))?.id;
-    return { room, contextId };
-  }
-  private fail(input: ChiefInput, error: unknown) {
-    this.state.storage.put('chief_inputs', {
-      ...this.input(input.id),
-      status: 'failed',
-      error: error instanceof Error ? error.message : '事项识别失败',
-    });
-    this.state.changed();
+    return room;
   }
 }

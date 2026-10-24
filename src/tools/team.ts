@@ -1,8 +1,48 @@
 import { z } from 'zod';
 import type { TaskGroupInput, ToolExecutionContext } from '../domain/tools.js';
+import type { ChiefWorkInput } from '../domain/chief-work.js';
 
 export function createTeamTools() {
   return {
+    start_work: {
+      description:
+        '启动或续做一项独立后台工作，管家主对话保持可用。传入目标、交付要求及明确授权的资料；未提项目时使用工作成果，续做传入 workId 并沿用原项目。指定项目不明确时先向用户自然询问。',
+      schema: z
+        .object({
+          title: z.string().trim().min(1).max(120).optional(),
+          goal: z.string().trim().min(1).max(120000),
+          expectedOutput: z.string().max(120000).optional(),
+          workspaceId: z.string().optional(),
+          project: z.string().trim().min(1).max(120).optional(),
+          artifactIds: z.array(z.string()).max(50).optional(),
+          sourceMessageIds: z.array(z.string()).max(30).optional(),
+          workId: z.string().optional(),
+        })
+        .strict(),
+      available: (context: ToolExecutionContext) =>
+        !!context.startWork && context.conversation.chiefRole === 'main',
+      execute: async (args: ChiefWorkInput, context: ToolExecutionContext) => {
+        if (
+          !(await context.requestApproval(
+            'start_work',
+            `安排工作：${args.title ?? args.goal.slice(0, 120)}`,
+            { ...args },
+          ))
+        )
+          throw new Error('工作安排未获批准');
+        context.signal.throwIfAborted();
+        context.markDispatched?.();
+        return context.startWork!(args, context);
+      },
+    },
+    list_work: {
+      description:
+        '读取管家独立工作的真实任务、项目、进展和成果引用，可据此补充、续做或停止指定工作。',
+      schema: z.object({}),
+      available: (context: ToolExecutionContext) =>
+        !!context.listWork && context.conversation.chiefRole === 'main',
+      execute: (_args: unknown, context: ToolExecutionContext) => context.listWork!(context),
+    },
     create_task_group: {
       description:
         '为明确任务创建独立群聊，邀请相关成员与用户参与。仅分享 goal 和交付要求，不复制主对话历史。创建后结束本轮，系统在群任务结束后唤醒主管汇总。相同来源任务和参数复用已建群。',

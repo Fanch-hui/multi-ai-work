@@ -7,6 +7,7 @@ import {
 } from '../domain/memory.js';
 import type { MemorySearchMatch, MemorySearchQuery, MemoryStore } from '../runtime/memory.js';
 import type { Storage } from './storage.js';
+import { memoryConversationId, memoryMessageAuthorized } from './chief-memory-scope.js';
 
 export interface MemoryUsageRecord extends MemoryUsage {
   id: string;
@@ -54,6 +55,10 @@ export function searchAuthorizedMemories(
   storage: Storage,
   query: MemorySearchQuery,
 ): MemorySearchMatch[] {
+  query = {
+    ...query,
+    conversationId: memoryConversationId(storage, query.botId, query.conversationId),
+  };
   const authParams = [
     query.conversationId,
     query.conversationId,
@@ -302,6 +307,8 @@ export function createStorageMemoryStore(storage: Storage): MemoryStore {
   ensureMemoryContentHashes(storage);
   if (!storage.metadata('memory-search-v2')) rebuildMemorySearch(storage);
   return {
+    resolveConversationId: (botId, conversationId) =>
+      memoryConversationId(storage, botId, conversationId),
     list: () => storage.all<MemoryEntry>('memory_entries'),
     save: (entry) => {
       storage.put('memory_entries', entry);
@@ -316,9 +323,7 @@ export function createStorageMemoryStore(storage: Storage): MemoryStore {
     usage: (memoryId) => getMemoryUsage(storage, memoryId),
     recordUsage: (memoryIds, kind, scopeKey) =>
       recordMemoryUsage(storage, memoryIds, kind, scopeKey),
-    canReadMessage: (messageId, conversationId) => {
-      const message = storage.getMessage(messageId);
-      return !!message && message.conversationId === conversationId;
-    },
+    canReadMessage: (messageId, conversationId) =>
+      memoryMessageAuthorized(storage, messageId, [conversationId]),
   };
 }

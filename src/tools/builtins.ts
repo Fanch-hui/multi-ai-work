@@ -1,3 +1,4 @@
+import { hasWritableWorkspace } from './paths.js';
 import { createWorkSkillTools } from './work-skills.js';
 import { createComputerTools } from './computer.js';
 import { createConnectorDraftTools } from './connector-drafts.js';
@@ -161,6 +162,7 @@ export function createBuiltins(mcp: McpConnections): Record<string, Builtin> {
       description:
         '生成并登记最终交付用户的文件（Markdown、DOCX、XLSX、PDF）。过程资料将 purpose 设为 intermediate；默认 deliverable 进入成果库。覆盖前须读取当前文件版本，按成员执行权限确认操作。XLSX 使用 sheets，其他格式使用 content。',
       schema: z.object({
+        workspaceId: id.optional(),
         previousArtifactId: id.optional(),
         path: text,
         format: z.enum(['markdown', 'docx', 'xlsx', 'pdf']),
@@ -183,13 +185,13 @@ export function createBuiltins(mcp: McpConnections): Record<string, Builtin> {
           .max(30)
           .optional(),
       }),
-      available: (context) => context.workspace.writable,
+      available: (context) => hasWritableWorkspace(context),
       execute: (args, context) => createArtifact(args, context),
     },
     delete_file: {
       description: '删除授权目录中的单个文件，按成员执行权限确认操作。',
-      schema: z.object({ path: text }),
-      available: (context) => context.workspace.writable,
+      schema: z.object({ workspaceId: id.optional(), path: text }),
+      available: (context) => hasWritableWorkspace(context),
       execute: async (args, context) => {
         const target = await filePath(args.path, context);
         if (

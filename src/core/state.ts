@@ -11,7 +11,6 @@ import type {
   Settings,
   Task,
   TaskQueueReason,
-  Workspace,
 } from '../domain/types.js';
 import { Storage } from './storage.js';
 import { ensureMemoryContentHashes, listMemoriesWithUsage } from './memory-storage.js';
@@ -44,6 +43,7 @@ import { ArtifactObjects } from './artifact-objects.js';
 import { migrateChiefWork } from './chief-migration.js';
 import { chiefSnapshot } from './chief-contexts.js';
 import { ChiefTimelineService } from './chief-timeline.js';
+import { ensureDefaultWorkspace, migrateChiefContinuity } from './chief-continuity-migration.js';
 
 export const now = () => new Date().toISOString();
 export const id = () => randomUUID();
@@ -66,12 +66,8 @@ export class State {
     ensureMemoryContentHashes(this.storage);
     migrateRunMetrics(this.storage);
     migrateReplyArtifacts(this.storage);
-    if (!this.storage.all<Workspace>('workspaces').length) {
-      const path = join(dataDirectory, 'workspace');
-      mkdirSync(path, { recursive: true });
-      this.storage.put('workspaces', { id: id(), name: '工作成果', path, writable: true });
-    }
     if (!this.storage.metadata('settings')) this.storage.setMetadata('settings', defaultSettings);
+    ensureDefaultWorkspace(this.storage, dataDirectory);
     migrateProviders(this.storage);
     migrateContextSettings(this.storage);
     this.syncMainTeam();
@@ -110,6 +106,7 @@ export class State {
     initializeOnboarding(this.storage);
     initializeConversationReads(this.storage);
     migrateChiefWork(this);
+    migrateChiefContinuity(this);
   }
   snapshot(messageProjection?: Message[]): Snapshot {
     const s = this.storage,

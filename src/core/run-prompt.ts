@@ -22,6 +22,7 @@ import { isChiefJob } from './chief-jobs.js';
 import { chiefPartPrompt } from './chief-contexts.js';
 import type { ChiefModelJob } from '../domain/chief-work.js';
 import { required } from './errors.js';
+import { chiefConversationMode, chiefDialogueContext } from './chief-dialogue-context.js';
 
 function stableMemorySort(entries: readonly MemoryEntry[]): MemoryEntry[] {
   return [...entries].sort(
@@ -162,6 +163,7 @@ export function runPrompt(
   );
   const prompt = [
     chiefPartPrompt(state, room),
+    chiefDialogueContext(state, task, room),
     taskPrompt(state, task, bot, room, delta, memoryUpdate, arrangement.prompt),
   ]
     .filter(Boolean)
@@ -182,8 +184,7 @@ export function runPrompt(
 }
 
 function conversationMode(room: Conversation, bot: Bot): string {
-  if (room.purpose === 'chief')
-    return '这是你与用户的独立主对话。先理解目标；需要协作时，用 list_bots 了解成员，再用 create_task_group 建立独立任务群，只邀请相关成员。只分享该任务的目标与交付要求。建群后结束本轮，群任务结束后会再次唤醒你，在这里向用户交付结果。简单问答直接回复。';
+  if (room.purpose === 'chief') return chiefConversationMode(room);
   if (room.kind === 'group' && room.chiefId === bot.id)
     return '这是成员共同讨论的任务群。直接向群内成员提问、回应和讨论，用 delegate_task 邀请相关成员实际发言或执行，派发后结束本轮。独立工作同时派发；dependencyIds 只用于必须取得前置任务完整结果才能执行的工作，准备工作和已有成果的审阅可独立推进。收到结果时直接接话、点评、追问或完善方案。每条可见发言都面向群成员，进展与协调保持简短，完整执行证据放在成果或工作记录。最终回复自然收束讨论，来源主对话的管家负责向用户汇报。用户也可随时参与。';
   if (room.kind === 'group')

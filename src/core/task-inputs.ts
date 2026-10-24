@@ -1,4 +1,4 @@
-import { referencePrompt } from './conversation-references.js';
+import { inputReplyMessage, referencePrompt } from './conversation-references.js';
 import type { Message, Run, Task, TaskInput } from '../domain/types.js';
 import type { ModelMessage, RunUserInput } from '../domain/provider.js';
 import type { ToolExecutionContext } from '../domain/tools.js';
@@ -49,16 +49,11 @@ export class TaskInputService {
             const image = modelImage(context.findArtifact(artifactId));
             return image ? [image] : [];
           });
-          const quoted = message.replyToMessageId
-            ? s.getMessage(message.replyToMessageId)
-            : undefined;
+          const quoted = inputReplyMessage(this.state, message);
           const body =
             message.authorType === 'bot'
               ? `管家要求：${message.content}`
-              : referencePrompt(
-                  message,
-                  quoted?.conversationId === message.conversationId ? quoted : undefined,
-                );
+              : referencePrompt(message, quoted);
           const content = message.artifactIds.length
             ? `${body}\n附件 ID：${message.artifactIds.join('、')}`
             : body;

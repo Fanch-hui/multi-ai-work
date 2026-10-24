@@ -1,3 +1,4 @@
+import { hasWritableWorkspace } from './paths.js';
 import { z } from 'zod';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -25,12 +26,18 @@ export function createFileTools() {
     list_directory: {
       description:
         '列出授权目录的直接子项，返回相对路径、类型、大小和分页信息；跳过凭据、依赖和生成目录。',
-      schema: z.object({ path: directory, offset: pageOffset, limit }),
+      schema: z.object({
+        workspaceId: z.string().optional(),
+        path: directory,
+        offset: pageOffset,
+        limit,
+      }),
       execute: listDirectory,
     },
     find_files: {
       description: '按文件名或 glob 查找授权目录的文件，尊重忽略规则，返回相对路径和分页信息。',
       schema: z.object({
+        workspaceId: z.string().optional(),
         path: directory,
         pattern: z.string().min(1).max(2000),
         offset: pageOffset,
@@ -42,6 +49,7 @@ export function createFileTools() {
       description:
         '搜索授权目录文本，默认字面匹配，可选择正则与文件 glob；返回相对路径、行号和上下文。',
       schema: z.object({
+        workspaceId: z.string().optional(),
         path: directory,
         query: z.string().min(1).max(2000),
         regex: z.boolean().default(false),
@@ -56,6 +64,7 @@ export function createFileTools() {
       description:
         '读取授权目录的文本、PDF、DOCX 或 XLSX；文本 offset 为从 1 开始的行号，limit 为行数。返回文件版本供修改核对。',
       schema: z.object({
+        workspaceId: z.string().optional(),
         path: file,
         offset: z.number().int().min(1).default(1),
         limit: z.number().int().min(1).max(2000).default(500),
@@ -65,20 +74,25 @@ export function createFileTools() {
     write_file: {
       description:
         '新建或完整更新 UTF-8 文本文件。覆盖已有文件前必须读取当前版本，按成员执行权限确认操作。返回规范路径和新版本。',
-      schema: z.object({ path: file, content: z.string().max(2_000_000) }),
-      available: (context: ToolExecutionContext) => context.workspace.writable,
+      schema: z.object({
+        workspaceId: z.string().optional(),
+        path: file,
+        content: z.string().max(2_000_000),
+      }),
+      available: (context: ToolExecutionContext) => hasWritableWorkspace(context),
       execute: writeWorkspaceFile,
     },
     edit_file: {
       description:
         '精确替换已读取文本，默认旧文本必须唯一匹配，replaceAll 可显式替换全部匹配；按成员执行权限确认操作。',
       schema: z.object({
+        workspaceId: z.string().optional(),
         path: file,
         oldText: z.string().min(1).max(500_000),
         newText: z.string().max(500_000),
         replaceAll: z.boolean().default(false),
       }),
-      available: (context: ToolExecutionContext) => context.workspace.writable,
+      available: (context: ToolExecutionContext) => hasWritableWorkspace(context),
       execute: editWorkspaceFile,
     },
   };

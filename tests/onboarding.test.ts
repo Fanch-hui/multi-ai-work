@@ -27,6 +27,7 @@ describe('管家首次设置', () => {
     await core.request('onboarding.skip');
     const input = {
       name: '小管家',
+      avatar: 'fox',
       connectionId: connection.id,
       model: 'test',
       workspaceId: core.state.snapshot().workspaces[0].id,
@@ -37,6 +38,7 @@ describe('管家首次设置', () => {
     const room = (await core.request('onboarding.complete', { input })) as Conversation;
     expect(room).toMatchObject({ id: initialId, name: '小管家', model: 'test', purpose: 'chief' });
     expect(core.state.storage.get<Bot>('bots', core.state.settings().mainBotId!)).toMatchObject({
+      avatar: 'fox',
       contextWindow: 272000,
       compactionThreshold: 85,
     });

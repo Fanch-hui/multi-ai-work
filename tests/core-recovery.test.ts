@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Artifact, Connection, Run, Task } from '../src/domain/types.js';
+import { latestArtifactVersions } from '../src/domain/artifact-versions.js';
 import { eventually, setup } from './core-harness.js';
 
 describe('取消、对账与恢复', () => {
@@ -202,6 +203,11 @@ describe('取消、对账与恢复', () => {
     const restored = core.state.storage.all<Artifact>('artifacts');
     expect(await readFile(restored[0].path, 'utf8')).toBe('第一版');
     expect(await readFile(restored[1].path, 'utf8')).toBe('第二版');
-    expect(restored[0].workingPath).toBeUndefined();
+    expect(restored[0].workingPath).toBe(artifacts[0].workingPath);
+    expect(restored[1].workingPath).toBe(artifacts[1].workingPath);
+    expect(latestArtifactVersions(restored)).toHaveLength(1);
+    expect(restored.map((artifact) => artifact.id)).toEqual(
+      artifacts.map((artifact) => artifact.id),
+    );
   });
 });

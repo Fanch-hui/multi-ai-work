@@ -65,6 +65,7 @@ export function createArtifactTools() {
       description:
         '将授权工作目录中最终交付用户的文件登记为不可变成果快照，返回成果 ID。修改已有成果时提供 previousArtifactId 关联明确输入的上一版本；过程资料确需登记时将 purpose 设为 intermediate；默认 deliverable 进入成果库。',
       schema: z.object({
+        workspaceId: z.string().optional(),
         path: z.string().min(1).max(8000),
         purpose: z.enum(['deliverable', 'intermediate']).default('deliverable'),
         previousArtifactId: z.string().min(1).optional(),

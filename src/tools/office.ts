@@ -5,9 +5,11 @@ import path from 'node:path';
 import type { ToolExecutionContext } from '../domain/tools.js';
 import { documentInputLimit, filePath, MAX_FILE_BYTES } from './file-policy.js';
 import { loadWorkspaceDependencies } from './office-runtime.js';
+import { hasWritableWorkspace } from './paths.js';
 
 const inputSchema = z
   .object({
+    workspaceId: z.string().optional(),
     artifactId: z.string().min(1).max(200).optional(),
     path: z.string().min(1).max(8000).optional(),
     format: z.enum(['pdf', 'png']).default('pdf'),
@@ -184,7 +186,7 @@ export function createOfficeTools() {
         '把获准 Office 成果或工作目录文档导出为 PDF，或生成页面、幻灯片、工作表区域的 PNG 预览。预览默认为 intermediate；仅将最终交付用户的导出文件设为 deliverable 进入成果库。outputDirectory 指定工作区内的输出目录，默认在原工作文件所在目录保存。返回登记成果 ID；此操作不代表已完成内容或视觉检查。',
       schema: inputSchema,
       available: (context: ToolExecutionContext) =>
-        context.workspace.writable && !!context.processes,
+        hasWritableWorkspace(context) && !!context.processes,
       execute: renderDocument,
     },
   };

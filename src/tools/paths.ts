@@ -2,6 +2,23 @@ import { realpath, mkdir, lstat } from 'node:fs/promises';
 import path from 'node:path';
 import type { ToolExecutionContext } from '../domain/tools.js';
 
+export function workspaceForPath(input: string, context: ToolExecutionContext, write = false) {
+  const workspace =
+    context.resolveWorkspace?.(
+      path.isAbsolute(input) ? undefined : context.workspace.id,
+      input,
+      write,
+    ) ?? context.workspace;
+  return { ...context, workspace };
+}
+
+export function hasWritableWorkspace(context: ToolExecutionContext) {
+  return (
+    context.authorizedWorkspaces?.some((item) => item.enabled !== false && item.writable) ??
+    context.workspace.writable
+  );
+}
+
 function within(root: string, target: string): boolean {
   const relative = path.relative(root, target);
   return (
@@ -33,10 +50,9 @@ export async function workspacePath(
   create = false,
   rootReal?: string,
 ): Promise<string> {
+  context = workspaceForPath(input, context);
   const root = rootReal ?? (await resolveCanonicalRoot(context.workspace.path));
   const target = path.resolve(root, input);
-  if (!within(root, target) && !within(path.resolve(context.workspace.path), target))
-    throw new Error('路径超出授权工作目录');
   let current = target;
   while (true) {
     try {

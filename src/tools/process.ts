@@ -1,3 +1,4 @@
+import { hasWritableWorkspace } from './paths.js';
 import { z } from 'zod';
 import { stat } from 'node:fs/promises';
 import type { CommandInput, ToolExecutionContext } from '../domain/tools.js';
@@ -67,13 +68,14 @@ export function createProcessTools() {
       description:
         '在授权工作目录执行命令，按成员执行权限确认操作。默认同步等待 60 秒；background 返回 processId，默认限时 10 分钟，最长 30 分钟。',
       schema: z.object({
+        workspaceId: z.string().optional(),
         command: z.string().min(1).max(2000),
         args: z.array(z.string().max(8000)).max(100),
         background: z.boolean().optional(),
         workdir: z.string().max(8000).optional(),
         timeoutMs: z.number().int().min(1).max(1_800_000).optional(),
       }),
-      available: (context: ToolExecutionContext) => context.workspace.writable,
+      available: (context: ToolExecutionContext) => hasWritableWorkspace(context),
       execute: (args: CommandInput, context: ToolExecutionContext) =>
         runCommand(args.command, args.args, context, args),
     },

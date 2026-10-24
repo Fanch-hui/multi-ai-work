@@ -13,6 +13,7 @@ import { ChiefMaintenanceService } from './chief-maintenance.js';
 import { queueContextCompaction } from './conversation-compaction.js';
 import { required } from './errors.js';
 import { ATTACHMENT_LIMIT_MESSAGE } from '../domain/attachment-policy.js';
+import { ChiefWorkService } from './chief-work-service.js';
 
 const sendSchema = z.object({
   content: z.string().max(100000),
@@ -39,6 +40,7 @@ export class ChiefSystem {
   readonly history: ChiefHistoryService;
   readonly jobs: ChiefJobs;
   readonly routing: ChiefRoutingService;
+  readonly work: ChiefWorkService;
   private maintenance: ChiefMaintenanceService;
   private historyTimer?: ReturnType<typeof setTimeout>;
   private unsubscribe?: () => void;
@@ -60,6 +62,7 @@ export class ChiefSystem {
       this.history,
       cancelTask,
     );
+    this.work = new ChiefWorkService(state, tasks, this.contexts);
     this.maintenance = new ChiefMaintenanceService(state, this.contexts, {
       queue: this.jobs.queue.bind(this.jobs),
       compact: (id) => queueContextCompaction(state, tasks, id),
@@ -68,6 +71,7 @@ export class ChiefSystem {
   start() {
     this.closed = false;
     this.routing.start();
+    this.work.startReports();
     this.maintenance.start();
     this.unsubscribe = this.state.subscribe(() => this.scheduleHistory());
     this.scheduleHistory();
@@ -75,6 +79,7 @@ export class ChiefSystem {
   close() {
     this.closed = true;
     this.routing.close();
+    this.work.closeReports();
     this.maintenance.close();
     this.unsubscribe?.();
     if (this.historyTimer) clearTimeout(this.historyTimer);
@@ -197,6 +202,13 @@ export class ChiefSystem {
               .parse(args),
           );
     const hits = 'items' in result ? result.items : result.messages;
+    const messageKey = `chief-message-grants:${context.conversation.id}`;
+    this.state.storage.setMetadata(messageKey, [
+      ...new Set([
+        ...(this.state.storage.metadata<string[]>(messageKey) ?? []),
+        ...hits.map((hit) => hit.messageId),
+      ]),
+    ]);
     const taskIds = hits.flatMap((hit) => (hit.taskId ? [hit.taskId] : []));
     if (taskIds.length) {
       const key = `chief-task-grants:${context.conversation.id}`;

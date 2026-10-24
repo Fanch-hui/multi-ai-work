@@ -25,6 +25,7 @@ import {
 } from './memory-merge.js';
 import { schedulePartitionConsolidations } from './memory-consolidation.js';
 import { findDuplicateMemory } from './memory-storage.js';
+import { memoryConversationId } from './chief-memory-scope.js';
 
 const fields = z.object({
   id: z.string().optional(),
@@ -312,6 +313,7 @@ export class MemoryManagement {
     conversationId: string,
     task?: Task,
   ): unknown {
+    conversationId = memoryConversationId(this.state.storage, botId, conversationId);
     const action = z
       .enum(['list', 'save', 'approve', 'revoke', 'merge', 'promote', 'history'])
       .parse(input.action);

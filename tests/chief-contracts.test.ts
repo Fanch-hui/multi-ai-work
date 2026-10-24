@@ -1,34 +1,45 @@
 import { describe, expect, it } from 'vitest';
 import type { Bot, Conversation, Task } from '../src/domain/types.js';
 import type { ChiefInput } from '../src/domain/chief-work.js';
-import { chiefRoutingPrompt } from '../src/core/chief-routing-prompt.js';
 import { migrateChiefWork } from '../src/core/chief-migration.js';
 import { scopedTask, returnTaskArtifacts } from '../src/core/task-access.js';
 import { accessibleArtifacts } from '../src/core/tool-access.js';
 import { setup } from './core-harness.js';
 
 describe('管家公共契约', () => {
-  it('较早输入在整理后恢复派发时保持较新输入的事项焦点', async () => {
+  it('主段整理期间输入按提交顺序接入连续上下文，历史引用保持独立', async () => {
     const { core, bot } = await setup(async () => ({ text: '完成' }));
     core.scheduler.pause();
     bot('Chief');
-    const a = core.chief.contexts.create({ title: '报告 A' });
-    core.chief.contexts.activate(a.id);
-    const key = `chief-maintenance:${a.id}`;
+    const historical = core.chief.contexts.create({ kind: 'history', title: '报告 A' });
+    const main = core.chief.contexts.main();
+    const key = `chief-maintenance:${main.context.id}`;
     core.state.storage.setMetadata(key, { status: 'judging' });
-    const first = core.chief.routing.send({ content: '补充 A', targetContextId: a.id });
-    expect(core.state.storage.get<ChiefInput>('chief_inputs', first.inputId)?.status).toBe(
-      'pending',
-    );
-    const second = core.chief.routing.send({ content: '独立事项 B', newContext: true });
-    const b = core.state.storage.get<ChiefInput>('chief_inputs', second.inputId)?.contextId;
-    expect(core.chief.contexts.focus().contextId).toBe(b);
+    const first = core.chief.routing.send({ content: '补充 A', targetContextId: historical.id });
+    const second = core.chief.routing.send({ content: '另外讨论 B', newContext: true });
+    for (const sent of [first, second]) {
+      expect(core.state.storage.get<ChiefInput>('chief_inputs', sent.inputId)?.status).toBe(
+        'pending',
+      );
+      expect(core.state.storage.getMessage(sent.messageId)).toBeUndefined();
+    }
     core.state.storage.setMetadata(key, { status: 'settled' });
-    core.chief.routing.send({ content: '继续 B', targetContextId: b });
-    expect(core.state.storage.get<ChiefInput>('chief_inputs', first.inputId)?.status).toBe(
-      'dispatched',
-    );
-    expect(core.chief.contexts.focus().contextId).toBe(b);
+    const third = core.chief.routing.send({ content: '继续刚才的讨论' });
+    const messages = core.state.storage
+      .messages(main.room.id)
+      .filter((message) => message.authorType === 'user');
+    expect(messages.map((message) => message.id)).toEqual([
+      first.messageId,
+      second.messageId,
+      third.messageId,
+    ]);
+    for (const sent of [first, second, third])
+      expect(core.state.storage.get<ChiefInput>('chief_inputs', sent.inputId)).toMatchObject({
+        status: 'dispatched',
+        contextId: main.context.id,
+      });
+    expect(core.chief.contexts.main().context.id).toBe(main.context.id);
+    expect(core.chief.contexts.list().filter((context) => context.kind === 'work')).toEqual([]);
   });
 
   it('所有配置入口共用跨事项模型门禁，同模型推理强度可调整', async () => {
@@ -61,35 +72,26 @@ describe('管家公共契约', () => {
     expect(core.entities.saveBot({ ...chief, model: 'another' }).model).toBe('another');
   });
 
-  it('长输入保留首尾要求及候选，路由资料始终为完整 JSON', async () => {
+  it('长输入的原文完整保存并直接进入主段，首尾要求与消息锚点稳定', async () => {
     const { core, bot } = await setup(async () => ({ text: '完成' }));
     core.scheduler.pause();
     bot('Chief');
-    const context = core.chief.contexts.create({ title: '报告' });
-    const pending: ChiefInput = {
-      id: 'long-input',
-      homeConversationId: core.state.settings().mainConversationId!,
-      messageId: 'long-message',
-      requestId: 'long-request',
-      fingerprint: 'long',
-      content: `开始报告 A\n${'资料'.repeat(30000)}\n最后继续昨天报告`,
-      artifactIds: [],
-      focusContextId: context.id,
-      status: 'pending',
-      taskIds: [],
-      createdAt: new Date().toISOString(),
-    };
-    const job = chiefRoutingPrompt(core.state, core.chief.contexts, core.chief.history, pending);
-    const data = JSON.parse(job.prompt);
-    expect(data.message).toContain('开始报告 A');
-    expect(data.message).toContain('最后继续昨天报告');
-    expect(data.contexts).toEqual(
-      expect.arrayContaining([expect.objectContaining({ id: context.id })]),
-    );
-    expect(data.projects).toEqual(
-      expect.arrayContaining([expect.objectContaining({ id: context.workspaceId })]),
-    );
-    expect(job.prompt.length).toBeLessThan(24000);
+    const content = `开始报告 A\n${'资料'.repeat(30000)}\n最后继续昨天报告`;
+    const sent = core.chief.routing.send({ content, requestId: 'long-input' });
+    const message = core.state.storage.getMessage(sent.messageId)!;
+    expect(message.content).toBe(content);
+    expect(message.conversationId).toBe(core.chief.contexts.main().room.id);
+    expect(core.state.storage.get<Task>('tasks', sent.taskIds[0])?.goal).toContain(content);
+    expect(core.state.storage.get<ChiefInput>('chief_inputs', sent.inputId)).toMatchObject({
+      status: 'dispatched',
+      messageId: message.id,
+    });
+    expect(
+      core.state.storage.get<ChiefInput>('chief_inputs', sent.inputId)?.content,
+    ).toBeUndefined();
+    expect(
+      core.state.storage.all<Task>('tasks').some((task) => task.kind === 'chief-routing'),
+    ).toBe(false);
   });
 
   it('跨段访问旧任务与显式绑定群，其他事项仍需确切历史授权', async () => {

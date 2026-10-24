@@ -5,6 +5,7 @@ import type { ToolExecutionContext } from '../domain/tools.js';
 import { State, id, now } from './state.js';
 import { TaskService, terminal } from './tasks.js';
 import { required } from './errors.js';
+import { chiefConversationScope } from './chief-conversation-scope.js';
 
 const requestSchema = z.object({
   targetBotId: z.string(),
@@ -35,9 +36,18 @@ export class CollaborationRequests {
   request(method: string, params: Record<string, unknown>) {
     if (method !== 'collaboration.list') throw new Error('不支持的协作操作');
     const conversationId = z.string().parse(params.conversationId);
-    required(this.state.storage.get<Conversation>('conversations', conversationId), '会话不存在');
-    return this.state.storage
-      .byField<CollaborationRequest>('collaboration_requests', 'conversationId', conversationId)
+    const room = required(
+      this.state.storage.get<Conversation>('conversations', conversationId),
+      '会话不存在',
+    );
+    return [...chiefConversationScope(this.state, room)]
+      .flatMap((id) =>
+        this.state.storage.byField<CollaborationRequest>(
+          'collaboration_requests',
+          'conversationId',
+          id,
+        ),
+      )
       .map((request) => ({
         ...request,
         task: request.targetTaskId

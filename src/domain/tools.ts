@@ -13,6 +13,7 @@ import type {
 } from './types.js';
 import type { ToolDefinition } from './provider.js';
 import type { PlanStepUpdate, TaskPlan, TaskPlanInput } from './task-plan.js';
+import type { ChiefWorkInput } from './chief-work.js';
 
 export interface TaskGroupInput {
   name: string;
@@ -46,6 +47,13 @@ export interface ProcessTools {
 }
 
 export interface ToolExecutionContext {
+  startWork?(
+    input: ChiefWorkInput,
+    context: ToolExecutionContext,
+  ): { workId: string; taskId: string; conversationId: string };
+  listWork?(context: ToolExecutionContext): unknown;
+  authorizedWorkspaces?: Workspace[];
+  resolveWorkspace?(workspaceId?: string, path?: string, write?: boolean): Workspace;
   chiefHistory?(
     action: 'search' | 'read',
     args: Record<string, unknown>,
