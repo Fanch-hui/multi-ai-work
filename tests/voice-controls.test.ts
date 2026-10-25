@@ -10,6 +10,7 @@ const hooks = vi.hoisted(() => ({
 const voice = vi.hoisted(() => ({
   statusLoaded: true,
   status: {
+    recognition: { available: true, reason: '' },
     transcriptionAvailable: true,
     speechAvailable: true,
     transcriptionUnavailableReason: '',
@@ -18,6 +19,7 @@ const voice = vi.hoisted(() => ({
   phase: 'idle',
   continuous: false,
   supported: true,
+  conversationSupported: true,
   error: '',
   start: vi.fn(),
   reportError: vi.fn(),
@@ -67,6 +69,10 @@ beforeEach(() => {
   voice.phase = 'idle';
   voice.continuous = false;
   voice.supported = true;
+  voice.conversationSupported = true;
+  voice.status.recognition.available = true;
+  voice.status.recognition.reason = '';
+  voice.status.speechUnavailableReason = '';
   voice.status.transcriptionAvailable = true;
   voice.status.speechAvailable = true;
   voice.status.transcriptionUnavailableReason = '';
@@ -87,16 +93,30 @@ describe('语音入口', () => {
     expect(onConversationStateChange).toHaveBeenLastCalledWith(false);
   });
   it('输入入口使用带无障碍名称的图标并提示确切缺项', () => {
-    voice.status.transcriptionAvailable = false;
-    voice.status.transcriptionUnavailableReason = '请在语音设置中填写语音识别模型';
+    voice.status.recognition.available = false;
+    voice.status.recognition.reason = '请在系统设置中允许语音识别';
     const nodes = elements(render());
     const input = nodes.find((node) => node['aria-label'] === '语音输入');
     expect(input).toMatchObject({
       disabled: true,
-      title: '请在语音设置中填写语音识别模型',
+      title: '请在系统设置中允许语音识别',
     });
     expect(typeof input?.children).toBe('object');
     expect(nodes.filter((node) => typeof node.onClick === 'function')).toHaveLength(1);
+  });
+  it('系统听写独立于语音对话的 Key 和模型设置', () => {
+    voice.status.transcriptionAvailable = false;
+    voice.status.speechAvailable = false;
+    const input = elements(render()).find((node) => node['aria-label'] === '语音输入');
+    expect(input?.disabled).toBeFalsy();
+    (input?.onClick as () => void)();
+    expect(voice.start).toHaveBeenCalledExactlyOnceWith(false);
+  });
+  it('系统听写不可用时仍可启动已配置的语音对话', () => {
+    voice.status.recognition.available = false;
+    render({ conversationStartToken: 12 });
+    expect(voice.start).toHaveBeenCalledExactlyOnceWith(true);
+    expect(voice.reportError).not.toHaveBeenCalled();
   });
   it('外部对话请求等设置加载后开始一次并确认消费', () => {
     const onConversationStartHandled = vi.fn();

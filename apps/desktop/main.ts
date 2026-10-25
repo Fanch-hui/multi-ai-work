@@ -1,4 +1,6 @@
 import { configureVoicePermissions } from './voice-permissions.js';
+import { DesktopVoiceService, systemSpeechLaunch } from './voice-host.js';
+import { SystemSpeechHost } from './system-speech-host.js';
 import { initializeResidentSettings, closeResidentSettings } from './resident-settings.js';
 import {
   app,
@@ -33,6 +35,7 @@ let trayEnabled = true;
 let updater: AppUpdater | undefined;
 let dataDirectory: DataDirectoryController | undefined;
 let shutdown: Promise<void> | undefined;
+let voice: DesktopVoiceService | undefined;
 const smoke = process.argv.includes('--smoke-core');
 app.setName('multi-AI work');
 if (smoke) {
@@ -71,6 +74,13 @@ async function smokeCore() {
     (room) => room.id === snapshot.settings.mainConversationId,
   );
   if (!mainBot || mainRoom?.chiefId !== mainBot.id) throw new Error('主智能体初始化失败');
+  const recognition = new SystemSpeechHost(
+    systemSpeechLaunch(process.platform, process.resourcesPath),
+  );
+  const speechStatus = await recognition.status();
+  await recognition.close();
+  if (speechStatus.authorization === 'unavailable')
+    throw new Error(`系统语音组件检查失败：${speechStatus.reason}`);
   process.stdout.write(
     JSON.stringify({
       coreReady: !!snapshot.settings,
@@ -78,6 +88,7 @@ async function smokeCore() {
       mainBotReady: true,
       credentialBackend: 'not_checked',
       uiInteraction: false,
+      systemSpeech: speechStatus,
     }) + '\n',
   );
   await core.close();
@@ -91,6 +102,20 @@ async function start() {
   configureDataDirectory(currentDirectory);
   configureWindowNavigation();
   configureVoicePermissions(window.webContents, pathToFileURL(pagePath).href);
+  voice = new DesktopVoiceService(
+    (method, params) => core.request(method, params),
+    new SystemSpeechHost(
+      systemSpeechLaunch(
+        process.platform,
+        process.resourcesPath,
+        app.isPackaged ? undefined : app.getAppPath(),
+      ),
+    ),
+  );
+  window.webContents.on('render-process-gone', () => void voice?.recognition.cancelAll());
+  window.webContents.on('did-start-navigation', (_event, _url, inPlace, mainFrame) => {
+    if (mainFrame && !inPlace) void voice?.recognition.cancelAll();
+  });
   registerRendererRequests();
   await startCoreAndShowWindow(currentDirectory);
   configureTrayAndWindowClose();
@@ -213,6 +238,8 @@ function registerRendererRequests() {
       return dataDirectory!.change((params as { path: string }).path);
     }
     if (method.startsWith('app.update.')) return updater!.request(method);
+    if (method.startsWith('voice.'))
+      return voice!.request(method, params as Record<string, unknown>);
     const result = await core.request(method, params as Record<string, unknown>);
     if (
       method === 'connections.login' &&
@@ -296,6 +323,7 @@ async function shutdownDesktop() {
   try {
     await dataDirectory?.settle();
     await updater?.close();
+    await voice?.close();
     await core.close();
   } finally {
     closeResidentSettings();

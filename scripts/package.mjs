@@ -1,4 +1,5 @@
 import { buildComputerHelper } from './computer-helper.mjs';
+import { buildSystemSpeechHelper } from './system-speech-helper.mjs';
 import { createRequire } from 'node:module';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile, rm } from 'node:fs/promises';
@@ -60,6 +61,7 @@ await run(process.execPath, [
     : []),
 ]);
 const computerHelper = platform === '--mac' ? await buildComputerHelper(project) : undefined;
+const speechHelper = platform === '--mac' ? await buildSystemSpeechHelper(project) : undefined;
 const builder = require.resolve('electron-builder/cli.js');
 const metadata = JSON.parse(await readFile(join(project, 'package.json'), 'utf8'));
 const configDirectory = join(project, '.data');
@@ -85,6 +87,7 @@ await writeFile(
       extendInfo: {
         ...metadata.build.mac?.extendInfo,
         NSMicrophoneUsageDescription: '用于语音输入和与团队成员进行语音对话。',
+        NSSpeechRecognitionUsageDescription: '使用系统语音识别将你的话转成输入草稿。',
         NSScreenCaptureUsageDescription: '用于观察你授权给智能体操作的应用窗口。',
       },
     },
@@ -92,6 +95,10 @@ await writeFile(
     extraResources: [
       ...(metadata.build.extraResources ?? []),
       ...(computerHelper ? [{ from: computerHelper, to: 'computer-helper' }] : []),
+      ...(speechHelper ? [{ from: speechHelper, to: 'system-speech-helper' }] : []),
+      ...(platform === '--win'
+        ? [{ from: join(project, 'apps/desktop/speech-windows.ps1'), to: 'speech-windows.ps1' }]
+        : []),
       { from: marketConfigPath, to: 'market-config.json' },
       { from: join(project, 'workspace-runtime', runtimeTarget), to: 'workspace-runtime' },
       {

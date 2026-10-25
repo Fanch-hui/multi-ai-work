@@ -29,13 +29,13 @@ export function VoiceControls(props: {
     props.disabled ||
     !voice.statusLoaded ||
     !voice.supported ||
-    !voice.status?.transcriptionAvailable;
+    !voice.status?.recognition?.available;
   let issue = '';
-  if (!voice.supported) issue = '当前环境不支持麦克风录音，请使用桌面应用或本机安全页面';
-  else if (!voice.statusLoaded) issue = '正在读取语音设置';
+  if (!voice.statusLoaded) issue = '正在读取语音设置';
   else if (!voice.status) issue = voice.error || '无法读取语音设置，请重试';
-  else if (!voice.status.transcriptionAvailable)
-    issue = voice.status.transcriptionUnavailableReason || '请在语音设置中填写语音识别模型';
+  else if (!voice.supported) issue = '请使用桌面 App 的语音输入或系统听写快捷键';
+  else if (!voice.status.recognition?.available)
+    issue = voice.status.recognition?.reason || '系统语音识别暂不可用';
   const title = issue || '语音输入：识别后填入草稿';
   useEffect(() => {
     props.onConversationStateChange?.(active);
@@ -45,7 +45,11 @@ export function VoiceControls(props: {
     const token = props.conversationStartToken;
     if (token === undefined || handled.current === token || !voice.statusLoaded) return;
     handled.current = token;
-    let reason = issue;
+    let reason = '';
+    if (!voice.status) reason = voice.error || '无法读取语音设置，请重试';
+    else if (!voice.conversationSupported) reason = '当前环境无法录音，请使用桌面 App';
+    else if (!voice.status.transcriptionAvailable)
+      reason = voice.status.transcriptionUnavailableReason || '请在语音设置中填写语音识别模型';
     if (!reason && !voice.status?.speechAvailable)
       reason = voice.status?.speechUnavailableReason || '请在语音设置中填写语音合成模型与音色';
     if (!reason && (props.disabled || props.busy)) reason = '当前对话正在处理，请稍后开始语音对话';

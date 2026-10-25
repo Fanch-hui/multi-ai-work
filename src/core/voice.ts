@@ -1,11 +1,13 @@
 import { z } from 'zod';
 import type { VoiceConfiguration, VoiceStatus } from '../domain/voice.js';
 import { maxVoiceRecordingMs, voiceConfigurationIssues } from '../domain/voice.js';
+import { systemSpeechLanguageSchema } from '../domain/system-speech.js';
 import type { Vault } from '../security/vault.js';
 import type { State } from './state.js';
 import { voiceBaseUrl, voiceHttp } from './voice-http.js';
 
 const configurationSchema = z.object({
+  dictationLanguage: systemSpeechLanguageSchema,
   baseUrl: z.string().trim().max(2048).transform(voiceBaseUrl),
   transcriptionModel: z.string().trim().max(120),
   speechModel: z.string().trim().max(120),

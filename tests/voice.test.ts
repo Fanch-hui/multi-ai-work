@@ -35,6 +35,19 @@ async function fixture() {
 }
 
 describe('语音服务', () => {
+  it('保存前校验系统听写语言，保留原有语音对话配置', async () => {
+    const { service, input } = await fixture();
+    await expect(
+      service.request('voice.save', { input: { ...input, dictationLanguage: '中文' } }),
+    ).rejects.toThrow('语言代码');
+    expect(((await service.request('voice.status')) as VoiceStatus).configuration).toEqual(input);
+    await service.request('voice.save', { input: { ...input, dictationLanguage: 'zh-CN' } });
+    expect(((await service.request('voice.status')) as VoiceStatus).configuration).toEqual({
+      ...input,
+      dictationLanguage: 'zh-CN',
+    });
+  });
+
   it('默认配置逐项提示缺少识别、朗读模型与独立的OpenAI密钥', async () => {
     const { service, state, vault } = await fixture();
     state.storage.setMetadata('voice-configuration', {

@@ -1,4 +1,7 @@
+import type { SystemSpeechStatus } from './system-speech.js';
+
 export interface VoiceConfiguration {
+  dictationLanguage?: string;
   baseUrl: string;
   transcriptionModel: string;
   speechModel: string;
@@ -6,6 +9,7 @@ export interface VoiceConfiguration {
   language: string;
 }
 export interface VoiceStatus {
+  recognition?: SystemSpeechStatus;
   configuration: VoiceConfiguration;
   hasApiKey: boolean;
   transcriptionAvailable: boolean;
