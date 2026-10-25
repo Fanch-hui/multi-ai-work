@@ -20,6 +20,7 @@ import { hasOutputText, markModelWorkStarted } from '../first-output.js';
 
 export class ChatAccumulator {
   private text = '';
+  private refused = false;
   private finishReason?: string;
   private calls = new Map<number, { id: string; name: string; arguments: string }>();
   private usage?: Usage;
@@ -62,6 +63,16 @@ export class ChatAccumulator {
         },
       });
     }
+    if (choice.delta.refusal) {
+      this.refused = true;
+      this.emit({
+        type: 'text',
+        data: {
+          delta: choice.delta.refusal,
+          ...(this.messageKey ? { messageKey: this.messageKey } : {}),
+        },
+      });
+    }
     for (const fragment of choice.delta.tool_calls ?? []) {
       const call = this.calls.get(fragment.index) ?? { id: '', name: '', arguments: '' };
       call.id += fragment.id ?? '';
@@ -74,6 +85,7 @@ export class ChatAccumulator {
   finish(): Turn {
     if (!this.finishReason) throw new InterruptedModelStreamError('模型响应未完成：流中断');
     if (!this.completed) throw new Error(`模型响应未完成：${this.finishReason}`);
+    if (this.refused) throw new Error('模型拒绝执行该请求');
     const calls = [...this.calls.entries()].sort(([a], [b]) => a - b).map(([, call]) => call);
     if (this.finishReason === 'stop' && calls.length) throw new Error('模型工具调用终态不一致');
     if (

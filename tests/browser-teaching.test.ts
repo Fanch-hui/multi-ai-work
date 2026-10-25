@@ -104,6 +104,25 @@ describe('浏览器示范教学', () => {
     ]);
     expect(page.listenerCount('did-finish-load')).toBe(0);
   });
+  it('初始化页面采集失败后释放监听并允许重新开始', async () => {
+    vi.useFakeTimers();
+    const recorder = new BrowserTeachingRecorder();
+    const first = new Page();
+    const unavailable = new Page();
+    vi.spyOn(unavailable, 'executeJavaScriptInIsolatedWorld').mockRejectedValueOnce(
+      new Error('页面已导航'),
+    );
+    await expect(recorder.start('session', [first.contents, unavailable.contents])).rejects.toThrow(
+      '页面已导航',
+    );
+    expect(first.listenerCount('did-finish-load')).toBe(0);
+    expect(unavailable.listenerCount('did-finish-load')).toBe(0);
+    expect(first.context.__teaching).toBeUndefined();
+    expect((await recorder.status())?.status).toBe('draft');
+    expect(vi.getTimerCount()).toBe(0);
+    expect((await recorder.start('session', [first.contents])).status).toBe('recording');
+    await recorder.stop();
+  });
   it('到十分钟自动结束并移除后续页面监听', async () => {
     vi.useFakeTimers();
     const recorder = new BrowserTeachingRecorder();

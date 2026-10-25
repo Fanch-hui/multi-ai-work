@@ -84,6 +84,7 @@ for (const [format, input] of Object.entries(files)) {
       options,
     );
     const report = JSON.parse(await readFile(reportPath, 'utf8'));
+    if (!report.files.length) throw new Error(`${format} export produced no ${outputFormat} files`);
     for (const rendered of report.files) {
       const bytes = await readFile(rendered.path);
       const getValidOutputHeader = () => {

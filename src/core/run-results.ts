@@ -1,4 +1,4 @@
-import type { Message, Run, Task, SessionBinding, Usage } from '../domain/types.js';
+import type { Run, Task, SessionBinding, Usage } from '../domain/types.js';
 import type { ProviderResult, RunContext } from '../domain/provider.js';
 import { ModelRecoveryPendingError } from '../domain/recovery.js';
 import type { State } from './state.js';

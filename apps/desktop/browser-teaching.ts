@@ -23,7 +23,12 @@ export class BrowserTeachingRecorder {
       steps: [],
       truncated: false,
     };
-    for (const tab of contents) await this.add(tab);
+    try {
+      for (const tab of contents) await this.add(tab);
+    } catch (error) {
+      await this.stop();
+      throw error;
+    }
     this.timer = setTimeout(
       () => {
         void this.stop().catch(() => {});

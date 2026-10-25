@@ -4,8 +4,6 @@ import type { Artifact, Conversation, Task } from '../domain/types.js';
 import type { ConversationReference } from '../domain/conversation-reference.js';
 import type { State } from './state.js';
 import type { TaskService } from './tasks.js';
-import type { ChiefJobs } from './chief-jobs.js';
-import type { ChiefHistoryService } from './chief-history.js';
 import { ChiefContextService } from './chief-contexts.js';
 import { ChiefTimelineService } from './chief-timeline.js';
 import { requireAttachmentCapacity } from '../domain/attachment-policy.js';
@@ -31,8 +29,6 @@ export class ChiefRoutingService {
     private state: State,
     private tasks: TaskService,
     readonly contexts: ChiefContextService,
-    _jobs?: ChiefJobs,
-    _history?: ChiefHistoryService,
     private cancelTask?: (id: string) => Promise<unknown>,
   ) {}
   start() {

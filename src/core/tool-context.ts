@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
 import type {
-  Artifact,
   Bot,
   Connection,
   Conversation,

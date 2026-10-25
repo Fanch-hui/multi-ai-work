@@ -166,7 +166,7 @@ describe('主管任务控制与需求版本', () => {
       content: '预算改260元，练习至少30分钟',
     })) as { messageId: string };
     expect(f.core.state.snapshot().tasks).toHaveLength(before);
-    const draft = f.core.state.storage.appendMessage({
+    f.core.state.storage.appendMessage({
       id: id(),
       conversationId: f.group.conversation.id,
       authorType: 'bot',

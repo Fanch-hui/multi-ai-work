@@ -107,11 +107,3 @@ export function messageInputFeedbackIndex(data: FeedbackData, conversationId: st
   }
   return feedback;
 }
-
-export function messageInputFeedback(
-  data: FeedbackData,
-  messageId: string,
-  conversationId: string,
-) {
-  return messageInputFeedbackIndex(data, conversationId).get(messageId) ?? [];
-}

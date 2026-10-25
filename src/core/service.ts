@@ -505,7 +505,6 @@ export class CoreService {
     method: string,
     params: Record<string, unknown>,
   ): Promise<unknown> {
-    const s = this.state.storage;
     const objectId = () => z.string().parse(params.id);
     switch (method) {
       case 'memories.propose':

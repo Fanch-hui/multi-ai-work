@@ -56,19 +56,7 @@ export class RunPreparation {
   ) {}
 
   async prepare(scope: RunPreparationInput) {
-    const {
-      run,
-      task,
-      bot,
-      room,
-      connection,
-      binding,
-      adapter,
-      toolContext,
-      signal,
-      writer,
-      saved,
-    } = scope;
+    const { run, task, bot, room, connection, adapter, toolContext, signal, writer, saved } = scope;
     const draft = writer.current;
     const cutoff = saved?.cutoff ?? draft.sequence - 1;
     const s = this.state.storage;

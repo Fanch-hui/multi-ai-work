@@ -193,7 +193,7 @@ describe('主管群文件共享', () => {
       runIds: [worker.run.id],
       inputArtifactIds: [artifact.id],
     });
-    const draft = f.core.state.storage.appendMessage({
+    f.core.state.storage.appendMessage({
       id: id(),
       conversationId: f.group.conversation.id,
       authorType: 'bot',

@@ -20,11 +20,7 @@ import {
   recoveringTasks,
   workingMembers,
 } from '../apps/ui/src/message-feed.js';
-import {
-  busyInputMembers,
-  messageInputFeedback,
-  messageInputFeedbackIndex,
-} from '../apps/ui/src/task-input-feedback.js';
+import { busyInputMembers, messageInputFeedbackIndex } from '../apps/ui/src/task-input-feedback.js';
 
 const time = '2026-10-13T10:00:00Z';
 const room: Conversation = {
@@ -231,7 +227,7 @@ describe('conversation message feed', () => {
         },
       ],
     });
-    expect(messageInputFeedback(data, 'supplement', room.id)).toEqual([
+    expect(messageInputFeedbackIndex(data, room.id).get('supplement')).toEqual([
       { id: 'busy-input', name: 'busy 成员', status: '等待接入' },
       { id: 'stopped-input', name: 'stopped 成员', status: '任务已结束，保留待接入' },
     ]);
@@ -240,31 +236,35 @@ describe('conversation message feed', () => {
     expect(html).toContain('stopped 成员 · 任务已结束，保留待接入');
     expect(html).not.toContain('idle 成员');
     data.taskInputs[0].status = 'claimed';
-    expect(messageInputFeedback(data, 'supplement', room.id)[0].status).toBe(
+    expect(messageInputFeedbackIndex(data, room.id).get('supplement')![0].status).toBe(
       '已接入当前请求，待确认',
     );
     data.taskInputs[0].status = 'delivered';
     data.tasks[0].status = 'completed';
     html = render(data);
     expect(html).toContain('busy 成员 · 成员已接收');
-    expect(messageInputFeedback(data, 'another-message', room.id)).toEqual([]);
-    expect(messageInputFeedback(data, 'supplement', 'another-room')).toEqual([]);
+    expect(messageInputFeedbackIndex(data, room.id).get('another-message')).toBeUndefined();
+    expect(messageInputFeedbackIndex(data, 'another-room').get('supplement')).toBeUndefined();
   });
 
   it('distinguishes publishing a message, dispatching its task and starting the member', () => {
     const data = snapshot({
       messages: [message('new-request', { authorType: 'user', status: 'committed' })],
     });
-    expect(messageInputFeedback(data, 'new-request', room.id)).toEqual([
+    expect(messageInputFeedbackIndex(data, room.id).get('new-request')).toEqual([
       { id: 'new-request', name: '消息', status: '已发布' },
     ]);
     data.tasks.push(
       task('member', { sourceMessageId: 'new-request', status: 'queued', runIds: [] }),
     );
-    expect(messageInputFeedback(data, 'new-request', room.id)[0].status).toBe('任务已派发');
+    expect(messageInputFeedbackIndex(data, room.id).get('new-request')![0].status).toBe(
+      '任务已派发',
+    );
     data.tasks[0].runIds.push('member-run');
-    expect(messageInputFeedback(data, 'new-request', room.id)[0].status).toBe('成员已开始');
-    expect(messageInputFeedback(data, 'new-request', 'another-room')).toEqual([]);
+    expect(messageInputFeedbackIndex(data, room.id).get('new-request')![0].status).toBe(
+      '成员已开始',
+    );
+    expect(messageInputFeedbackIndex(data, 'another-room').get('new-request')).toBeUndefined();
   });
 
   it('detects supplementation targets within the current conversation and explicit member selection', () => {

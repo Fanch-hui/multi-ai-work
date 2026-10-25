@@ -54,14 +54,7 @@ export class ChiefSystem {
     this.timeline = new ChiefTimelineService(state);
     this.history = new ChiefHistoryService(state);
     this.jobs = new ChiefJobs(state, tasks);
-    this.routing = new ChiefRoutingService(
-      state,
-      tasks,
-      this.contexts,
-      this.jobs,
-      this.history,
-      cancelTask,
-    );
+    this.routing = new ChiefRoutingService(state, tasks, this.contexts, cancelTask);
     this.work = new ChiefWorkService(state, tasks, this.contexts);
     this.maintenance = new ChiefMaintenanceService(state, this.contexts, {
       queue: this.jobs.queue.bind(this.jobs),
