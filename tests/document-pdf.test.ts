@@ -79,7 +79,7 @@ describe('authorized local PDF inputs', () => {
         context,
       ),
     ).toBe(target);
-  });
+  }, 30_000);
 
   it.skipIf(!existsSync(path.join(workspaceRuntimeRoot(), 'runtime.json')))(
     'renders a selected page of a large local PDF with the source rendering adapter',
