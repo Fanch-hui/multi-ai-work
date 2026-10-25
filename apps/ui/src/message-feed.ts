@@ -7,6 +7,17 @@ export interface WorkingMember {
   run: Run;
 }
 
+export function messageTaskGroups(groups: Conversation[]): Map<string, Conversation[]> {
+  const index = new Map<string, Conversation[]>();
+  for (const group of groups) {
+    if (!group.sourceMessageId) continue;
+    const linked = index.get(group.sourceMessageId) ?? [];
+    linked.push(group);
+    index.set(group.sourceMessageId, linked);
+  }
+  return index;
+}
+
 export function conversationMessages(
   data: Pick<Snapshot, 'messages'> & Partial<Pick<Snapshot, 'chief'>>,
   conversation: Conversation,

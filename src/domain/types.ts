@@ -129,6 +129,7 @@ export interface Conversation {
   purpose?: 'chief' | 'task';
   sourceConversationId?: string;
   sourceTaskId?: string;
+  sourceMessageId?: string;
   archived?: boolean;
   model?: string;
   reasoning?: string;

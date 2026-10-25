@@ -543,6 +543,8 @@ describe('single Chief workspace presentation', () => {
 
   it('links work-created task groups from the fixed main conversation', () => {
     const data = snapshot();
+    const source = message('create-group', 'main-part', 1, 1);
+    data.messages = [source, message('next-message', 'main-part', 2, 2)];
     data.conversations.push(
       room('report-group', {
         name: '报告协作群',
@@ -550,12 +552,14 @@ describe('single Chief workspace presentation', () => {
         purpose: 'task',
         sourceConversationId: 'a2',
         sourceTaskId: 'work',
+        sourceMessageId: source.id,
       }),
       room('private-group', {
         name: '其他私聊群',
         kind: 'group',
         purpose: 'task',
         sourceConversationId: 'foreign',
+        sourceMessageId: source.id,
       }),
     );
     const html = renderToStaticMarkup(
@@ -568,6 +572,12 @@ describe('single Chief workspace presentation', () => {
     );
     expect(html).toContain('报告协作群');
     expect(html).not.toContain('其他私聊群');
+    expect(html.indexOf('data-task-group-id="report-group"')).toBeGreaterThan(
+      html.indexOf('data-message-id="create-group"'),
+    );
+    expect(html.indexOf('data-task-group-id="report-group"')).toBeLessThan(
+      html.indexOf('data-message-id="next-message"'),
+    );
   });
 
   it('groups deliverables by stable work item across execution parts', () => {

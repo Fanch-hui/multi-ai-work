@@ -200,6 +200,7 @@ describe('历史任务与上下文管理', () => {
       workspaceId: f.work.workspaceId,
       sourceConversationId: f.work.conversationId,
       sourceTaskId: f.task.id,
+      sourceMessageId: reply.id,
       createdAt: now(),
     };
     s.put('conversations', group);
@@ -285,6 +286,7 @@ describe('历史任务与上下文管理', () => {
     expect(f.core.tasks.accepting(f.work.conversationId)).toBe(false);
     expect(s.get<Conversation>('conversations', group.id)?.sourceConversationId).toBeUndefined();
     expect(s.get<Conversation>('conversations', group.id)?.sourceTaskId).toBeUndefined();
+    expect(s.get<Conversation>('conversations', group.id)?.sourceMessageId).toBeUndefined();
     expect(s.getMessage(groupMessage.id)?.content).toBe(groupMessage.content);
     expect(s.get<Artifact>('artifacts', artifact.id)?.sha256).toBe(artifact.sha256);
     expect(await readFile(artifact.path, 'utf8')).toBe(bytes.toString());

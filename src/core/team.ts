@@ -9,6 +9,7 @@ import { TaskService, terminal } from './tasks.js';
 import { isChiefProvider } from '../domain/chief-provider.js';
 import { isReasoningSupported } from '../domain/model-reasoning.js';
 import { ChiefContextService } from './chief-contexts.js';
+import { taskGroupSourceMessage } from './task-group-source.js';
 
 const memberSchema = z
   .object({
@@ -163,6 +164,7 @@ export class TeamService {
   createTaskGroup(
     sourceTask: Task,
     input: TaskGroupInput,
+    sourceRunId?: string,
   ): { conversation: Conversation; task: Task } {
     const s = this.state.storage,
       chiefId = this.state.settings().mainBotId!;
@@ -210,6 +212,7 @@ export class TeamService {
         reasoning: s.get<Bot>('bots', chiefId)?.reasoning,
         sourceConversationId: sourceRoom.id,
         sourceTaskId: source.id,
+        sourceMessageId: taskGroupSourceMessage(s, source, sourceRunId),
         createdAt: now(),
       };
       s.put('conversations', conversation);

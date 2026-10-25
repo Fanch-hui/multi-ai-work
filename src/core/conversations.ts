@@ -304,7 +304,12 @@ export class ConversationService {
     for (const room of s
       .all<Conversation>('conversations')
       .filter((room) => room.sourceConversationId === conversationId))
-      s.put('conversations', { ...room, sourceConversationId: undefined, sourceTaskId: undefined });
+      s.put('conversations', {
+        ...room,
+        sourceConversationId: undefined,
+        sourceTaskId: undefined,
+        sourceMessageId: undefined,
+      });
     for (const task of s.all<Task>('tasks')) {
       if (taskIds.has(task.parentId ?? '')) s.put('tasks', { ...task, parentId: undefined });
       if (

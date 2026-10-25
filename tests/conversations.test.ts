@@ -230,6 +230,19 @@ describe('会话管理', () => {
       goal: '公开目标',
       memberIds: [bot('成员').id],
     });
+    const instruction = core.state.storage.appendMessage({
+      id: 'group-source-instruction',
+      conversationId: homeId,
+      authorType: 'user',
+      content: '请安排团队协作',
+      artifactIds: [],
+      status: 'committed',
+      createdAt: new Date().toISOString(),
+    });
+    core.state.storage.put('conversations', {
+      ...group.conversation,
+      sourceMessageId: instruction.id,
+    });
     core.tasks.post(group.conversation.id, source.botId, 'history', '群内历史');
     await new ConversationService(core.state, core.tasks, core.scheduler).delete(
       source.conversationId,
@@ -241,6 +254,7 @@ describe('会话管理', () => {
     const room = core.state.storage.get<Conversation>('conversations', group.conversation.id)!;
     expect(room.sourceConversationId).toBeUndefined();
     expect(room.sourceTaskId).toBeUndefined();
+    expect(room.sourceMessageId).toBeUndefined();
     expect(core.state.storage.messages(room.id)[0].content).toBe('群内历史');
     expect(core.state.settings().mainConversationId).toBe(homeId);
   });

@@ -44,6 +44,7 @@ import { migrateChiefWork } from './chief-migration.js';
 import { chiefSnapshot } from './chief-contexts.js';
 import { ChiefTimelineService } from './chief-timeline.js';
 import { ensureDefaultWorkspace, migrateChiefContinuity } from './chief-continuity-migration.js';
+import { withTaskGroupSource } from './task-group-source.js';
 
 export const now = () => new Date().toISOString();
 export const id = () => randomUUID();
@@ -125,11 +126,12 @@ export class State {
       chief: chiefSnapshot(this),
       connections: this.snapshotCache.all('connections'),
       bots: this.snapshotCache.all<Bot>('bots').map((bot) => publicBot(bot, settings.mainBotId)),
-      conversations: conversations.map((room) =>
-        room.id === settings.mainConversationId
-          ? { ...room, unreadCount: timeline.unreadCount() }
-          : room,
-      ),
+      conversations: conversations.map((room) => {
+        const projected = withTaskGroupSource(s, room);
+        return room.id === settings.mainConversationId
+          ? { ...projected, unreadCount: timeline.unreadCount() }
+          : projected;
+      }),
       workspaces: this.snapshotCache.all('workspaces'),
       messages,
       tasks: tasks.map((task) => this.taskSnapshot(task, readActivity)),

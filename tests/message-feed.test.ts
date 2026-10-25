@@ -136,6 +136,88 @@ const render = (data: Snapshot, conversation = room) =>
   );
 
 describe('conversation message feed', () => {
+  it('keeps task-group entries after their source message across streaming and history pages', () => {
+    const chief: Conversation = {
+      ...room,
+      id: 'chief',
+      kind: 'private',
+      purpose: 'chief',
+      chiefRole: 'home',
+    };
+    const group = (id: string, sourceMessageId: string): Conversation => ({
+      ...room,
+      id,
+      name: `群聊 ${id}`,
+      purpose: 'task',
+      sourceConversationId: chief.id,
+      sourceMessageId,
+    });
+    const first = message('source-a', {
+      conversationId: chief.id,
+      content: '先开始第一个工作',
+      status: 'committed',
+    });
+    const second = message('source-b', {
+      conversationId: chief.id,
+      content: '再开始第二个工作',
+    });
+    const later = message('later', { conversationId: chief.id, content: '之后继续讨论' });
+    const data = snapshot({
+      conversations: [
+        chief,
+        group('a', first.id),
+        { ...group('b', second.id), sourceConversationId: 'background-work' },
+        { ...group('unanchored', ''), sourceMessageId: undefined },
+      ],
+      messages: [first, second, later],
+      chief: {
+        homeConversationId: chief.id,
+        inputs: [],
+        contexts: [
+          {
+            id: 'work',
+            title: '后台工作',
+            kind: 'work',
+            homeConversationId: chief.id,
+            currentPartId: 'part',
+            conversationId: 'background-work',
+            conversationIds: ['background-work'],
+            workspaceId: 'workspace',
+            activeTaskIds: [],
+            createdAt: time,
+          },
+        ],
+      },
+    });
+    const assertPosition = (html: string, sourceId: string, groupId: string, nextId: string) => {
+      const source = html.indexOf(`data-message-id="${sourceId}"`);
+      const linked = html.indexOf(`data-task-group-id="${groupId}"`);
+      const next = html.indexOf(`data-message-id="${nextId}"`);
+      expect(source).toBeGreaterThanOrEqual(0);
+      expect(linked).toBeGreaterThan(source);
+      expect(linked).toBeLessThan(next);
+      expect(html.split(`data-task-group-id="${groupId}"`)).toHaveLength(2);
+    };
+    assertPosition(render(data, chief), first.id, 'a', second.id);
+    assertPosition(render(data, chief), second.id, 'b', later.id);
+    expect(render(data, chief)).not.toContain('data-task-group-id="unanchored"');
+    const page = { ...data, messages: [second, { ...later, content: '之后继续讨论，流式更新' }] };
+    const html = render(page, chief);
+    expect(html).not.toContain('data-task-group-id="a"');
+    assertPosition(html, second.id, 'b', later.id);
+    assertPosition(
+      render({ ...page, messages: [first, ...page.messages] }, chief),
+      first.id,
+      'a',
+      second.id,
+    );
+    const archived = {
+      ...data,
+      conversations: [chief, { ...group('a', first.id), archived: true }],
+    };
+    expect(render(archived, chief)).not.toContain('data-task-group-id=');
+  });
+
   it('indexes all message feedback without mixing conversations or duplicating task recipients', () => {
     const data = snapshot({
       bots: [bot('busy'), bot('idle')],

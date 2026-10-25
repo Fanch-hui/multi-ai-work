@@ -4,6 +4,99 @@ import { State } from '../src/core/state.js';
 import { eventually, setup } from './core-harness.js';
 
 describe('主管主对话与任务群', () => {
+  it('建群固定关联当轮主管发言，重复调用和后续发言保持原锚点', async () => {
+    const { core, bot } = await setup(async () => ({ text: '完成' }));
+    core.scheduler.pause();
+    bot('Chief');
+    const room = core.state.storage.get<Conversation>(
+      'conversations',
+      core.state.settings().mainConversationId!,
+    )!;
+    const instruction = core.state.storage.appendMessage({
+      id: 'group-instruction',
+      conversationId: room.id,
+      authorType: 'user',
+      content: '请安排协作',
+      artifactIds: [],
+      status: 'committed',
+      createdAt: new Date().toISOString(),
+    });
+    const source = core.tasks.create({
+      conversationId: room.id,
+      botId: room.chiefId!,
+      goal: instruction.content,
+      sourceMessageId: instruction.id,
+    });
+    core.state.storage.put('tasks', { ...source, runIds: ['creation-run'] });
+    const reply = core.state.storage.appendMessage({
+      ...instruction,
+      id: 'group-creation-reply',
+      authorType: 'bot',
+      authorBotId: room.chiefId,
+      runId: 'creation-run',
+      content: '我来安排成员协作',
+    });
+    const input = { name: '协作群', goal: '成员协作', memberIds: [bot('成员').id] };
+    const group = core.team.createTaskGroup(source, input, 'creation-run');
+    expect(group.conversation.sourceMessageId).toBe(reply.id);
+    core.state.storage.appendMessage({ ...reply, id: 'later-reply', content: '稍后的回复' });
+    expect(core.team.createTaskGroup(source, input, 'creation-run').conversation).toEqual(
+      group.conversation,
+    );
+    expect(
+      core.state.snapshot().conversations.find((item) => item.id === group.conversation.id),
+    ).toMatchObject({ sourceMessageId: reply.id });
+  });
+
+  it('后台建群沿真实来源找回用户指令，旧群快照补全关联', async () => {
+    const { core, bot } = await setup(async () => ({ text: '完成' }));
+    core.scheduler.pause();
+    bot('Chief');
+    const s = core.state.storage;
+    const homeId = core.state.settings().mainConversationId!;
+    const instruction = s.appendMessage({
+      id: 'visible-instruction',
+      conversationId: homeId,
+      authorType: 'user',
+      content: '请为这项工作组建团队',
+      artifactIds: [],
+      status: 'committed',
+      createdAt: new Date().toISOString(),
+    });
+    const room = core.team.createChiefExecutionConversation('后台工作');
+    const hidden = s.appendMessage({
+      ...instruction,
+      id: 'hidden-work-instruction',
+      conversationId: room.id,
+    });
+    s.setMetadata(`chief-work-source:${hidden.id}`, { sourceMessageIds: [instruction.id] });
+    const source = core.tasks.create({
+      conversationId: room.id,
+      botId: room.chiefId!,
+      goal: '后台协作',
+      sourceMessageId: hidden.id,
+    });
+    s.put('tasks', { ...source, runIds: ['hidden-run'] });
+    s.appendMessage({
+      ...hidden,
+      id: 'hidden-reply',
+      authorType: 'bot',
+      authorBotId: room.chiefId,
+      runId: 'hidden-run',
+      content: '开始建群',
+    });
+    const group = core.team.createTaskGroup(
+      source,
+      { name: '后台协作群', goal: '协作', memberIds: [bot('成员').id] },
+      'hidden-run',
+    );
+    expect(group.conversation.sourceMessageId).toBe(instruction.id);
+    s.put('conversations', { ...group.conversation, sourceMessageId: undefined });
+    expect(
+      core.state.snapshot().conversations.find((item) => item.id === group.conversation.id),
+    ).toMatchObject({ sourceMessageId: instruction.id });
+  });
+
   it('事项保存所选工作目录，任务群继承统一管家模型而不公开系统目标', async () => {
     const { core, connection, bot } = await setup(async () => ({ text: '完成' }));
     core.scheduler.pause();

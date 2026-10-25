@@ -184,7 +184,7 @@ export class ToolContextFactory {
             ...(room.purpose === 'chief' && room.kind === 'private'
               ? {
                   createTaskGroup: (input: TaskGroupInput) =>
-                    this.team.createTaskGroup(task, input),
+                    this.team.createTaskGroup(task, input, run.id),
                 }
               : {}),
           }

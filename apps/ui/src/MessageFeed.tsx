@@ -1,23 +1,27 @@
 import { composerDrafts } from './composer-drafts.js';
 import { useLayoutEffect, useMemo, useRef } from 'react';
-import { ArrowUpRight } from 'lucide-react';
 import type { Conversation, Message, Snapshot, Task } from '../../../src/domain/types.js';
 import type { ConversationHistory, Mutate } from './store.js';
 import { Badge, cn, timeLabel } from './components.js';
 import Avatar, { UserAvatar } from './Avatar.js';
-import { ConversationAvatar } from './ConversationAvatar.js';
 import { Markdown } from './Markdown.js';
 import { AgentActivity, agentActivity } from './AgentActivity.js';
 import { ApprovalCard } from './TaskDetail.js';
 import { UserQuestionCard } from './UserQuestionCard.js';
 import { MessageArtifacts } from './MessageArtifacts.js';
-import { conversationMessages, recoveringTasks, workingMembers } from './message-feed.js';
+import {
+  conversationMessages,
+  messageTaskGroups,
+  recoveringTasks,
+  workingMembers,
+} from './message-feed.js';
 import { useScrollFollow } from './useScrollFollow.js';
 import { taskRecovery } from './task-activity.js';
 import { messageInputFeedbackIndex } from './task-input-feedback.js';
 import { chiefConversationIds, isChiefHistory, isChiefHome } from './chief-work.js';
 import { conversationRecordTasks } from './conversation-records.js';
 import { ChiefInputFeedback } from './ChiefInputFeedback.js';
+import { TaskGroupLinks } from './TaskGroupLinks.js';
 export function MessageFeed({
   data,
   history,
@@ -116,6 +120,7 @@ export function MessageFeed({
         : [],
     [data.conversations, main, conversationIds],
   );
+  const groupsByMessage = useMemo(() => messageTaskGroups(groups), [groups]);
   const taskIds = useMemo(
     () =>
       new Set(
@@ -192,18 +197,19 @@ export function MessageFeed({
             )}
           </div>
         )}
-        {messages.map((message, index) => {
+        {messages.flatMap((message, index) => {
           const bot = bots.get(message.authorBotId ?? '');
           const user = message.authorType === 'user';
           const previous = messages[index - 1];
           const continuation =
             message.authorType === 'bot' &&
             previous?.authorType === 'bot' &&
+            !groupsByMessage.has(previous.id) &&
             previous.chiefContextId === message.chiefContextId &&
             previous.authorBotId === message.authorBotId &&
             previous.runId === message.runId;
           const inputFeedback = user ? (feedback.get(message.id) ?? []) : [];
-          return (
+          return [
             <article
               key={message.id}
               data-message-id={message.id}
@@ -328,8 +334,14 @@ export function MessageFeed({
                 )}
               </div>
               {user && <UserAvatar avatar={data.settings.userAvatar} className="size-8" />}
-            </article>
-          );
+            </article>,
+            <TaskGroupLinks
+              key={`groups:${message.id}`}
+              groups={groupsByMessage.get(message.id) ?? []}
+              bots={data.bots}
+              onSelect={onSelectConversation}
+            />,
+          ];
         })}
         {!!working.length && (
           <div
@@ -375,22 +387,6 @@ export function MessageFeed({
                 mutate={mutate}
                 hideResolved
               />
-            ))}
-          </div>
-        )}
-        {!!groups.length && (
-          <div className="grid gap-1 border-t border-black/5 pt-4" aria-label="关联任务群聊">
-            {groups.map((group) => (
-              <button
-                key={group.id}
-                onClick={() => onSelectConversation(group.id)}
-                className="flex min-w-0 items-center gap-2 rounded-lg px-2 py-2 text-left text-xs text-slate-500 hover:bg-slate-50"
-              >
-                <ConversationAvatar conversation={group} bots={data.bots} className="size-6" />
-                <span className="truncate">{group.name}</span>
-                <span className="ml-auto shrink-0 text-slate-400">进入群聊</span>
-                <ArrowUpRight size={13} className="shrink-0" />
-              </button>
             ))}
           </div>
         )}
