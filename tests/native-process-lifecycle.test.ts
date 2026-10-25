@@ -18,7 +18,10 @@ const children: ChildProcessWithoutNullStreams[] = [],
 afterEach(async () => {
   await Promise.all(children.splice(0).map(stop));
   await Promise.all(
-    folders.splice(0).map((folder) => rm(folder, { recursive: true, force: true })),
+    folders.splice(0).map((folder) =>
+      // Windows may retain directory handles briefly after the exit assertions pass.
+      rm(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }),
+    ),
   );
 });
 
