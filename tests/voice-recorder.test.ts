@@ -57,6 +57,32 @@ async function flush() {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('麦克风生命周期', () => {
+  it('权限和设备失败提供可操作原因', async () => {
+    const { getUserMedia } = environment();
+    for (const [name, expected] of [
+      ['NotAllowedError', '麦克风权限未开启'],
+      ['NotFoundError', '未找到麦克风'],
+      ['NotReadableError', '麦克风无法录音'],
+    ]) {
+      getUserMedia.mockRejectedValueOnce(Object.assign(new Error('browser detail'), { name }));
+      await expect(new VoiceRecorder().start(false)).rejects.toThrow(expected);
+    }
+  });
+  it('音频上下文初始化失败后释放已取得的麦克风', async () => {
+    const { stop, close } = environment();
+    vi.stubGlobal(
+      'AudioContext',
+      class {
+        close = close;
+        resume = async () => {
+          throw new Error('audio initialization failed');
+        };
+      },
+    );
+    await expect(new VoiceRecorder().start(false)).rejects.toThrow('audio initialization failed');
+    expect(stop).toHaveBeenCalledOnce();
+    expect(close).toHaveBeenCalledOnce();
+  });
   it('只在start请求权限，完成段落释放麦克风与AudioContext，保留实际音频', async () => {
     const { getUserMedia, stop, close } = environment();
     const recorder = new VoiceRecorder();

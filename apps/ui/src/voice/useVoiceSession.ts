@@ -22,8 +22,10 @@ export function useVoiceSession({
   reply?: VoiceReply;
 }) {
   const [status, setStatus] = useState<VoiceStatus>();
-  const [phase, setPhase] = useState<VoicePhase>('idle');
+  const [session, setSession] = useState({ phase: 'idle' as VoicePhase, continuous: false });
+  const phase = session.phase;
   const [error, setError] = useState('');
+  const [loadedConversationId, setLoadedConversationId] = useState<string>();
   const state = useRef({
     version: 0,
     continuous: false,
@@ -32,14 +34,12 @@ export function useVoiceSession({
     url: '',
     requestId: '',
     lastReply: '',
-    phase: 'idle' as VoicePhase,
     priorTaskError: taskError,
   });
   const current = useRef({ onSubmit, onDictation, reply });
   current.current = { onSubmit, onDictation, reply };
   function change(next: VoicePhase) {
-    state.current.phase = next;
-    setPhase(next);
+    setSession({ phase: next, continuous: state.current.continuous });
   }
   function stopPlayback() {
     state.current.audio?.pause();
@@ -66,6 +66,9 @@ export function useVoiceSession({
       })
       .catch((cause) => {
         if (!disposed) setError(errorMessage(cause));
+      })
+      .finally(() => {
+        if (!disposed) setLoadedConversationId(conversationId);
       });
     return () => {
       disposed = true;
@@ -190,8 +193,11 @@ export function useVoiceSession({
   }
   return {
     status,
+    statusLoaded: loadedConversationId === conversationId,
     phase,
+    continuous: session.continuous,
     error,
+    reportError: setError,
     supported: VoiceRecorder.supported(),
     start,
     end,

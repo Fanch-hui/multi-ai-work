@@ -42,8 +42,14 @@ export function Chat({
   sidebarCollapsed,
   onExpandSidebar,
   browserRequest,
+  conversationStartToken,
+  onConversationStartHandled,
+  onConversationStateChange,
 }: {
   browserRequest?: number;
+  conversationStartToken?: number;
+  onConversationStartHandled?: (token: number) => void;
+  onConversationStateChange?: (active: boolean) => void;
   data: Snapshot;
   conversation?: Conversation;
   mutate: Mutate;
@@ -69,6 +75,9 @@ export function Chat({
   useEffect(() => {
     if (browserRequest) setBrowserOpen(true);
   }, [browserRequest]);
+  useEffect(() => {
+    if (conversationStartToken !== undefined) setView('chat');
+  }, [conversationStartToken]);
   const waitResource = useResource<TaskWait[]>('waits.list');
   const waits =
     waitResource.value?.filter(
@@ -143,6 +152,9 @@ export function Chat({
         conversation={conversation}
         mutate={mutate}
         configureChief={main ? configureChief : undefined}
+        conversationStartToken={conversationStartToken}
+        onConversationStartHandled={onConversationStartHandled}
+        onConversationStateChange={home ? onConversationStateChange : undefined}
       />
     );
   };

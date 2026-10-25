@@ -79,10 +79,7 @@ export function Integrations({ data, mutate }: { data: Snapshot; mutate: Mutate 
     <div className="grid gap-8">
       <section>
         <div className="mb-5 flex items-center justify-between">
-          <div>
-            <h2 className="text-balance text-base font-semibold">外部工具</h2>
-            <p className="mt-1 text-sm text-slate-500">连接 MCP 工具和搜索服务。</p>
-          </div>
+          <h2 className="text-balance text-base font-semibold">外部工具</h2>
           <Button variant="primary" onClick={() => setEditing('new')}>
             <Plus size={16} />
             添加工具

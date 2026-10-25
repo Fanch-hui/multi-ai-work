@@ -55,11 +55,8 @@ export function Workspaces({ data, mutate }: { data: Snapshot; mutate: Mutate })
     }
   }
   return (
-    <section>
-      <div className="mb-5 flex items-center justify-between">
-        <div>
-          <h2 className="text-balance text-base font-semibold">授权工作目录</h2>
-        </div>
+    <section aria-label="授权工作目录">
+      <div className="mb-5 flex justify-end">
         <Button variant="primary" onClick={() => edit()}>
           <Plus size={16} />
           添加目录

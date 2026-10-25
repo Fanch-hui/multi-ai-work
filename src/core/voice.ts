@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { VoiceConfiguration, VoiceStatus } from '../domain/voice.js';
-import { maxVoiceRecordingMs } from '../domain/voice.js';
+import { maxVoiceRecordingMs, voiceConfigurationIssues } from '../domain/voice.js';
 import type { Vault } from '../security/vault.js';
 import type { State } from './state.js';
 import { voiceBaseUrl, voiceHttp } from './voice-http.js';
@@ -49,6 +49,9 @@ export class VoiceService {
       const configuration = this.configuration();
       const key = await this.vault.get(keyReference);
       controller.signal.throwIfAborted();
+      const issues = voiceConfigurationIssues(configuration, !!key);
+      const issue = method === 'voice.transcribe' ? issues.transcription : issues.speech;
+      if (issue) throw new Error(issue);
       const headers: Record<string, string> = key ? { Authorization: `Bearer ${key}` } : {};
       if (method === 'voice.transcribe')
         return await this.transcribe(configuration, headers, params, controller.signal);
@@ -70,11 +73,15 @@ export class VoiceService {
   }
   private async status(): Promise<VoiceStatus> {
     const configuration = this.configuration();
+    const hasApiKey = !!(await this.vault.get(keyReference));
+    const issues = voiceConfigurationIssues(configuration, hasApiKey);
     return {
       configuration,
-      hasApiKey: !!(await this.vault.get(keyReference)),
-      transcriptionAvailable: !!configuration.transcriptionModel,
-      speechAvailable: !!configuration.speechModel && !!configuration.voice,
+      hasApiKey,
+      transcriptionAvailable: !issues.transcription,
+      speechAvailable: !issues.speech,
+      transcriptionUnavailableReason: issues.transcription || undefined,
+      speechUnavailableReason: issues.speech || undefined,
       mode: 'segmented',
       maxRecordingMs: maxVoiceRecordingMs,
     };
@@ -101,7 +108,6 @@ export class VoiceService {
     params: Record<string, unknown>,
     signal: AbortSignal,
   ) {
-    if (!config.transcriptionModel) throw new Error('请先配置语音识别模型');
     const input = z
       .object({
         audioBase64: z
@@ -153,7 +159,6 @@ export class VoiceService {
     params: Record<string, unknown>,
     signal: AbortSignal,
   ) {
-    if (!config.speechModel || !config.voice) throw new Error('请先配置语音回复模型与音色');
     const { text } = z.object({ text: z.string().trim().min(1).max(4000) }).parse(params);
     const result = await voiceHttp(
       `${config.baseUrl}/audio/speech`,

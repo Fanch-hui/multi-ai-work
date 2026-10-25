@@ -46,7 +46,7 @@ export function PersonalSettings({ data, mutate }: { data: Snapshot; mutate: Mut
         <h2 className="mb-5 text-balance text-base font-semibold">职业信息</h2>
         <div className="grid gap-4 rounded-xl border border-slate-200 bg-white p-5">
           <p className="text-pretty text-sm text-slate-500">
-            管家会结合你的职业或身份提供帮助，并推荐适合的智能体伙伴。修改后从下一轮对话生效。
+            用于管家回复和智能体推荐，修改后从下一轮对话生效。
           </p>
           {renderCareers()}
           <ErrorNote error={error} />

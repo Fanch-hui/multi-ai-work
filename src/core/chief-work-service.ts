@@ -52,8 +52,10 @@ export class ChiefWorkService {
       workId: string;
       taskId: string;
       conversationId: string;
+      deleted?: boolean;
     }>(requestId);
     if (saved) {
+      if (saved.deleted) throw new Error('历史任务已删除，请创建新的工作');
       if (saved.fingerprint !== fingerprint) throw new Error('工作调用与已保存要求不匹配');
       return { workId: saved.workId, taskId: saved.taskId, conversationId: saved.conversationId };
     }

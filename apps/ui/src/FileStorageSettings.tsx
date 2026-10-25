@@ -120,7 +120,7 @@ export function FileStorageSettings() {
         <div className="flex items-center justify-between gap-3">
           <h2 className="flex items-center gap-2 text-base font-semibold">
             <HardDrive size={18} className="text-slate-500" />
-            文件存储
+            空间占用
           </h2>
           <Button disabled={!!busy} onClick={() => void refresh()}>
             <RefreshCw size={15} />
@@ -138,7 +138,7 @@ export function FileStorageSettings() {
           {usage && (
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
               <p className="text-sm leading-6 text-slate-500">
-                自动整理缓存；上传资料、交付成果和历史版本持续保留。
+                上传资料、交付成果和历史版本持续保留。
               </p>
               <Confirm
                 title="清理可回收文件？"

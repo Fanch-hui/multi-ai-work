@@ -32,7 +32,8 @@ export function MainSidebar({
   selectedId,
   onPage,
   onSelect,
-  onCreate,
+  onVoiceConversation,
+  voiceActive = false,
   onCreateGroup,
   onCollapse,
   mutate,
@@ -43,7 +44,8 @@ export function MainSidebar({
   selectedId?: string;
   onPage: (page: Page) => void;
   onSelect: (id: string) => void;
-  onCreate: () => void;
+  onVoiceConversation: () => void;
+  voiceActive?: boolean;
   onCreateGroup: () => void;
   onCollapse: () => void;
   mutate: Mutate;
@@ -100,11 +102,14 @@ export function MainSidebar({
             新对话
           </Button>
           <Button
-            className="size-10 shrink-0 border-black/6 bg-white/70 p-0"
-            onClick={onCreate}
+            className={cn(
+              'size-10 shrink-0 border-black/6 bg-white/70 p-0',
+              voiceActive && 'bg-blue-50 text-blue-600',
+            )}
+            onClick={onVoiceConversation}
             disabled={!data}
-            aria-label="打开管家对话"
-            title="呼叫管家"
+            aria-label={voiceActive ? '返回语音对话' : '与管家语音对话'}
+            title={voiceActive ? '返回语音对话' : '与管家语音对话'}
           >
             <Phone size={16} />
           </Button>

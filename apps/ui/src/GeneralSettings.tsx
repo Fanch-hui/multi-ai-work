@@ -51,7 +51,7 @@ export function General({ data, mutate }: { data: Snapshot; mutate: Mutate }) {
   const fields: {
     key: 'maxActiveRuns' | 'maxChildren' | 'maxCoordinationRounds';
     label: string;
-    hint: string;
+    hint?: string;
     min: number;
     max?: number;
   }[] = [
@@ -65,7 +65,6 @@ export function General({ data, mutate }: { data: Snapshot; mutate: Mutate }) {
     {
       key: 'maxChildren',
       label: '每任务最多分派成员任务',
-      hint: '一个任务最多能拆成多少项成员任务。',
       min: 1,
       max: 30,
     },

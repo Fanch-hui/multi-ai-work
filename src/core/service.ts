@@ -146,7 +146,12 @@ export class CoreService {
       this.adapters,
     );
     this.scheduler = new Scheduler(this.state, this.tasks, this.executor, this.adapters);
-    this.chief = new ChiefSystem(this.state, this.tasks, (id) => this.scheduler.cancel(id));
+    this.chief = new ChiefSystem(
+      this.state,
+      this.tasks,
+      (id) => this.scheduler.cancel(id),
+      () => this.conversations,
+    );
     this.entities.workspaceBusy = (id) => this.tools.workspaceBusy(id);
     this.tools.controls = new TaskControlService(this.state, this.tasks, this.scheduler);
     this.questionDecisions = new QuestionDecisions(this.state, this.tasks);

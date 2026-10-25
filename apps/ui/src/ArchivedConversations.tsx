@@ -19,7 +19,10 @@ export function ArchivedConversations({
   const [manageId, setManageId] = useState('');
   const conversations = data.conversations
     .filter(
-      (item) => item.archived && item.name.toLocaleLowerCase().includes(query.toLocaleLowerCase()),
+      (item) =>
+        item.archived &&
+        !item.timelineOnly &&
+        item.name.toLocaleLowerCase().includes(query.toLocaleLowerCase()),
     )
     .slice()
     .reverse();

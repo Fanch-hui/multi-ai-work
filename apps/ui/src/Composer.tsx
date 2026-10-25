@@ -21,11 +21,17 @@ export function Composer({
   conversation,
   mutate,
   configureChief,
+  conversationStartToken,
+  onConversationStartHandled,
+  onConversationStateChange,
 }: {
   data: Snapshot;
   conversation: Conversation;
   mutate: Mutate;
   configureChief?: () => void;
+  conversationStartToken?: number;
+  onConversationStartHandled?: (token: number) => void;
+  onConversationStateChange?: (active: boolean) => void;
 }) {
   const { draft, setContent, setTargets, setReferences } = useComposerDraft(conversation.id);
   const { content, targets, error, sending: busy } = draft;
@@ -345,6 +351,9 @@ export function Composer({
                 taskError={voiceFailure}
                 busy={busy}
                 disabled={attaching}
+                conversationStartToken={conversationStartToken}
+                onConversationStartHandled={onConversationStartHandled}
+                onConversationStateChange={onConversationStateChange}
               />
 
               {rootTasks.length > 0 && (

@@ -35,6 +35,42 @@ async function fixture() {
 }
 
 describe('语音服务', () => {
+  it('默认配置逐项提示缺少识别、朗读模型与独立的OpenAI密钥', async () => {
+    const { service, state, vault } = await fixture();
+    state.storage.setMetadata('voice-configuration', {
+      baseUrl: 'https://api.openai.com/v1',
+      transcriptionModel: '',
+      speechModel: '',
+      voice: 'alloy',
+      language: 'zh',
+    });
+    await vault.delete('voice-api-key');
+    const status = (await service.request('voice.status')) as VoiceStatus;
+    expect(status.transcriptionAvailable).toBe(false);
+    expect(status.transcriptionUnavailableReason).toContain('语音识别模型');
+    expect(status.transcriptionUnavailableReason).toContain('API Key');
+    expect(status.speechUnavailableReason).toContain('语音合成模型');
+    const transport = vi.fn();
+    configureProviderFetch(transport);
+    await expect(
+      service.request('voice.transcribe', { requestId: 'missing-config' }),
+    ).rejects.toThrow(status.transcriptionUnavailableReason);
+    expect(transport).not.toHaveBeenCalled();
+  });
+
+  it('本机免密钥识别服务保持可用，朗读配置独立检查', async () => {
+    const { service, input } = await fixture();
+    await service.request('voice.save', {
+      input: { ...input, speechModel: '', voice: '', clearApiKey: true },
+    });
+    expect(await service.request('voice.status')).toMatchObject({
+      hasApiKey: false,
+      transcriptionAvailable: true,
+      speechAvailable: false,
+      speechUnavailableReason: '请在语音设置中填写语音合成模型、音色',
+    });
+  });
+
   it('凭据仅在Vault，公开配置保存独立能力，支持保留与清除Key', async () => {
     const { service, state, vault, input } = await fixture();
     expect(JSON.stringify(await service.request('voice.status'))).not.toContain('synthetic-key');

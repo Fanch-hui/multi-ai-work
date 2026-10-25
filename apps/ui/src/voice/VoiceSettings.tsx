@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { Fragment, useEffect, useState, type FormEvent } from 'react';
 import type { VoiceStatus } from '../../../../src/domain/voice.js';
 import { request, errorMessage } from '../api.js';
 import { Button, ErrorNote, Field, inputClass } from '../components.js';
@@ -44,45 +44,31 @@ export function VoiceSettings() {
     }
   }
   return (
-    <form onSubmit={save} className="grid max-w-2xl gap-4">
+    <form aria-label="语音设置" onSubmit={save} className="grid max-w-2xl gap-4">
       <div>
-        <h2 className="text-base font-semibold text-slate-800">语音</h2>
-        <p className="mt-2 text-sm leading-6 text-slate-500">
-          使用 OpenAI 兼容的语音识别与合成服务，也可连接本机兼容服务。语音对话在停顿后识别，
-          交给当前成员处理，再朗读回复。点击录音后音频发送至下方地址，录音在内存中处理。
+        <p className="text-sm leading-6 text-slate-500">
+          语音输入将识别结果填入可编辑草稿；语音对话在停顿后发送给管家，并朗读回复。
+          两者共用下方识别服务，录音在内存中处理并发送至所填地址。
         </p>
       </div>
       {status && (
         <>
-          {(
-            [
-              ['baseUrl', '服务地址（包含 /v1）', 'https://api.openai.com/v1'],
-              ['transcriptionModel', '语音识别模型', '填写服务商支持的模型 ID'],
-              ['speechModel', '语音合成模型', '填写服务商支持的模型 ID'],
-              ['voice', '音色', 'alloy'],
-              ['language', '识别语言', 'zh'],
-            ] as const
-          ).map(([name, label, placeholder]) => (
-            <Field key={name} label={label}>
-              <input
-                className={inputClass}
-                value={status.configuration[name]}
-                placeholder={placeholder}
-                onChange={(event) => {
-                  setSaved(false);
-                  setStatus({
-                    ...status,
-                    configuration: {
-                      ...status.configuration,
-                      [name]: event.target.value,
-                    },
-                  });
-                }}
-              />
-            </Field>
-          ))}
+          <Field label="服务地址（包含 /v1）">
+            <input
+              className={inputClass}
+              value={status.configuration.baseUrl}
+              placeholder="https://api.openai.com/v1"
+              onChange={(event) => {
+                setSaved(false);
+                setStatus({
+                  ...status,
+                  configuration: { ...status.configuration, baseUrl: event.target.value },
+                });
+              }}
+            />
+          </Field>
           <Field
-            label={`API Key${status.hasApiKey ? '（已保存，留空保留）' : '（本机服务可留空）'}`}
+            label={`API Key${status.hasApiKey ? '（已保存，留空保留）' : '（免密钥服务可留空）'}`}
           >
             <input
               className={inputClass}
@@ -92,6 +78,9 @@ export function VoiceSettings() {
               onChange={(event) => setKey(event.target.value)}
             />
           </Field>
+          <p className="text-xs text-slate-500">
+            识别与朗读共用此密钥；ChatGPT 登录与语音服务分别配置。
+          </p>
           {status.hasApiKey && (
             <label className="flex items-center gap-2 text-sm text-slate-600">
               <input
@@ -102,6 +91,44 @@ export function VoiceSettings() {
               清除已保存的 API Key
             </label>
           )}
+          {(
+            [
+              ['transcriptionModel', '识别模型', '填写服务商支持的语音识别模型 ID'],
+              ['language', '识别语言', 'zh'],
+              ['speechModel', '合成模型', '填写服务商支持的语音合成模型 ID'],
+              ['voice', '音色', 'alloy'],
+            ] as const
+          ).map(([name, label, placeholder]) => (
+            <Fragment key={name}>
+              {name === 'transcriptionModel' && (
+                <h3 className="mt-2 text-sm font-semibold text-slate-700">
+                  语音识别 · 两种功能共用
+                </h3>
+              )}
+              {name === 'speechModel' && (
+                <h3 className="mt-2 text-sm font-semibold text-slate-700">
+                  回复朗读 · 语音对话使用
+                </h3>
+              )}
+              <Field label={label}>
+                <input
+                  className={inputClass}
+                  value={status.configuration[name]}
+                  placeholder={placeholder}
+                  onChange={(event) => {
+                    setSaved(false);
+                    setStatus({
+                      ...status,
+                      configuration: {
+                        ...status.configuration,
+                        [name]: event.target.value,
+                      },
+                    });
+                  }}
+                />
+              </Field>
+            </Fragment>
+          ))}
           <p className="text-xs text-slate-500">每段最长 45 秒；合成的回复以 AI 语音播放。</p>
           <div>
             <Button type="submit" disabled={busy}>

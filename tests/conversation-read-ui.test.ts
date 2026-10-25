@@ -140,7 +140,7 @@ describe('conversation unread badges', () => {
         selectedId: '主管',
         onPage: () => undefined,
         onSelect: () => undefined,
-        onCreate: () => undefined,
+        onVoiceConversation: () => undefined,
         onCreateGroup: () => undefined,
         onCollapse: () => undefined,
         mutate: async () => undefined as never,

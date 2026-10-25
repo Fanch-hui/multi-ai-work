@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { PanelLeft, RefreshCw } from 'lucide-react';
 import { useTeamStore } from './store.js';
 import { subscribeNavigation } from './api.js';
@@ -26,6 +26,12 @@ export function App() {
     useTeamStore();
   const [page, setPage] = useState<Page>('chat');
   const [selected, setSelected] = useState('');
+  const [voiceRequest, setVoiceRequest] = useState<{ conversationId: string; token: number }>();
+  const [voiceActive, setVoiceActive] = useState(false);
+  const voiceSequence = useRef(0);
+  const voiceHandled = useCallback((token: number) => {
+    setVoiceRequest((request) => (request?.token === token ? undefined : request));
+  }, []);
   const [browserRequest, setBrowserRequest] = useState<{
     conversationId: string;
     revision: number;
@@ -48,6 +54,27 @@ export function App() {
       (item) => item.id === data.settings.mainConversationId && !item.archived,
     ) ||
     data?.conversations.find((item) => !item.archived);
+  useEffect(() => {
+    if (
+      voiceRequest &&
+      (page !== 'chat' ||
+        conversation?.id !== voiceRequest.conversationId ||
+        configureChief ||
+        create ||
+        onboardingActive ||
+        data?.settings.onboardingStatus === 'pending')
+    ) {
+      setVoiceRequest(undefined);
+    }
+  }, [
+    voiceRequest,
+    page,
+    conversation?.id,
+    configureChief,
+    create,
+    onboardingActive,
+    data?.settings.onboardingStatus,
+  ]);
   useEffect(
     () =>
       subscribeNavigation((id) => {
@@ -63,8 +90,23 @@ export function App() {
     setCollapsed(next);
     localStorage.setItem('sidebar-collapsed', String(next));
   }
+  function startVoiceConversation() {
+    const homeId = data?.settings.mainConversationId;
+    if (!homeId) return;
+    if (!chiefConfigured) {
+      setConfigureChief(true);
+      return;
+    }
+    const alreadyActive = page === 'chat' && conversation?.id === homeId && voiceActive;
+    openConversation(homeId);
+    if (!alreadyActive) setVoiceRequest({ conversationId: homeId, token: ++voiceSequence.current });
+  }
   function openConversation(id: string, openBrowser = false) {
     const room = data?.conversations.find((item) => item.id === id);
+    if (room?.timelineOnly && room.chiefHomeId) {
+      openConversation(room.chiefHomeId, openBrowser);
+      return;
+    }
     if (room?.chiefContextId && ['work', 'routine'].includes(room.chiefRole ?? '') && data?.chief) {
       const home = data.chief.homeConversationId;
       void mutate('chief.contexts.activate', { id: room.chiefContextId })
@@ -162,6 +204,11 @@ export function App() {
               : undefined
           }
           onExpandSidebar={toggleSidebar}
+          conversationStartToken={
+            voiceRequest?.conversationId === conversation?.id ? voiceRequest?.token : undefined
+          }
+          onConversationStartHandled={voiceHandled}
+          onConversationStateChange={setVoiceActive}
         />
       );
     }
@@ -217,8 +264,9 @@ export function App() {
         collapsed={collapsed}
         onPage={setPage}
         onSelect={openConversation}
-        onCreate={() =>
-          data?.settings.mainConversationId && openConversation(data.settings.mainConversationId)
+        onVoiceConversation={startVoiceConversation}
+        voiceActive={
+          page === 'chat' && conversation?.id === data?.settings.mainConversationId && voiceActive
         }
         onCreateGroup={() => setCreate(true)}
         mutate={mutate}

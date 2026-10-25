@@ -28,14 +28,8 @@ export function Connections({ data, mutate }: { data: Snapshot; mutate: Mutate }
     }
   }
   return (
-    <section>
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-balance text-base font-semibold text-slate-900">模型供应</h2>
-          <p className="mt-1 text-pretty text-sm text-slate-500">
-            连接账号后，为每位智能体选择模型。
-          </p>
-        </div>
+    <section aria-label="模型供应">
+      <div className="mb-6 flex justify-end">
         <Button variant="primary" onClick={() => setEditing('new')}>
           <Plus size={16} />
           添加连接

@@ -7,6 +7,11 @@ const hooks = vi.hoisted(() => ({
   effects: [] as (() => unknown)[],
 }));
 const api = vi.hoisted(() => ({ request: vi.fn() }));
+const recordings = vi.hoisted(() => ({
+  deferred: false,
+  events: [] as string[],
+  complete: [] as ((recording?: { blob: Blob; durationMs: number }) => void)[],
+}));
 vi.mock('react', () => ({
   useRef(initial: unknown) {
     const index = hooks.cursor++;
@@ -38,13 +43,23 @@ vi.mock('../apps/ui/src/api.js', () => ({
 }));
 vi.mock('../apps/ui/src/voice/recorder.js', () => ({
   VoiceRecorder: class {
+    private finish?: (recording?: { blob: Blob; durationMs: number }) => void;
     static supported() {
       return true;
     }
-    async start() {
+    async start(continuous: boolean) {
+      recordings.events.push(`start:${continuous}`);
+      if (recordings.deferred)
+        return new Promise<{ blob: Blob; durationMs: number } | undefined>((resolve) => {
+          this.finish = resolve;
+          recordings.complete.push(resolve);
+        });
       return { blob: new Blob(['synthetic-audio'], { type: 'audio/webm' }), durationMs: 1000 };
     }
-    close() {}
+    close() {
+      recordings.events.push('close');
+      this.finish?.();
+    }
   },
   recordingBase64: async () => 'YWJj',
 }));
@@ -65,6 +80,9 @@ beforeEach(() => {
   hooks.values = [];
   hooks.dependencies.clear();
   hooks.effects = [];
+  recordings.deferred = false;
+  recordings.events = [];
+  recordings.complete = [];
   api.request.mockReset().mockImplementation(async (method: string) => {
     if (method === 'voice.status') return { transcriptionAvailable: true, speechAvailable: true };
     if (method === 'voice.transcribe') return { text: '整理今天的资料' };
@@ -73,6 +91,25 @@ beforeEach(() => {
 });
 
 describe('语音输入与连续对话', () => {
+  it('听写录音中切换对话先释放旧录音，同为录音阶段也更新模式并直接发送新识别结果', async () => {
+    recordings.deferred = true;
+    const props = { conversationId: 'room', onSubmit: vi.fn(), onDictation: vi.fn() };
+    render(props).start(false);
+    expect(render(props)).toMatchObject({ phase: 'recording', continuous: false });
+    render(props).start(true);
+    expect(recordings.events).toEqual(['start:false', 'close', 'start:true']);
+    expect(render(props)).toMatchObject({ phase: 'recording', continuous: true });
+    recordings.complete[1]!({
+      blob: new Blob(['synthetic-audio'], { type: 'audio/webm' }),
+      durationMs: 1000,
+    });
+    await flush();
+    expect(props.onSubmit).toHaveBeenCalledExactlyOnceWith('整理今天的资料');
+    expect(props.onDictation).not.toHaveBeenCalled();
+    expect(render(props)).toMatchObject({ phase: 'waiting', continuous: true });
+    render(props).end();
+    expect(render(props)).toMatchObject({ phase: 'idle', continuous: false });
+  });
   it('语音输入只写可编辑草稿，连续对话才发送给成员', async () => {
     const props = { conversationId: 'room', onSubmit: vi.fn(), onDictation: vi.fn() };
     render(props).start(false);

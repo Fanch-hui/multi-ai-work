@@ -103,6 +103,7 @@ export class ChiefHistoryService {
           room.purpose === 'chief' &&
           room.chiefId === mainBotId &&
           room.chiefRole !== 'router' &&
+          !room.timelineOnly &&
           (!room.chiefHomeId || room.chiefHomeId === mainConversationId) &&
           (!ids || ids.has(room.id)) &&
           (!input.workspaceId || input.workspaceId === room.workspaceId),

@@ -115,6 +115,7 @@ export interface Bot {
   archived: boolean;
 }
 export interface Conversation {
+  timelineOnly?: boolean;
   chiefRole?: 'home' | 'main' | 'work' | 'history' | 'routine' | 'router';
   chiefHomeId?: string;
   chiefContextId?: string;

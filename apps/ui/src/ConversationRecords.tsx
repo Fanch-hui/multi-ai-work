@@ -16,6 +16,7 @@ import { conversationTaskPlans } from './task-plans.js';
 import { TaskWorkOverview } from './TaskWorkOverview.js';
 import { TaskPlanCard } from './TaskPlanCard.js';
 import { ChiefHistorySearch } from './ChiefHistorySearch.js';
+import { ChiefHistoryTasks } from './ChiefHistoryTasks.js';
 import { inputClass } from './components.js';
 import { contextRecordTasks, isChiefHome } from './chief-work.js';
 
@@ -107,6 +108,7 @@ export function ConversationRecords({
   if (!member)
     return (
       <div className="mx-auto grid w-full min-w-0 max-w-3xl gap-5">
+        {home && <ChiefHistoryTasks data={data} mutate={mutate} />}
         {search}
         {contextFilter}
         {history}
@@ -115,6 +117,7 @@ export function ConversationRecords({
     );
   return (
     <div className="mx-auto grid w-full min-w-0 max-w-3xl grid-cols-1 gap-5">
+      {home && <ChiefHistoryTasks data={data} mutate={mutate} />}
       {search}
       {contextFilter}
       {history}

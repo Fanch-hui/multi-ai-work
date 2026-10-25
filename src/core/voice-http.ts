@@ -27,6 +27,12 @@ export async function voiceHttp(
   });
   if (!response.ok) {
     await response.body?.cancel();
+    if (response.status === 401)
+      throw new Error('语音服务鉴权失败（HTTP 401），请检查语音设置中的 API Key');
+    if (response.status === 403)
+      throw new Error('语音服务拒绝访问（HTTP 403），请检查语音账号与模型权限');
+    if (response.status === 404)
+      throw new Error('语音接口或模型不存在（HTTP 404），请检查服务地址与模型 ID');
     throw new Error(`语音服务请求失败（HTTP ${response.status}）`);
   }
   const reader = response.body?.getReader();

@@ -35,7 +35,7 @@ export class ConversationService {
 
   async archive(conversationId: string, archived: boolean): Promise<Conversation> {
     const room = this.room(conversationId);
-    if (archived) this.requireManageable(room);
+    if (archived || room.timelineOnly) this.requireManageable(room);
     if (!!room.archived === archived) return room;
     return this.modify(room, async () => {
       if (archived) await this.cancelTasks(room.id);
@@ -49,16 +49,55 @@ export class ConversationService {
   async delete(conversationId: string): Promise<void> {
     const room = this.room(conversationId);
     this.requireManageable(room);
-    await this.modify(room, async () => {
-      await this.cancelTasks(room.id);
-      await this.state.artifactContents.retainConversation(room.id);
-      this.state.storage.transaction(() => {
-        removeChiefConversation(this.state, room.id);
-        this.deleteRecords(room.id);
-        this.state.storage.delete('conversations', room.id);
+    await this.deleteRooms([room]);
+  }
+
+  async deleteHistory(conversationIds: string[], assertIdle: () => void): Promise<void> {
+    const rooms = [...new Set(conversationIds)].map((id) => this.room(id));
+    await this.deleteRooms(rooms, assertIdle);
+  }
+
+  private async deleteRooms(rooms: Conversation[], assertIdle?: () => void) {
+    const s = this.state.storage;
+    const locked: string[] = [];
+    try {
+      for (const room of rooms) {
+        this.tasks.blockConversation(room.id);
+        locked.push(room.id);
+      }
+      assertIdle?.();
+      if (!assertIdle) for (const room of rooms) await this.cancelTasks(room.id);
+      await Promise.all(
+        rooms.map((room) => this.state.artifactContents.retainConversation(room.id)),
+      );
+      assertIdle?.();
+      s.transaction(() => {
+        for (const room of rooms) {
+          const retained = new Set<string>();
+          if (assertIdle) {
+            const ids = s
+              .prepare(`SELECT id FROM messages WHERE conversation_id=? AND
+              (conversation_id=? OR id IN (SELECT json_extract(payload,'$.messageId') FROM chief_timeline))`)
+              .all(room.id, this.state.settings().mainConversationId) as { id: string }[];
+            for (const row of ids) retained.add(row.id);
+          }
+          removeChiefConversation(this.state, room.id, retained);
+          this.deleteRecords(room.id, retained);
+          if (room.id === this.state.settings().mainConversationId || retained.size) {
+            s.put('conversations', {
+              ...room,
+              chiefContextId: undefined,
+              archived: room.id !== this.state.settings().mainConversationId,
+              timelineOnly: room.id !== this.state.settings().mainConversationId,
+            });
+          } else s.delete('conversations', room.id);
+        }
         this.state.syncMainTeam();
       });
-    });
+    } finally {
+      for (const id of locked) this.tasks.unblockConversation(id);
+      this.state.changed();
+    }
   }
 
   async updateMembers(conversationId: string, memberIds: string[]): Promise<Conversation> {
@@ -95,8 +134,15 @@ export class ConversationService {
   }
 
   private requireManageable(room: Conversation) {
+    if (room.timelineOnly) throw new Error('主对话消息持续保留，任务记录已在历史任务中管理');
     if (room.chiefRole === 'home' || room.id === this.state.settings().mainConversationId)
       throw new Error('管家主入口需要保留，请在历史中管理其他对话。');
+    if (
+      room.chiefContextId &&
+      this.state.storage.get<{ kind?: string }>('chief_contexts', room.chiefContextId)?.kind ===
+        'main'
+    )
+      throw new Error('管家主对话上下文持续保留');
   }
 
   private async modify<T>(room: Conversation, action: () => Promise<T>): Promise<T> {
@@ -121,7 +167,7 @@ export class ConversationService {
     await Promise.all(tasks.map((task) => this.scheduler.cancel(task.id)));
   }
 
-  private deleteRecords(conversationId: string) {
+  private deleteRecords(conversationId: string, retained = new Set<string>()) {
     const s = this.state.storage;
     const tasks = s.all<Task>('tasks').filter((task) => task.conversationId === conversationId);
     const taskIds = new Set(tasks.map((task) => task.id));
@@ -162,6 +208,7 @@ export class ConversationService {
       'deliveries',
       'notifications',
       'questions',
+      'task_waits',
       'processes',
       'task_plans',
     ];
@@ -188,16 +235,26 @@ export class ConversationService {
           s.delete(table, row.id);
       }
     }
-    s.db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(conversationId);
+    if (retained.size) {
+      for (const message of s.messages(conversationId))
+        if (!retained.has(message.id)) s.deleteMessage(message.id);
+    } else s.db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(conversationId);
     for (const runId of runIds) s.db.prepare('DELETE FROM run_events WHERE run_id = ?').run(runId);
-    this.deleteMetadata(conversationId, taskIds, bindingIds);
+    this.deleteMetadata(conversationId, taskIds, bindingIds, retained.size > 0);
     this.detachReferences(conversationId, taskIds);
   }
 
-  private deleteMetadata(conversationId: string, taskIds: Set<string>, bindingIds: Set<string>) {
+  private deleteMetadata(
+    conversationId: string,
+    taskIds: Set<string>,
+    bindingIds: Set<string>,
+    retainedMessages = false,
+  ) {
     const db = this.state.storage.db;
-    db.prepare('DELETE FROM metadata WHERE key = ?').run(`conversation-read:${conversationId}`);
-    db.prepare('DELETE FROM metadata WHERE key = ?').run(`message-sequence:${conversationId}`);
+    if (!retainedMessages) {
+      db.prepare('DELETE FROM metadata WHERE key = ?').run(`conversation-read:${conversationId}`);
+      db.prepare('DELETE FROM metadata WHERE key = ?').run(`message-sequence:${conversationId}`);
+    }
     const rows = db
       .prepare(
         'SELECT key, value FROM metadata WHERE key LIKE ? OR key LIKE ? OR key LIKE ? OR key LIKE ? OR key LIKE ? OR key LIKE ? OR key LIKE ? OR key LIKE ? OR key LIKE ?',

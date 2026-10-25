@@ -46,6 +46,7 @@ export class TaskService {
       !this.maintenanceBlocked &&
       !!room &&
       !room.archived &&
+      !room.timelineOnly &&
       !this.blockedConversations.has(conversationId)
     );
   }

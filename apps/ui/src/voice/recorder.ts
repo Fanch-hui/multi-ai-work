@@ -22,6 +22,14 @@ export class VoiceRecorder {
     );
   }
   async start(autoSegment: boolean): Promise<VoiceRecording | undefined> {
+    try {
+      return await this.record(autoSegment);
+    } catch (cause) {
+      this.close();
+      throw microphoneError(cause);
+    }
+  }
+  private async record(autoSegment: boolean): Promise<VoiceRecording | undefined> {
     this.stream = await navigator.mediaDevices.getUserMedia({
       audio: {
         echoCancellation: true,
@@ -35,6 +43,7 @@ export class VoiceRecorder {
     }
     this.context = new AudioContext();
     await this.context.resume();
+    if (this.closed) return;
     const analyser = this.context.createAnalyser();
     analyser.fftSize = 2048;
     this.context.createMediaStreamSource(this.stream).connect(analyser);
@@ -122,4 +131,17 @@ export async function recordingBase64(blob: Blob): Promise<string> {
   for (let offset = 0; offset < bytes.length; offset += 8192)
     binary += String.fromCharCode(...bytes.subarray(offset, offset + 8192));
   return btoa(binary);
+}
+
+function microphoneError(cause: unknown): Error {
+  if (!(cause instanceof Error)) return new Error(String(cause));
+  if (cause.name === 'NotAllowedError' || cause.name === 'PermissionDeniedError')
+    return new Error('麦克风权限未开启，请在系统或浏览器设置中允许此应用使用麦克风');
+  if (cause.name === 'NotFoundError' || cause.name === 'DevicesNotFoundError')
+    return new Error('未找到麦克风，请连接麦克风并检查系统输入设备');
+  if (cause.name === 'NotReadableError' || cause.name === 'TrackStartError')
+    return new Error('麦克风无法录音，请检查设备是否被占用或已停用');
+  if (cause.name === 'SecurityError')
+    return new Error('当前页面无法使用麦克风，请使用桌面应用或本机安全页面');
+  return cause;
 }

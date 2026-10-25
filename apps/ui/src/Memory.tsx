@@ -90,9 +90,6 @@ export function Memory({
                 placeholder="搜索成员、主题、标签或记忆内容"
               />
             </div>
-            <p className="text-sm text-slate-400">
-              每位成员一个记忆空间，支持按主题折叠、置顶核心记忆与版本溯源。
-            </p>
           </div>
           {notebooks.length ? (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

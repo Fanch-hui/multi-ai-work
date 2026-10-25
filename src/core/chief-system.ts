@@ -14,6 +14,8 @@ import { queueContextCompaction } from './conversation-compaction.js';
 import { required } from './errors.js';
 import { ATTACHMENT_LIMIT_MESSAGE } from '../domain/attachment-policy.js';
 import { ChiefWorkService } from './chief-work-service.js';
+import { ChiefHistoryTasks } from './chief-history-tasks.js';
+import type { ConversationService } from './conversations.js';
 
 const sendSchema = z.object({
   content: z.string().max(100000),
@@ -41,6 +43,7 @@ export class ChiefSystem {
   readonly jobs: ChiefJobs;
   readonly routing: ChiefRoutingService;
   readonly work: ChiefWorkService;
+  readonly historyTasks: ChiefHistoryTasks;
   private maintenance: ChiefMaintenanceService;
   private historyTimer?: ReturnType<typeof setTimeout>;
   private unsubscribe?: () => void;
@@ -49,6 +52,7 @@ export class ChiefSystem {
     private state: State,
     tasks: TaskService,
     cancelTask: (id: string) => Promise<unknown>,
+    conversations: () => ConversationService,
   ) {
     this.contexts = new ChiefContextService(state);
     this.timeline = new ChiefTimelineService(state);
@@ -56,6 +60,7 @@ export class ChiefSystem {
     this.jobs = new ChiefJobs(state, tasks);
     this.routing = new ChiefRoutingService(state, tasks, this.contexts, cancelTask);
     this.work = new ChiefWorkService(state, tasks, this.contexts);
+    this.historyTasks = new ChiefHistoryTasks(state, conversations);
     this.maintenance = new ChiefMaintenanceService(state, this.contexts, {
       queue: this.jobs.queue.bind(this.jobs),
       compact: (id) => queueContextCompaction(state, tasks, id),
@@ -152,6 +157,29 @@ export class ChiefSystem {
         this.contexts.activate(context.id);
         return this.state.storage.get<Conversation>('conversations', this.contexts.homeId);
       }
+      case 'chief.history.tasks.list':
+        return this.historyTasks.list(
+          z
+            .object({
+              query: z.string().max(500).optional(),
+              before: z.string().optional(),
+              limit: z.number().int().min(1).max(100).optional(),
+            })
+            .parse(params),
+        );
+      case 'chief.history.tasks.read':
+        return this.historyTasks.read(
+          z
+            .object({
+              contextId: z.string(),
+              partId: z.string().optional(),
+              before: z.number().int().positive().optional(),
+              limit: z.number().int().min(1).max(100).optional(),
+            })
+            .parse(params),
+        );
+      case 'chief.history.tasks.delete':
+        return this.historyTasks.delete(z.string().parse(params.contextId));
       case 'chief.history.search':
         return this.history.search(searchSchema.parse(params));
       case 'chief.history.read':
